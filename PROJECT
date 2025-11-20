@@ -16,7 +16,7 @@ resources:
     namespaced: true
   controller: true
   domain: bindplane.com
-  group: bindplane
+  group: k8s
   kind: Bindplane
   path: github.com/bindplane-operator/bindplane-operator/api/v1alpha1
   version: v1alpha1

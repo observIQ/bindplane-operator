@@ -79,77 +79,90 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: selectorLabels,
-				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: fmt.Sprintf("%s-transform-agent", bindplane.Name),
-					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup:    int64Ptr(65534),
-						RunAsGroup: int64Ptr(65534),
-						RunAsUser:  int64Ptr(65534),
+			Template: mergePodTemplateSpec(
+				corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: selectorLabels,
 					},
-					Containers: []corev1.Container{
-						{
-							Name:  "transform-agent",
-							Image: "ghcr.io/observiq/bindplane-transform-agent:1.96.3-bindplane",
-							Ports: []corev1.ContainerPort{
-								{
-									Name:          "http",
-									ContainerPort: 4568,
-									Protocol:      corev1.ProtocolTCP,
-								},
-							},
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceMemory: resource.MustParse("100Mi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("100m"),
-									corev1.ResourceMemory: resource.MustParse("100Mi"),
-								},
-							},
-							StartupProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/collector-version",
-										Port: intstr.FromString("http"),
-									},
-								},
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/collector-version",
-										Port: intstr.FromString("http"),
-									},
-								},
-							},
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/collector-version",
-										Port: intstr.FromString("http"),
-									},
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-								ReadOnlyRootFilesystem: boolPtr(true),
-								RunAsNonRoot:           boolPtr(true),
-								RunAsUser:              int64Ptr(65534),
-							},
-							ImagePullPolicy: corev1.PullIfNotPresent,
+					Spec: corev1.PodSpec{
+						ServiceAccountName: fmt.Sprintf("%s-transform-agent", bindplane.Name),
+						SecurityContext: &corev1.PodSecurityContext{
+							FSGroup:    int64Ptr(65534),
+							RunAsGroup: int64Ptr(65534),
+							RunAsUser:  int64Ptr(65534),
 						},
+						Affinity: getTransformAgentAffinity(bindplane),
+						Containers: []corev1.Container{
+							{
+								Name:  "transform-agent",
+								Image: "ghcr.io/observiq/bindplane-transform-agent:1.96.3-bindplane",
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: 4568,
+										Protocol:      corev1.ProtocolTCP,
+									},
+								},
+								Resources: corev1.ResourceRequirements{
+									Limits: corev1.ResourceList{
+										corev1.ResourceMemory: resource.MustParse("100Mi"),
+									},
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU:    resource.MustParse("100m"),
+										corev1.ResourceMemory: resource.MustParse("100Mi"),
+									},
+								},
+								StartupProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: "/collector-version",
+											Port: intstr.FromString("http"),
+										},
+									},
+								},
+								ReadinessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: "/collector-version",
+											Port: intstr.FromString("http"),
+										},
+									},
+								},
+								LivenessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: "/collector-version",
+											Port: intstr.FromString("http"),
+										},
+									},
+								},
+								SecurityContext: &corev1.SecurityContext{
+									Capabilities: &corev1.Capabilities{
+										Drop: []corev1.Capability{"ALL"},
+									},
+									ReadOnlyRootFilesystem: boolPtr(true),
+									RunAsNonRoot:           boolPtr(true),
+									RunAsUser:              int64Ptr(65534),
+								},
+								ImagePullPolicy: corev1.PullIfNotPresent,
+							},
+						},
+						TerminationGracePeriodSeconds: int64Ptr(60),
 					},
-					TerminationGracePeriodSeconds: int64Ptr(60),
 				},
-			},
+				bindplane.Spec.TransformAgent.PodTemplate,
+			),
 		},
 	}
+}
+
+// getTransformAgentAffinity returns the affinity configuration for Transform Agent pods
+// This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
+func getTransformAgentAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
+	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.PodTemplate != nil {
+		return bindplane.Spec.TransformAgent.PodTemplate.Spec.Affinity
+	}
+	return nil
 }
 
 func (r *BindplaneReconciler) transformAgentService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {

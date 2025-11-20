@@ -1,4 +1,4 @@
-apiVersion: bindplane.com/v1alpha1
+apiVersion: k8s.bindplane.com/v1alpha1
 kind: Bindplane
 metadata:
   labels:
@@ -6,4 +6,85 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: bindplane-sample
 spec:
-  # TODO(user): Add fields here
+  bindplane:
+    config:
+      license: "your-license-key-here"
+      mode:
+        - all
+      auth:
+        type: system
+        username: admin
+        password: password
+      network:
+        host: 0.0.0.0
+        port: "3001"
+        remoteURL: http://bindplane:3001
+      store:
+        type: postgres
+        postgres:
+          host: postgres.example.com
+          port: "5432"
+          database: bindplane
+          username: bindplane
+          password: bindplane
+      eventBus:
+        type: local
+    # podTemplate: # For future use - pod template for bindplane containers
+  transformAgent:
+    # podTemplate: # Optional - arbitrary pod template fields (affinity, tolerations, nodeSelector, etc.)
+    #   metadata:
+    #     labels:
+    #       custom-label: "value"
+    #     annotations:
+    #       custom-annotation: "value"
+    #   spec:
+    #     affinity:
+    #       podAntiAffinity:
+    #         preferredDuringSchedulingIgnoredDuringExecution:
+    #           - weight: 100
+    #             podAffinityTerm:
+    #               labelSelector:
+    #                 matchExpressions:
+    #                   - key: app.kubernetes.io/component
+    #                     operator: In
+    #                     values:
+    #                       - transform-agent
+    #               topologyKey: kubernetes.io/hostname
+    #     tolerations:
+    #       - key: "key1"
+    #         operator: "Equal"
+    #         value: "value1"
+    #         effect: "NoSchedule"
+    #     nodeSelector:
+    #       disktype: ssd
+    #     priorityClassName: high-priority
+  prometheus:
+    # podTemplate: # Optional - arbitrary pod template fields (affinity, tolerations, nodeSelector, etc.)
+    #   metadata:
+    #     labels:
+    #       custom-label: "value"
+    #     annotations:
+    #       custom-annotation: "value"
+    #   spec:
+    #     affinity:
+    #       podAntiAffinity:
+    #         requiredDuringSchedulingIgnoredDuringExecution:
+    #           - labelSelector:
+    #               matchExpressions:
+    #                 - key: app.kubernetes.io/component
+    #                   operator: In
+    #                   values:
+    #                     - prometheus
+    #             topologyKey: kubernetes.io/hostname
+    #     tolerations:
+    #       - key: "key1"
+    #         operator: "Equal"
+    #         value: "value1"
+    #         effect: "NoSchedule"
+    #     nodeSelector:
+    #       disktype: ssd
+    #     priorityClassName: high-priority
+    #     initContainers:
+    #       - name: init-container
+    #         image: busybox:latest
+    #         command: ["sh", "-c", "echo init"]

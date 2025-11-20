@@ -5,7 +5,33 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - bindplane.com
+  - ""
+  resources:
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - k8s.bindplane.com
   resources:
   - bindplanes
   verbs:
@@ -17,13 +43,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - bindplane.com
+  - k8s.bindplane.com
   resources:
   - bindplanes/finalizers
   verbs:
   - update
 - apiGroups:
-  - bindplane.com
+  - k8s.bindplane.com
   resources:
   - bindplanes/status
   verbs:

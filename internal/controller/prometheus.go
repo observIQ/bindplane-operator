@@ -82,83 +82,60 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: selectorLabels,
-				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: serviceName,
-					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup: int64Ptr(65534),
+			Template: mergePodTemplateSpec(
+				corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: selectorLabels,
 					},
-					Containers: []corev1.Container{
-						{
-							Name:  "prometheus",
-							Image: "ghcr.io/observiq/bindplane-prometheus:1.96.3",
-							Ports: []corev1.ContainerPort{
-								{
-									Name:          "http",
-									ContainerPort: 9090,
-									Protocol:      corev1.ProtocolTCP,
-								},
-							},
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceMemory: resource.MustParse("500Mi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("250m"),
-									corev1.ResourceMemory: resource.MustParse("500Mi"),
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      fmt.Sprintf("%s-prometheus-data", bindplane.Name),
-									MountPath: "/prometheus",
-								},
-								{
-									Name:      "config",
-									MountPath: "/etc/prometheus/prometheus.yml",
-									SubPath:   "prometheus.yml",
-								},
-								{
-									Name:      "config",
-									MountPath: "/etc/prometheus/rules.yml",
-									SubPath:   "rules.yml",
-								},
-								{
-									Name:      "config",
-									MountPath: "/etc/prometheus/web.yml",
-									SubPath:   "web.yml",
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: boolPtr(false),
-								RunAsNonRoot:             boolPtr(true),
-								ReadOnlyRootFilesystem:   boolPtr(true),
-								RunAsUser:                int64Ptr(65534),
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-							},
-							ImagePullPolicy: corev1.PullIfNotPresent,
+					Spec: corev1.PodSpec{
+						ServiceAccountName: serviceName,
+						SecurityContext: &corev1.PodSecurityContext{
+							FSGroup: int64Ptr(65534),
 						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: serviceName,
+						Affinity: getPrometheusAffinity(bindplane),
+						Containers: []corev1.Container{
+							{
+								Name:  "prometheus",
+								Image: "ghcr.io/observiq/bindplane-prometheus:1.96.3",
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: 9090,
+										Protocol:      corev1.ProtocolTCP,
 									},
 								},
+								Resources: corev1.ResourceRequirements{
+									Limits: corev1.ResourceList{
+										corev1.ResourceMemory: resource.MustParse("500Mi"),
+									},
+									Requests: corev1.ResourceList{
+										corev1.ResourceCPU:    resource.MustParse("250m"),
+										corev1.ResourceMemory: resource.MustParse("500Mi"),
+									},
+								},
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      fmt.Sprintf("%s-prometheus-data", bindplane.Name),
+										MountPath: "/prometheus",
+									},
+								},
+								SecurityContext: &corev1.SecurityContext{
+									AllowPrivilegeEscalation: boolPtr(false),
+									RunAsNonRoot:             boolPtr(true),
+									ReadOnlyRootFilesystem:   boolPtr(true),
+									RunAsUser:                int64Ptr(65534),
+									Capabilities: &corev1.Capabilities{
+										Drop: []corev1.Capability{"ALL"},
+									},
+								},
+								ImagePullPolicy: corev1.PullIfNotPresent,
 							},
 						},
+						TerminationGracePeriodSeconds: int64Ptr(60),
 					},
-					TerminationGracePeriodSeconds: int64Ptr(60),
 				},
-			},
+				getPrometheusPodTemplateSpec(bindplane),
+			),
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -206,4 +183,21 @@ func (r *BindplaneReconciler) prometheusService(bindplane *bindplanev1alpha1.Bin
 			},
 		},
 	}
+}
+
+// getPrometheusAffinity returns the affinity configuration for Prometheus pods
+// This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
+func getPrometheusAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
+	if bindplane.Spec.Prometheus != nil && bindplane.Spec.Prometheus.PodTemplate != nil {
+		return bindplane.Spec.Prometheus.PodTemplate.Spec.Affinity
+	}
+	return nil
+}
+
+// getPrometheusPodTemplateSpec returns the user-provided pod template spec for Prometheus
+func getPrometheusPodTemplateSpec(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
+	if bindplane.Spec.Prometheus != nil {
+		return bindplane.Spec.Prometheus.PodTemplate
+	}
+	return nil
 }

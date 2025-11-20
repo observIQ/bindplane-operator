@@ -55,9 +55,9 @@ type BindplaneReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=bindplane.com,resources=bindplanes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=bindplane.com,resources=bindplanes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=bindplane.com,resources=bindplanes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=k8s.bindplane.com,resources=bindplanes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=k8s.bindplane.com,resources=bindplanes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=k8s.bindplane.com,resources=bindplanes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -228,4 +228,147 @@ func int64Ptr(i int64) *int64 {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.
+// Operator-managed fields (ServiceAccountName, containers, labels) take precedence.
+func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *bindplanev1alpha1.PodTemplateSpec) corev1.PodTemplateSpec {
+	if userProvided == nil {
+		return operatorManaged
+	}
+
+	merged := operatorManaged.DeepCopy()
+
+	// Merge metadata (labels and annotations)
+	if userProvided.ObjectMeta.Labels != nil {
+		if merged.ObjectMeta.Labels == nil {
+			merged.ObjectMeta.Labels = make(map[string]string)
+		}
+		for k, v := range userProvided.ObjectMeta.Labels {
+			merged.ObjectMeta.Labels[k] = v
+		}
+	}
+	if userProvided.ObjectMeta.Annotations != nil {
+		if merged.ObjectMeta.Annotations == nil {
+			merged.ObjectMeta.Annotations = make(map[string]string)
+		}
+		for k, v := range userProvided.ObjectMeta.Annotations {
+			merged.ObjectMeta.Annotations[k] = v
+		}
+	}
+
+	// Merge pod spec - allow user overrides for scheduling-related fields
+	userSpec := userProvided.Spec
+
+	// Allow user to override affinity
+	if userSpec.Affinity != nil {
+		merged.Spec.Affinity = userSpec.Affinity
+	}
+
+	// Allow user to override tolerations
+	if userSpec.Tolerations != nil {
+		merged.Spec.Tolerations = userSpec.Tolerations
+	}
+
+	// Allow user to override nodeSelector
+	if userSpec.NodeSelector != nil {
+		merged.Spec.NodeSelector = userSpec.NodeSelector
+	}
+
+	// Allow user to override runtimeClassName
+	if userSpec.RuntimeClassName != nil {
+		merged.Spec.RuntimeClassName = userSpec.RuntimeClassName
+	}
+
+	// Allow user to override priorityClassName
+	if userSpec.PriorityClassName != "" {
+		merged.Spec.PriorityClassName = userSpec.PriorityClassName
+	}
+
+	// Allow user to override schedulerName
+	if userSpec.SchedulerName != "" {
+		merged.Spec.SchedulerName = userSpec.SchedulerName
+	}
+
+	// Allow user to override hostNetwork, hostPID, hostIPC
+	if userSpec.HostNetwork {
+		merged.Spec.HostNetwork = userSpec.HostNetwork
+	}
+	if userSpec.HostPID {
+		merged.Spec.HostPID = userSpec.HostPID
+	}
+	if userSpec.HostIPC {
+		merged.Spec.HostIPC = userSpec.HostIPC
+	}
+
+	// Allow user to override DNS settings
+	if userSpec.DNSPolicy != "" {
+		merged.Spec.DNSPolicy = userSpec.DNSPolicy
+	}
+	if userSpec.DNSConfig != nil {
+		merged.Spec.DNSConfig = userSpec.DNSConfig
+	}
+
+	// Allow user to override initContainers (but preserve operator containers)
+	if len(userSpec.InitContainers) > 0 {
+		merged.Spec.InitContainers = userSpec.InitContainers
+	}
+
+	// Allow user to override volumes (merge with operator volumes)
+	if len(userSpec.Volumes) > 0 {
+		// Create a map of existing volumes by name to avoid duplicates
+		volumeMap := make(map[string]corev1.Volume)
+		for _, vol := range merged.Spec.Volumes {
+			volumeMap[vol.Name] = vol
+		}
+		// Add user volumes, allowing them to override operator volumes with same name
+		for _, vol := range userSpec.Volumes {
+			volumeMap[vol.Name] = vol
+		}
+		// Convert back to slice
+		merged.Spec.Volumes = make([]corev1.Volume, 0, len(volumeMap))
+		for _, vol := range volumeMap {
+			merged.Spec.Volumes = append(merged.Spec.Volumes, vol)
+		}
+	}
+
+	// Allow user to override imagePullSecrets
+	if len(userSpec.ImagePullSecrets) > 0 {
+		merged.Spec.ImagePullSecrets = userSpec.ImagePullSecrets
+	}
+
+	// Allow user to override securityContext (merge carefully)
+	if userSpec.SecurityContext != nil {
+		// Merge security context - user values override operator values
+		if merged.Spec.SecurityContext == nil {
+			merged.Spec.SecurityContext = &corev1.PodSecurityContext{}
+		}
+		userSC := userSpec.SecurityContext
+		if userSC.FSGroup != nil {
+			merged.Spec.SecurityContext.FSGroup = userSC.FSGroup
+		}
+		if userSC.RunAsGroup != nil {
+			merged.Spec.SecurityContext.RunAsGroup = userSC.RunAsGroup
+		}
+		if userSC.RunAsUser != nil {
+			merged.Spec.SecurityContext.RunAsUser = userSC.RunAsUser
+		}
+		if userSC.RunAsNonRoot != nil {
+			merged.Spec.SecurityContext.RunAsNonRoot = userSC.RunAsNonRoot
+		}
+		if userSC.SupplementalGroups != nil {
+			merged.Spec.SecurityContext.SupplementalGroups = userSC.SupplementalGroups
+		}
+		if userSC.SELinuxOptions != nil {
+			merged.Spec.SecurityContext.SELinuxOptions = userSC.SELinuxOptions
+		}
+		if userSC.SeccompProfile != nil {
+			merged.Spec.SecurityContext.SeccompProfile = userSC.SeccompProfile
+		}
+	}
+
+	// Note: ServiceAccountName, Containers, and TerminationGracePeriodSeconds are
+	// operator-managed and are NOT overridden by user input
+
+	return *merged
 }

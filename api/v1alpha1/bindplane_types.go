@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,6 +26,30 @@ import (
 
 // BindplaneSpec defines the desired state of Bindplane.
 type BindplaneSpec struct {
+	// Bindplane configuration and pod specification
+	Bindplane BindplaneComponentSpec `json:"bindplane"`
+
+	// Transform Agent pod specification
+	// +optional
+	TransformAgent *TransformAgentComponentSpec `json:"transformAgent,omitempty"`
+
+	// Prometheus pod specification
+	// +optional
+	Prometheus *PrometheusComponentSpec `json:"prometheus,omitempty"`
+}
+
+// BindplaneComponentSpec defines the Bindplane component configuration and pod specification
+type BindplaneComponentSpec struct {
+	// Config contains Bindplane's configuration (license, mode, auth, network, store, eventBus)
+	Config BindplaneConfigSpec `json:"config"`
+
+	// PodTemplate defines pod template specification for Bindplane containers (for future use)
+	// +optional
+	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+}
+
+// BindplaneConfigSpec defines Bindplane's configuration
+type BindplaneConfigSpec struct {
 	// License is the Bindplane license key
 	License string `json:"license"`
 
@@ -46,10 +71,32 @@ type BindplaneSpec struct {
 	// EventBus configuration for Bindplane
 	// +optional
 	EventBus *EventBusConfig `json:"eventBus,omitempty"`
+}
 
-	// Note: TransformAgent and Prometheus are implementation details and are not exposed
-	// in the CRD. The controller will compute these values internally when generating
-	// the Bindplane configuration. The type definitions below are kept for internal use.
+// TransformAgentComponentSpec defines the Transform Agent component pod specification
+type TransformAgentComponentSpec struct {
+	// PodTemplate defines pod template specification for Transform Agent
+	// +optional
+	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+}
+
+// PrometheusComponentSpec defines the Prometheus component pod specification
+type PrometheusComponentSpec struct {
+	// PodTemplate defines pod template specification for Prometheus
+	// +optional
+	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+}
+
+// PodTemplateSpec defines pod template specification.
+// This embeds corev1.PodTemplateSpec to allow arbitrary pod spec fields.
+// Note: The operator will merge this with operator-managed fields, ensuring
+// operator-managed fields (like ServiceAccountName, containers, etc.) take precedence.
+// +kubebuilder:pruning:PreserveUnknownFields
+type PodTemplateSpec struct {
+	// Embedded PodTemplateSpec allows users to specify arbitrary pod spec fields
+	// such as affinity, tolerations, nodeSelector, securityContext, etc.
+	// Operator-managed fields (ServiceAccountName, containers, etc.) will be preserved.
+	corev1.PodTemplateSpec `json:",inline"`
 }
 
 // AuthConfig defines authentication configuration
@@ -189,6 +236,7 @@ type BindplaneStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:path=bindplanes,singular=bindplane,scope=Namespaced
 
 // Bindplane is the Schema for the bindplanes API.
 type Bindplane struct {
