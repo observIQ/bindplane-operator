@@ -87,6 +87,8 @@ Install the Custom Resource Definitions into your Minikube cluster:
 make install
 ```
 
+**Note:** The CRD installation uses server-side apply (`--server-side` flag) to avoid Kubernetes annotation size limits. This is required because the CRD includes embedded PodTemplateSpec schemas.
+
 This will apply the CRDs defined in `config/crd/bases/`.
 
 Verify the CRDs are installed:

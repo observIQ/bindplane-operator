@@ -78,7 +78,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"user-label": "user-value",
+							"user-label":                  "user-value",
 							"app.kubernetes.io/component": "user-override",
 						},
 					},
@@ -368,8 +368,8 @@ var _ = Describe("mergePodTemplateSpec", func() {
 		It("should use user-provided initContainers", func() {
 			userInitContainers := []corev1.Container{
 				{
-					Name:  "user-init",
-					Image: "busybox:latest",
+					Name:    "user-init",
+					Image:   "busybox:latest",
 					Command: []string{"sh", "-c", "echo init"},
 				},
 			}
@@ -395,7 +395,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup: userFSGroup,
+							FSGroup:   userFSGroup,
 							RunAsUser: int64Ptr(1000),
 						},
 					},
@@ -565,7 +565,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 						},
 					},
 					Spec: corev1.PodSpec{
-						Affinity:       userAffinity,
+						Affinity: userAffinity,
 						Tolerations: []corev1.Toleration{
 							{
 								Key:      "key1",
@@ -599,4 +599,3 @@ var _ = Describe("mergePodTemplateSpec", func() {
 		})
 	})
 })
-

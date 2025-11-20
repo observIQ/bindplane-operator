@@ -77,6 +77,8 @@ type BindplaneConfigSpec struct {
 type TransformAgentComponentSpec struct {
 	// PodTemplate defines pod template specification for Transform Agent
 	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 
@@ -84,6 +86,8 @@ type TransformAgentComponentSpec struct {
 type PrometheusComponentSpec struct {
 	// PodTemplate defines pod template specification for Prometheus
 	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 
 	// Storage defines the persistent storage configuration for Prometheus
