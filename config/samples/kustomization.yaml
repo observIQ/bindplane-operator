@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- bindplane_v1alpha1_bindplane.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
