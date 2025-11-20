@@ -88,3 +88,17 @@ spec:
     #       - name: init-container
     #         image: busybox:latest
     #         command: ["sh", "-c", "echo init"]
+    # storage: # Optional - persistent volume configuration
+    #   volumeClaimTemplate:
+    #     metadata:
+    #       labels:
+    #         custom-pvc-label: "value"
+    #       annotations:
+    #         custom-pvc-annotation: "value"
+    #     spec:
+    #       accessModes:
+    #         - ReadWriteOnce
+    #       storageClassName: fast-ssd  # Optional - uses default storage class if not specified
+    #       resources:
+    #         requests:
+    #           storage: 120Gi  # Default is 60Gi if not specified

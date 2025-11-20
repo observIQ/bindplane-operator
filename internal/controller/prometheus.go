@@ -137,20 +137,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 				getPrometheusPodTemplateSpec(bindplane),
 			),
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   fmt.Sprintf("%s-prometheus-data", bindplane.Name),
-						Labels: labels,
-					},
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						Resources: corev1.VolumeResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: resource.MustParse("10Gi"),
-							},
-						},
-					},
-				},
+				getPrometheusVolumeClaimTemplate(bindplane, labels),
 			},
 			PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
 				WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
@@ -200,4 +187,65 @@ func getPrometheusPodTemplateSpec(bindplane *bindplanev1alpha1.Bindplane) *bindp
 		return bindplane.Spec.Prometheus.PodTemplate
 	}
 	return nil
+}
+
+// getPrometheusVolumeClaimTemplate returns the PersistentVolumeClaim template for Prometheus
+func getPrometheusVolumeClaimTemplate(bindplane *bindplanev1alpha1.Bindplane, labels map[string]string) corev1.PersistentVolumeClaim {
+	volumeName := fmt.Sprintf("%s-prometheus-data", bindplane.Name)
+
+	// Default PVC spec
+	defaultSpec := corev1.PersistentVolumeClaimSpec{
+		AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+		Resources: corev1.VolumeResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceStorage: resource.MustParse("60Gi"),
+			},
+		},
+	}
+
+	// Use user-provided storage configuration if available
+	if bindplane.Spec.Prometheus != nil && bindplane.Spec.Prometheus.Storage != nil && bindplane.Spec.Prometheus.Storage.VolumeClaimTemplate != nil {
+		userTemplate := bindplane.Spec.Prometheus.Storage.VolumeClaimTemplate
+
+		// Start with user-provided spec
+		pvcSpec := userTemplate.Spec.DeepCopy()
+
+		// Build metadata
+		pvcMeta := metav1.ObjectMeta{
+			Name:   volumeName,
+			Labels: labels,
+		}
+
+		// Merge user-provided metadata if present
+		if userTemplate.Metadata != nil {
+			if userTemplate.Metadata.Labels != nil {
+				if pvcMeta.Labels == nil {
+					pvcMeta.Labels = make(map[string]string)
+				}
+				for k, v := range userTemplate.Metadata.Labels {
+					pvcMeta.Labels[k] = v
+				}
+			}
+			if userTemplate.Metadata.Annotations != nil {
+				pvcMeta.Annotations = make(map[string]string)
+				for k, v := range userTemplate.Metadata.Annotations {
+					pvcMeta.Annotations[k] = v
+				}
+			}
+		}
+
+		return corev1.PersistentVolumeClaim{
+			ObjectMeta: pvcMeta,
+			Spec:       *pvcSpec,
+		}
+	}
+
+	// Return default PVC
+	return corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   volumeName,
+			Labels: labels,
+		},
+		Spec: defaultSpec,
+	}
 }

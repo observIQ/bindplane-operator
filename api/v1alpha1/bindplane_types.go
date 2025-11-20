@@ -85,6 +85,27 @@ type PrometheusComponentSpec struct {
 	// PodTemplate defines pod template specification for Prometheus
 	// +optional
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// Storage defines the persistent storage configuration for Prometheus
+	// +optional
+	Storage *StorageSpec `json:"storage,omitempty"`
+}
+
+// StorageSpec defines persistent storage configuration
+type StorageSpec struct {
+	// VolumeClaimTemplate defines the template for creating PersistentVolumeClaims
+	// This follows the same structure as StatefulSet volumeClaimTemplates
+	VolumeClaimTemplate *VolumeClaimTemplate `json:"volumeClaimTemplate,omitempty"`
+}
+
+// VolumeClaimTemplate defines a template for creating PersistentVolumeClaims
+type VolumeClaimTemplate struct {
+	// Metadata for the PersistentVolumeClaim
+	// +optional
+	Metadata *metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Spec defines the PersistentVolumeClaim specification
+	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
 }
 
 // PodTemplateSpec defines pod template specification.
