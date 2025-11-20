@@ -30,6 +30,17 @@ import (
 	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
 )
 
+const (
+	// prometheusHTTPPort is the HTTP port for Prometheus
+	prometheusHTTPPort = 9090
+	// prometheusHTTPPortName is the name of the HTTP port for Prometheus
+	prometheusHTTPPortName = "http"
+	// prometheusLivenessProbePath is the HTTP path for the liveness probe
+	prometheusLivenessProbePath = "/-/healthy"
+	// prometheusReadinessProbePath is the HTTP path for the readiness probe
+	prometheusReadinessProbePath = "/-/ready"
+)
+
 // reconcilePrometheus reconciles all Prometheus resources
 func (r *BindplaneReconciler) reconcilePrometheus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	// Reconcile ServiceAccount
@@ -99,8 +110,8 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 								Image: "ghcr.io/observiq/bindplane-prometheus:1.96.3",
 								Ports: []corev1.ContainerPort{
 									{
-										Name:          "http",
-										ContainerPort: 9090,
+										Name:          prometheusHTTPPortName,
+										ContainerPort: prometheusHTTPPort,
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
@@ -118,6 +129,30 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 										Name:      fmt.Sprintf("%s-prometheus-data", bindplane.Name),
 										MountPath: "/prometheus",
 									},
+								},
+								LivenessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: prometheusLivenessProbePath,
+											Port: intstr.FromString(prometheusHTTPPortName),
+										},
+									},
+									InitialDelaySeconds: 30,
+									PeriodSeconds:       10,
+									TimeoutSeconds:      5,
+									FailureThreshold:    3,
+								},
+								ReadinessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: prometheusReadinessProbePath,
+											Port: intstr.FromString(prometheusHTTPPortName),
+										},
+									},
+									InitialDelaySeconds: 5,
+									PeriodSeconds:       10,
+									TimeoutSeconds:      5,
+									FailureThreshold:    3,
 								},
 								SecurityContext: &corev1.SecurityContext{
 									AllowPrivilegeEscalation: boolPtr(false),
@@ -162,9 +197,9 @@ func (r *BindplaneReconciler) prometheusService(bindplane *bindplanev1alpha1.Bin
 			Selector: selectorLabels,
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "http",
-					Port:       9090,
-					TargetPort: intstr.FromInt(9090),
+					Name:       prometheusHTTPPortName,
+					Port:       prometheusHTTPPort,
+					TargetPort: intstr.FromInt(prometheusHTTPPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},

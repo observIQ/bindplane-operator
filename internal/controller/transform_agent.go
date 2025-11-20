@@ -30,6 +30,15 @@ import (
 	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
 )
 
+const (
+	// transformAgentHTTPPort is the HTTP port for Transform Agent
+	transformAgentHTTPPort = 4568
+	// transformAgentHTTPPortName is the name of the HTTP port for Transform Agent
+	transformAgentHTTPPortName = "http"
+	// transformAgentHealthCheckPath is the HTTP path for health checks (startup, readiness, liveness)
+	transformAgentHealthCheckPath = "/collector-version"
+)
+
 // reconcileTransformAgent reconciles all Transform Agent resources
 func (r *BindplaneReconciler) reconcileTransformAgent(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	// Reconcile ServiceAccount
@@ -98,8 +107,8 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								Image: "ghcr.io/observiq/bindplane-transform-agent:1.96.3-bindplane",
 								Ports: []corev1.ContainerPort{
 									{
-										Name:          "http",
-										ContainerPort: 4568,
+										Name:          transformAgentHTTPPortName,
+										ContainerPort: transformAgentHTTPPort,
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
@@ -115,24 +124,24 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/collector-version",
-											Port: intstr.FromString("http"),
+											Path: transformAgentHealthCheckPath,
+											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/collector-version",
-											Port: intstr.FromString("http"),
+											Path: transformAgentHealthCheckPath,
+											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/collector-version",
-											Port: intstr.FromString("http"),
+											Path: transformAgentHealthCheckPath,
+											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
 								},
@@ -180,9 +189,9 @@ func (r *BindplaneReconciler) transformAgentService(bindplane *bindplanev1alpha1
 			Selector: selectorLabels,
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "http",
-					Port:       4568,
-					TargetPort: intstr.FromInt(4568),
+					Name:       transformAgentHTTPPortName,
+					Port:       transformAgentHTTPPort,
+					TargetPort: intstr.FromInt(transformAgentHTTPPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
