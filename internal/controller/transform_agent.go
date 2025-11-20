@@ -159,7 +159,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 						TerminationGracePeriodSeconds: int64Ptr(60),
 					},
 				},
-				bindplane.Spec.TransformAgent.PodTemplate,
+				getTransformAgentPodTemplate(bindplane),
 			),
 		},
 	}
@@ -170,6 +170,14 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 func getTransformAgentAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
 	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.PodTemplate != nil {
 		return bindplane.Spec.TransformAgent.PodTemplate.Spec.Affinity
+	}
+	return nil
+}
+
+// getTransformAgentPodTemplate returns the user-provided pod template spec for Transform Agent
+func getTransformAgentPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
+	if bindplane.Spec.TransformAgent != nil {
+		return bindplane.Spec.TransformAgent.PodTemplate
 	}
 	return nil
 }
