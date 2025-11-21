@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,6 +30,14 @@ import (
 )
 
 const (
+	// prometheusComponent is the component name for Prometheus
+	prometheusComponent = "prometheus"
+	// prometheusContainerName is the container name for Prometheus
+	prometheusContainerName = "prometheus"
+	// prometheusImage is the default container image for Prometheus
+	prometheusImage = "ghcr.io/observiq/bindplane-prometheus:1.96.3"
+	// prometheusDataVolumeSuffix is the suffix for Prometheus data volume names
+	prometheusDataVolumeSuffix = "prometheus-data"
 	// prometheusHTTPPort is the HTTP port for Prometheus
 	prometheusHTTPPort = 9090
 	// prometheusHTTPPortName is the name of the HTTP port for Prometheus
@@ -65,20 +72,14 @@ func (r *BindplaneReconciler) reconcilePrometheus(ctx context.Context, bindplane
 }
 
 func (r *BindplaneReconciler) prometheusServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-prometheus", bindplane.Name),
-			Namespace: bindplane.Namespace,
-			Labels:    getLabels(bindplane, "prometheus"),
-		},
-	}
+	return newServiceAccount(bindplane, prometheusComponent)
 }
 
 func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1.Bindplane) *appsv1.StatefulSet {
 	replicas := int32(1)
-	labels := getLabels(bindplane, "prometheus")
-	selectorLabels := getSelectorLabels(bindplane, "prometheus")
-	serviceName := fmt.Sprintf("%s-prometheus", bindplane.Name)
+	labels := getLabels(bindplane, prometheusComponent)
+	selectorLabels := getSelectorLabels(bindplane, prometheusComponent)
+	serviceName := getResourceName(bindplane, prometheusComponent)
 
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -106,8 +107,8 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 						Affinity: getPrometheusAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
-								Name:  "prometheus",
-								Image: "ghcr.io/observiq/bindplane-prometheus:1.96.3",
+								Name:  prometheusContainerName,
+								Image: prometheusImage,
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          prometheusHTTPPortName,
@@ -126,7 +127,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 								},
 								VolumeMounts: []corev1.VolumeMount{
 									{
-										Name:      fmt.Sprintf("%s-prometheus-data", bindplane.Name),
+										Name:      getResourceName(bindplane, prometheusDataVolumeSuffix),
 										MountPath: "/prometheus",
 									},
 								},
@@ -154,15 +155,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 									TimeoutSeconds:      5,
 									FailureThreshold:    3,
 								},
-								SecurityContext: &corev1.SecurityContext{
-									AllowPrivilegeEscalation: boolPtr(false),
-									RunAsNonRoot:             boolPtr(true),
-									ReadOnlyRootFilesystem:   boolPtr(true),
-									RunAsUser:                int64Ptr(65534),
-									Capabilities: &corev1.Capabilities{
-										Drop: []corev1.Capability{"ALL"},
-									},
-								},
+								SecurityContext: newContainerSecurityContext(WithRunAsUser(65534)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
 							},
 						},
@@ -183,28 +176,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 }
 
 func (r *BindplaneReconciler) prometheusService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
-	labels := getLabels(bindplane, "prometheus")
-	selectorLabels := getSelectorLabels(bindplane, "prometheus")
-
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-prometheus", bindplane.Name),
-			Namespace: bindplane.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: selectorLabels,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       prometheusHTTPPortName,
-					Port:       prometheusHTTPPort,
-					TargetPort: intstr.FromInt(prometheusHTTPPort),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-		},
-	}
+	return newService(bindplane, prometheusComponent, WithPort(prometheusHTTPPortName, prometheusHTTPPort))
 }
 
 // getPrometheusAffinity returns the affinity configuration for Prometheus pods
@@ -226,7 +198,7 @@ func getPrometheusPodTemplateSpec(bindplane *bindplanev1alpha1.Bindplane) *bindp
 
 // getPrometheusVolumeClaimTemplate returns the PersistentVolumeClaim template for Prometheus
 func getPrometheusVolumeClaimTemplate(bindplane *bindplanev1alpha1.Bindplane, labels map[string]string) corev1.PersistentVolumeClaim {
-	volumeName := fmt.Sprintf("%s-prometheus-data", bindplane.Name)
+	volumeName := getResourceName(bindplane, prometheusDataVolumeSuffix)
 
 	// Default PVC spec
 	defaultSpec := corev1.PersistentVolumeClaimSpec{

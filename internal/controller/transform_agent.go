@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,6 +30,12 @@ import (
 )
 
 const (
+	// transformAgentComponent is the component name for Transform Agent
+	transformAgentComponent = "transform-agent"
+	// transformAgentContainerName is the container name for Transform Agent
+	transformAgentContainerName = "transform-agent"
+	// transformAgentImage is the default container image for Transform Agent
+	transformAgentImage = "ghcr.io/observiq/bindplane-transform-agent:1.96.3-bindplane"
 	// transformAgentHTTPPort is the HTTP port for Transform Agent
 	transformAgentHTTPPort = 4568
 	// transformAgentHTTPPortName is the name of the HTTP port for Transform Agent
@@ -63,23 +68,17 @@ func (r *BindplaneReconciler) reconcileTransformAgent(ctx context.Context, bindp
 }
 
 func (r *BindplaneReconciler) transformAgentServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-transform-agent", bindplane.Name),
-			Namespace: bindplane.Namespace,
-			Labels:    getLabels(bindplane, "transform-agent"),
-		},
-	}
+	return newServiceAccount(bindplane, transformAgentComponent)
 }
 
 func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
 	replicas := int32(2)
-	labels := getLabels(bindplane, "transform-agent")
-	selectorLabels := getSelectorLabels(bindplane, "transform-agent")
+	labels := getLabels(bindplane, transformAgentComponent)
+	selectorLabels := getSelectorLabels(bindplane, transformAgentComponent)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-transform-agent", bindplane.Name),
+			Name:      getResourceName(bindplane, transformAgentComponent),
 			Namespace: bindplane.Namespace,
 			Labels:    labels,
 		},
@@ -94,7 +93,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PodSpec{
-						ServiceAccountName: fmt.Sprintf("%s-transform-agent", bindplane.Name),
+						ServiceAccountName: getResourceName(bindplane, transformAgentComponent),
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    int64Ptr(65534),
 							RunAsGroup: int64Ptr(65534),
@@ -103,8 +102,8 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 						Affinity: getTransformAgentAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
-								Name:  "transform-agent",
-								Image: "ghcr.io/observiq/bindplane-transform-agent:1.96.3-bindplane",
+								Name:  transformAgentContainerName,
+								Image: transformAgentImage,
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          transformAgentHTTPPortName,
@@ -145,14 +144,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 										},
 									},
 								},
-								SecurityContext: &corev1.SecurityContext{
-									Capabilities: &corev1.Capabilities{
-										Drop: []corev1.Capability{"ALL"},
-									},
-									ReadOnlyRootFilesystem: boolPtr(true),
-									RunAsNonRoot:           boolPtr(true),
-									RunAsUser:              int64Ptr(65534),
-								},
+								SecurityContext: newContainerSecurityContext(WithRunAsUser(65534)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
 							},
 						},
@@ -183,26 +175,5 @@ func getTransformAgentPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindp
 }
 
 func (r *BindplaneReconciler) transformAgentService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
-	labels := getLabels(bindplane, "transform-agent")
-	selectorLabels := getSelectorLabels(bindplane, "transform-agent")
-
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-transform-agent", bindplane.Name),
-			Namespace: bindplane.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
-			Selector: selectorLabels,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       transformAgentHTTPPortName,
-					Port:       transformAgentHTTPPort,
-					TargetPort: intstr.FromInt(transformAgentHTTPPort),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-		},
-	}
+	return newService(bindplane, transformAgentComponent, WithPort(transformAgentHTTPPortName, transformAgentHTTPPort))
 }

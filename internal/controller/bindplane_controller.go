@@ -18,13 +18,16 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -123,6 +126,11 @@ func getSelectorLabels(bindplane *bindplanev1alpha1.Bindplane, component string)
 		labelKeyInstance:  bindplane.Name,
 		labelKeyComponent: component,
 	}
+}
+
+// getResourceName returns a standardized resource name for a component
+func getResourceName(bindplane *bindplanev1alpha1.Bindplane, component string) string {
+	return fmt.Sprintf("%s-%s", bindplane.Name, component)
 }
 
 // Generic reconcile functions
@@ -230,6 +238,108 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
+// securityContextOptions holds configuration options for creating a SecurityContext
+type securityContextOptions struct {
+	runAsUser *int64
+}
+
+// securityContextOption is a function that configures securityContextOptions
+type securityContextOption func(*securityContextOptions)
+
+// WithRunAsUser sets the RunAsUser for the container security context
+func WithRunAsUser(userID int64) securityContextOption {
+	return func(opts *securityContextOptions) {
+		opts.runAsUser = &userID
+	}
+}
+
+// newContainerSecurityContext creates a secure container security context
+// It accepts variadic securityContextOption functions to configure overrides
+func newContainerSecurityContext(opts ...securityContextOption) *corev1.SecurityContext {
+	// Apply default options
+	options := &securityContextOptions{
+		runAsUser: int64Ptr(65534), // Default to nobody user
+	}
+
+	// Apply all option functions
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	return &corev1.SecurityContext{
+		AllowPrivilegeEscalation: boolPtr(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		ReadOnlyRootFilesystem: boolPtr(true),
+		RunAsNonRoot:           boolPtr(true),
+		RunAsUser:              options.runAsUser,
+	}
+}
+
+// newServiceAccount creates a ServiceAccount for a component
+func newServiceAccount(bindplane *bindplanev1alpha1.Bindplane, component string) *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      getResourceName(bindplane, component),
+			Namespace: bindplane.Namespace,
+			Labels:    getLabels(bindplane, component),
+		},
+	}
+}
+
+// serviceOptions holds configuration options for creating a Service
+type serviceOptions struct {
+	ports []corev1.ServicePort
+}
+
+// serviceOption is a function that configures serviceOptions
+type serviceOption func(*serviceOptions)
+
+// WithPort adds a single port to the service
+// The port will be used for both Port and TargetPort
+// Call WithPort multiple times to add multiple ports
+func WithPort(name string, port int32) serviceOption {
+	return func(opts *serviceOptions) {
+		opts.ports = append(opts.ports, corev1.ServicePort{
+			Name:       name,
+			Port:       port,
+			TargetPort: intstr.FromInt(int(port)),
+			Protocol:   corev1.ProtocolTCP,
+		})
+	}
+}
+
+// newService creates a ClusterIP Service for a component
+// It accepts variadic serviceOption functions to configure ports
+func newService(bindplane *bindplanev1alpha1.Bindplane, component string, opts ...serviceOption) *corev1.Service {
+	labels := getLabels(bindplane, component)
+	selectorLabels := getSelectorLabels(bindplane, component)
+
+	// Apply default options
+	options := &serviceOptions{
+		ports: []corev1.ServicePort{},
+	}
+
+	// Apply all option functions
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      getResourceName(bindplane, component),
+			Namespace: bindplane.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeClusterIP,
+			Selector: selectorLabels,
+			Ports:    options.ports,
+		},
+	}
+}
+
 // mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.
 // Operator-managed fields (ServiceAccountName, containers, labels) take precedence.
 func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *bindplanev1alpha1.PodTemplateSpec) corev1.PodTemplateSpec {
@@ -240,12 +350,29 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 	merged := operatorManaged.DeepCopy()
 
 	// Merge metadata (labels and annotations)
+	// Protect operator-managed selector labels from user overrides
+	// These labels are critical for service selectors to match pods
+	protectedLabelKeys := []string{
+		labelKeyName,
+		labelKeyInstance,
+		labelKeyComponent,
+	}
 	if userProvided.ObjectMeta.Labels != nil {
 		if merged.ObjectMeta.Labels == nil {
 			merged.ObjectMeta.Labels = make(map[string]string)
 		}
 		for k, v := range userProvided.ObjectMeta.Labels {
-			merged.ObjectMeta.Labels[k] = v
+			// Skip protected labels - operator-managed labels take precedence
+			isProtected := false
+			for _, protectedKey := range protectedLabelKeys {
+				if k == protectedKey {
+					isProtected = true
+					break
+				}
+			}
+			if !isProtected {
+				merged.ObjectMeta.Labels[k] = v
+			}
 		}
 	}
 	if userProvided.ObjectMeta.Annotations != nil {

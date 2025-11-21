@@ -33,6 +33,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: map[string]string{
 					"app.kubernetes.io/name":      "bindplane",
+					"app.kubernetes.io/instance":  "test-instance",
 					"app.kubernetes.io/component": "test",
 				},
 				Annotations: map[string]string{
@@ -78,8 +79,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"user-label":                  "user-value",
-							"app.kubernetes.io/component": "user-override",
+							"user-label": "user-value",
 						},
 					},
 				},
@@ -88,8 +88,33 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			result := mergePodTemplateSpec(operatorManaged, userProvided)
 
 			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "bindplane"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", "test-instance"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "test"))
 			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
-			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "user-override"))
+		})
+
+		It("should protect operator-managed selector labels from user overrides", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app.kubernetes.io/name":      "user-override-name",
+							"app.kubernetes.io/instance":  "user-override-instance",
+							"app.kubernetes.io/component": "user-override-component",
+							"user-label":                  "user-value",
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			// Protected labels should retain operator-managed values
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "bindplane"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", "test-instance"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "test"))
+			// User labels should still be merged
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
 		})
 
 		It("should merge annotations from user-provided template", func() {
