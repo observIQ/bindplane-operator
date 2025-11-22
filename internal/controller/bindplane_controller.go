@@ -52,6 +52,13 @@ const (
 	labelValuePartOf    = "bindplane"
 )
 
+// Kubernetes environment variable name constants
+const (
+	kubernetesNamespaceNameEnvVar = "KUBERNETES_NAMESPACE_NAME"
+	kubernetesPodNameEnvVar       = "KUBERNETES_POD_NAME"
+	kubernetesContainerNameEnvVar = "KUBERNETES_CONTAINER_NAME"
+)
+
 // BindplaneReconciler reconciles a Bindplane object
 type BindplaneReconciler struct {
 	client.Client
@@ -65,6 +72,7 @@ type BindplaneReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -94,6 +102,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Reconcile Prometheus resources
 	if err := r.reconcilePrometheus(ctx, bindplane, log); err != nil {
 		log.Error(err, "unable to reconcile Prometheus")
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile Bindplane Jobs resources
+	if err := r.reconcileBindplaneJobs(ctx, bindplane, log); err != nil {
+		log.Error(err, "unable to reconcile Bindplane Jobs")
 		return ctrl.Result{}, err
 	}
 
@@ -228,6 +242,30 @@ func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *b
 	return nil
 }
 
+func (r *BindplaneReconciler) reconcileConfigMap(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, configMap *corev1.ConfigMap, log logr.Logger) error {
+	if err := controllerutil.SetControllerReference(bindplane, configMap, r.Scheme); err != nil {
+		return err
+	}
+
+	found := &corev1.ConfigMap{}
+	err := r.Get(ctx, types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating ConfigMap", "name", configMap.Name, "namespace", configMap.Namespace)
+		return r.Create(ctx, configMap)
+	} else if err != nil {
+		return err
+	}
+
+	// Update ConfigMap data and labels if needed
+	found.Data = configMap.Data
+	found.BinaryData = configMap.BinaryData
+	found.Labels = configMap.Labels
+	if err := r.Update(ctx, found); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Helper functions
 
 func int64Ptr(i int64) *int64 {
@@ -236,6 +274,33 @@ func int64Ptr(i int64) *int64 {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// getKubernetesEnvVars returns the common Kubernetes environment variables
+// that should be present in all pods deployed by this operator
+func getKubernetesEnvVars(containerName string) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name: kubernetesNamespaceNameEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		{
+			Name: kubernetesPodNameEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name:  kubernetesContainerNameEnvVar,
+			Value: containerName,
+		},
+	}
 }
 
 // securityContextOptions holds configuration options for creating a SecurityContext
@@ -498,4 +563,102 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 	// operator-managed and are NOT overridden by user input
 
 	return *merged
+}
+
+// bindplaneConfig defines Bindplane configuration for internal use.
+// This type is not exposed in the CRD spec - it's an implementation detail that the
+// controller uses when generating the Bindplane configuration file for ConfigMaps.
+// It has YAML tags for serialization to YAML format.
+type bindplaneConfig struct {
+	License  string          `yaml:"license"`
+	Auth     *authConfig     `yaml:"auth,omitempty"`
+	Network  *networkConfig  `yaml:"network,omitempty"`
+	Store    storeConfig     `yaml:"store"`
+	EventBus *eventBusConfig `yaml:"eventBus,omitempty"`
+}
+
+type authConfig struct {
+	Type     string `yaml:"type,omitempty"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+}
+
+type networkConfig struct {
+	Host      string `yaml:"host,omitempty"`
+	Port      string `yaml:"port,omitempty"`
+	RemoteURL string `yaml:"remoteURL,omitempty"`
+}
+
+type storeConfig struct {
+	Type     string          `yaml:"type"`
+	Postgres *postgresConfig `yaml:"postgres"`
+}
+
+type postgresConfig struct {
+	Host             string `yaml:"host"`
+	Port             string `yaml:"port,omitempty"`
+	ConnectTimeout   string `yaml:"connectTimeout,omitempty"`
+	StatementTimeout string `yaml:"statementTimeout,omitempty"`
+	Database         string `yaml:"database,omitempty"`
+	SSLMode          string `yaml:"sslmode,omitempty"`
+	Username         string `yaml:"username,omitempty"`
+	Password         string `yaml:"password,omitempty"`
+	MaxConnections   int    `yaml:"maxConnections,omitempty"`
+	MaxLifetime      string `yaml:"maxLifetime,omitempty"`
+	Schema           string `yaml:"schema,omitempty"`
+}
+
+type eventBusConfig struct {
+	Type string `yaml:"type"`
+}
+
+// toBindplaneConfig converts BindplaneConfigSpec to bindplaneConfig for ConfigMap generation
+func toBindplaneConfig(spec *bindplanev1alpha1.BindplaneConfigSpec) *bindplaneConfig {
+	config := &bindplaneConfig{
+		License: spec.License,
+	}
+
+	if spec.Auth != nil {
+		config.Auth = &authConfig{
+			Type:     spec.Auth.Type,
+			Username: spec.Auth.Username,
+			Password: spec.Auth.Password,
+		}
+	}
+
+	if spec.Network != nil {
+		config.Network = &networkConfig{
+			Host:      spec.Network.Host,
+			Port:      spec.Network.Port,
+			RemoteURL: spec.Network.RemoteURL,
+		}
+	}
+
+	config.Store = storeConfig{
+		Type: spec.Store.Type,
+	}
+
+	if spec.Store.Postgres != nil {
+		config.Store.Postgres = &postgresConfig{
+			Host:             spec.Store.Postgres.Host,
+			Port:             spec.Store.Postgres.Port,
+			ConnectTimeout:   spec.Store.Postgres.ConnectTimeout,
+			StatementTimeout: spec.Store.Postgres.StatementTimeout,
+			Database:         spec.Store.Postgres.Database,
+			SSLMode:          spec.Store.Postgres.SSLMode,
+			Username:         spec.Store.Postgres.Username,
+			Password:         spec.Store.Postgres.Password,
+			MaxConnections:   spec.Store.Postgres.MaxConnections,
+			MaxLifetime:      spec.Store.Postgres.MaxLifetime,
+			Schema:           spec.Store.Postgres.Schema,
+		}
+	}
+
+	if spec.EventBus != nil {
+		config.EventBus = &eventBusConfig{
+			Type: spec.EventBus.Type,
+		}
+	}
+
+	return config
 }

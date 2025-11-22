@@ -111,6 +111,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
+								Env: getKubernetesEnvVars(transformAgentContainerName),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
 										corev1.ResourceMemory: resource.MustParse("100Mi"),

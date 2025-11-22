@@ -168,9 +168,10 @@ run-minikube-destructive: generate fmt vet
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
+# BuildKit is required for cache mounts to work. Enable with: export DOCKER_BUILDKIT=1
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: ## Build docker image with the manager (uses BuildKit cache mounts for faster builds).
+	DOCKER_BUILDKIT=1 $(CONTAINER_TOOL) build -t ${IMG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.

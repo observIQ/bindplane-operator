@@ -116,6 +116,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
+								Env: getKubernetesEnvVars(prometheusContainerName),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
 										corev1.ResourceMemory: resource.MustParse("500Mi"),

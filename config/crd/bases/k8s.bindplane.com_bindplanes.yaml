@@ -53,10 +53,6 @@ spec:
                         type: object
                       license:
                         type: string
-                      mode:
-                        items:
-                          type: string
-                        type: array
                       network:
                         properties:
                           host:
