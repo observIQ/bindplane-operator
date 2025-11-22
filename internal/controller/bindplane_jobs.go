@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,14 +26,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/yaml"
 
 	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
 )
 
 const (
 	// bindplaneJobsComponent is the component name for Bindplane Jobs Migrate
-	bindplaneJobsComponent = "bindplane-jobs-migrate"
+	bindplaneJobsComponent = "jobs-migrate"
 	// bindplaneJobsContainerName is the container name for Bindplane Jobs
 	bindplaneJobsContainerName = "server"
 	// bindplaneJobsImage is the default container image for Bindplane Jobs
@@ -41,18 +41,10 @@ const (
 	bindplaneJobsHTTPPort = int32(3001)
 	// bindplaneJobsHTTPPortName is the name of the HTTP port for Bindplane Jobs
 	bindplaneJobsHTTPPortName = "http"
-	// bindplaneJobsConfigPath is the path where the config file is mounted
-	bindplaneJobsConfigPath = "/config.yaml"
-	// bindplaneJobsConfigVolumeName is the name of the volume for the config file
-	bindplaneJobsConfigVolumeName = "config"
-	// bindplaneJobsConfigMapKey is the key in the ConfigMap for the config file
-	bindplaneJobsConfigMapKey = "config.yaml"
 	// bindplaneJobsModeEnvVar is the environment variable name for Bindplane mode
 	bindplaneJobsModeEnvVar = "BINDPLANE_MODE"
 	// bindplaneJobsModeValue is the value for BINDPLANE_MODE
 	bindplaneJobsModeValue = "migrate"
-	// bindplaneJobsConfigEnvVar is the environment variable name for config file path
-	bindplaneJobsConfigEnvVar = "BINDPLANE_CONFIG"
 )
 
 // reconcileBindplaneJobs reconciles all Bindplane Jobs resources
@@ -61,12 +53,6 @@ func (r *BindplaneReconciler) reconcileBindplaneJobs(ctx context.Context, bindpl
 	// Reconcile ServiceAccount
 	sa := r.bindplaneJobsServiceAccount(bindplane)
 	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
-		return err
-	}
-
-	// Reconcile ConfigMap
-	configMap := r.bindplaneJobsConfigMap(bindplane)
-	if err := r.reconcileConfigMap(ctx, bindplane, configMap, log); err != nil {
 		return err
 	}
 
@@ -83,35 +69,10 @@ func (r *BindplaneReconciler) bindplaneJobsServiceAccount(bindplane *bindplanev1
 	return newServiceAccount(bindplane, bindplaneJobsComponent)
 }
 
-func (r *BindplaneReconciler) bindplaneJobsConfigMap(bindplane *bindplanev1alpha1.Bindplane) *corev1.ConfigMap {
-	// Convert BindplaneConfigSpec to bindplaneConfig
-	config := toBindplaneConfig(&bindplane.Spec.Bindplane.Config)
-
-	// Marshal to YAML
-	yamlData, err := yaml.Marshal(config)
-	if err != nil {
-		// This should not happen in practice, but if it does, we'll create an empty ConfigMap
-		// The error will be logged by the caller
-		yamlData = []byte{}
-	}
-
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      getResourceName(bindplane, bindplaneJobsComponent),
-			Namespace: bindplane.Namespace,
-			Labels:    getLabels(bindplane, bindplaneJobsComponent),
-		},
-		Data: map[string]string{
-			bindplaneJobsConfigMapKey: string(yamlData),
-		},
-	}
-}
-
 func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
 	replicas := int32(1)
 	labels := getLabels(bindplane, bindplaneJobsComponent)
 	selectorLabels := getSelectorLabels(bindplane, bindplaneJobsComponent)
-	configMapName := getResourceName(bindplane, bindplaneJobsComponent)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -150,16 +111,15 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 								},
 								Env: append(
 									getKubernetesEnvVars(bindplaneJobsContainerName),
-									[]corev1.EnvVar{
-										{
-											Name:  bindplaneJobsModeEnvVar,
-											Value: bindplaneJobsModeValue,
+									append(
+										[]corev1.EnvVar{
+											{
+												Name:  bindplaneJobsModeEnvVar,
+												Value: bindplaneJobsModeValue,
+											},
 										},
-										{
-											Name:  bindplaneJobsConfigEnvVar,
-											Value: bindplaneJobsConfigPath,
-										},
-									}...,
+										getBindplaneConfigEnvVars(&bindplane.Spec.Bindplane.Config)...,
+									)...,
 								),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
@@ -201,35 +161,10 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(65534)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      bindplaneJobsConfigVolumeName,
-										MountPath: "/",
-										ReadOnly:  true,
-									},
-								},
 								Lifecycle: &corev1.Lifecycle{
 									PreStop: &corev1.LifecycleHandler{
 										Exec: &corev1.ExecAction{
 											Command: []string{"sh", "-c", "sleep 5"},
-										},
-									},
-								},
-							},
-						},
-						Volumes: []corev1.Volume{
-							{
-								Name: bindplaneJobsConfigVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									ConfigMap: &corev1.ConfigMapVolumeSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: configMapName,
-										},
-										Items: []corev1.KeyToPath{
-											{
-												Key:  bindplaneJobsConfigMapKey,
-												Path: "config.yaml",
-											},
 										},
 									},
 								},
@@ -256,4 +191,152 @@ func getBindplaneJobsAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Af
 // getBindplaneJobsPodTemplate returns the user-provided pod template spec for Bindplane Jobs
 func getBindplaneJobsPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
 	return bindplane.Spec.Bindplane.PodTemplate
+}
+
+// getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
+// following the naming convention from override_test.go (BINDPLANE_*)
+func getBindplaneConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	var envVars []corev1.EnvVar
+
+	// License
+	if config.License != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "BINDPLANE_LICENSE",
+			Value: config.License,
+		})
+	}
+
+	// Auth configuration
+	if config.Auth != nil {
+		if config.Auth.Type != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_AUTH_TYPE",
+				Value: config.Auth.Type,
+			})
+		}
+		if config.Auth.Username != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_USERNAME",
+				Value: config.Auth.Username,
+			})
+		}
+		if config.Auth.Password != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_PASSWORD",
+				Value: config.Auth.Password,
+			})
+		}
+	}
+
+	// Network configuration
+	if config.Network != nil {
+		if config.Network.Host != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_HOST",
+				Value: config.Network.Host,
+			})
+		}
+		if config.Network.Port != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_PORT",
+				Value: config.Network.Port,
+			})
+		}
+		if config.Network.RemoteURL != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_REMOTE_URL",
+				Value: config.Network.RemoteURL,
+			})
+		}
+	}
+
+	// Store configuration
+	if config.Store.Type != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "BINDPLANE_STORE_TYPE",
+			Value: config.Store.Type,
+		})
+	}
+
+	// Postgres configuration
+	if config.Store.Postgres != nil {
+		if config.Store.Postgres.Host != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_HOST",
+				Value: config.Store.Postgres.Host,
+			})
+		}
+		if config.Store.Postgres.Port != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_PORT",
+				Value: config.Store.Postgres.Port,
+			})
+		}
+		if config.Store.Postgres.ConnectTimeout != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_CONNECT_TIMEOUT",
+				Value: config.Store.Postgres.ConnectTimeout,
+			})
+		}
+		if config.Store.Postgres.StatementTimeout != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_STATEMENT_TIMEOUT",
+				Value: config.Store.Postgres.StatementTimeout,
+			})
+		}
+		if config.Store.Postgres.Database != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_DATABASE",
+				Value: config.Store.Postgres.Database,
+			})
+		}
+		if config.Store.Postgres.SSLMode != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_SSL_MODE",
+				Value: config.Store.Postgres.SSLMode,
+			})
+		}
+		if config.Store.Postgres.Username != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_USERNAME",
+				Value: config.Store.Postgres.Username,
+			})
+		}
+		if config.Store.Postgres.Password != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_PASSWORD",
+				Value: config.Store.Postgres.Password,
+			})
+		}
+		if config.Store.Postgres.MaxConnections > 0 {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_MAX_CONNECTIONS",
+				Value: strconv.Itoa(config.Store.Postgres.MaxConnections),
+			})
+		}
+		if config.Store.Postgres.MaxLifetime != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_MAX_LIFETIME",
+				Value: config.Store.Postgres.MaxLifetime,
+			})
+		}
+		if config.Store.Postgres.Schema != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_POSTGRES_SCHEMA",
+				Value: config.Store.Postgres.Schema,
+			})
+		}
+	}
+
+	// EventBus configuration
+	if config.EventBus != nil {
+		if config.EventBus.Type != "" {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  "BINDPLANE_EVENT_BUS_TYPE",
+				Value: config.EventBus.Type,
+			})
+		}
+	}
+
+	return envVars
 }
