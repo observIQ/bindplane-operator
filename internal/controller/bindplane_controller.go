@@ -116,6 +116,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile Node resources
+	if err := r.reconcileNode(ctx, bindplane, log); err != nil {
+		log.Error(err, "unable to reconcile Node")
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
