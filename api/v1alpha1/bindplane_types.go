@@ -40,7 +40,7 @@ type BindplaneSpec struct {
 
 // BindplaneComponentSpec defines the Bindplane component configuration and pod specification
 type BindplaneComponentSpec struct {
-	// Config contains Bindplane's configuration (license, mode, auth, network, store, eventBus)
+	// Config contains Bindplane's configuration (license, auth, network, store, eventBus)
 	Config BindplaneConfigSpec `json:"config"`
 
 	// PodTemplate defines pod template specification for Bindplane containers (for future use)
@@ -52,10 +52,6 @@ type BindplaneComponentSpec struct {
 type BindplaneConfigSpec struct {
 	// License is the Bindplane license key
 	License string `json:"license"`
-
-	// Mode specifies the operational mode(s) for Bindplane
-	// +optional
-	Mode []string `json:"mode,omitempty"`
 
 	// Auth configuration for Bindplane
 	// +optional

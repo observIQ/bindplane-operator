@@ -9,8 +9,6 @@ spec:
   bindplane:
     config:
       license: "your-license-key-here"
-      mode:
-        - all
       auth:
         type: system
         username: admin
