@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -31,8 +32,10 @@ import (
 )
 
 const (
-	// bindplaneJobsComponent is the component name for Bindplane Jobs Migrate
-	bindplaneJobsComponent = "jobs-migrate"
+	// bindplaneJobsMigrateComponent is the component name for Bindplane Jobs Migrate
+	bindplaneJobsMigrateComponent = "jobs-migrate"
+	// bindplaneJobsComponent is the component name for Bindplane Jobs
+	bindplaneJobsComponent = "jobs"
 	// bindplaneJobsContainerName is the container name for Bindplane Jobs
 	bindplaneJobsContainerName = "server"
 	// bindplaneJobsImage is the default container image for Bindplane Jobs
@@ -43,13 +46,47 @@ const (
 	bindplaneJobsHTTPPortName = "http"
 	// bindplaneJobsModeEnvVar is the environment variable name for Bindplane mode
 	bindplaneJobsModeEnvVar = "BINDPLANE_MODE"
-	// bindplaneJobsModeValue is the value for BINDPLANE_MODE
-	bindplaneJobsModeValue = "migrate"
+	// bindplaneJobsMigrateModeValue is the value for BINDPLANE_MODE for migrate jobs
+	bindplaneJobsMigrateModeValue = "migrate"
+	// bindplaneJobsModeValue is the value for BINDPLANE_MODE for regular jobs
+	bindplaneJobsModeValue = "all,-migrate"
 )
 
 // reconcileBindplaneJobs reconciles all Bindplane Jobs resources
-// Note: This deployment does NOT create a Service, as traffic should not be routed to it
+// Note: These deployments do NOT create Services, as traffic should not be routed to them
 func (r *BindplaneReconciler) reconcileBindplaneJobs(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	// Reconcile Jobs Migrate
+	if err := r.reconcileBindplaneJobsMigrate(ctx, bindplane, log); err != nil {
+		return err
+	}
+
+	// Reconcile Jobs
+	if err := r.reconcileBindplaneJobsRegular(ctx, bindplane, log); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// reconcileBindplaneJobsMigrate reconciles the Bindplane Jobs Migrate deployment
+func (r *BindplaneReconciler) reconcileBindplaneJobsMigrate(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	// Reconcile ServiceAccount
+	sa := r.bindplaneJobsMigrateServiceAccount(bindplane)
+	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
+		return err
+	}
+
+	// Reconcile Deployment
+	deployment := r.bindplaneJobsMigrateDeployment(bindplane)
+	if err := r.reconcileDeployment(ctx, bindplane, deployment, log); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// reconcileBindplaneJobsRegular reconciles the Bindplane Jobs deployment
+func (r *BindplaneReconciler) reconcileBindplaneJobsRegular(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	// Reconcile ServiceAccount
 	sa := r.bindplaneJobsServiceAccount(bindplane)
 	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
@@ -65,23 +102,46 @@ func (r *BindplaneReconciler) reconcileBindplaneJobs(ctx context.Context, bindpl
 	return nil
 }
 
+func (r *BindplaneReconciler) bindplaneJobsMigrateServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
+	return newServiceAccount(bindplane, bindplaneJobsMigrateComponent)
+}
+
 func (r *BindplaneReconciler) bindplaneJobsServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
 	return newServiceAccount(bindplane, bindplaneJobsComponent)
 }
 
+func (r *BindplaneReconciler) bindplaneJobsMigrateDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
+	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsMigrateComponent, bindplaneJobsMigrateModeValue, appsv1.DeploymentStrategy{
+		Type: appsv1.RecreateDeploymentStrategyType,
+	}, false) // false = don't include NATS client config
+}
+
 func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
+	// Use RollingUpdate strategy with maxSurge to allow overlapping pods
+	maxSurge := intstr.FromInt(1)
+	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsComponent, bindplaneJobsModeValue, appsv1.DeploymentStrategy{
+		Type: appsv1.RollingUpdateDeploymentStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateDeployment{
+			MaxSurge: &maxSurge,
+		},
+	}, true) // true = include NATS client config
+}
+
+// bindplaneJobsDeploymentCommon creates a deployment for Bindplane Jobs with configurable component, mode, and strategy
+func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplanev1alpha1.Bindplane, component string, modeValue string, strategy appsv1.DeploymentStrategy, includeNatsClient bool) *appsv1.Deployment {
 	replicas := int32(1)
-	labels := getLabels(bindplane, bindplaneJobsComponent)
-	selectorLabels := getSelectorLabels(bindplane, bindplaneJobsComponent)
+	labels := getLabels(bindplane, component)
+	selectorLabels := getSelectorLabels(bindplane, component)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      getResourceName(bindplane, bindplaneJobsComponent),
+			Name:      getResourceName(bindplane, component),
 			Namespace: bindplane.Namespace,
 			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
+			Strategy: strategy,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
@@ -91,7 +151,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PodSpec{
-						ServiceAccountName: getResourceName(bindplane, bindplaneJobsComponent),
+						ServiceAccountName: getResourceName(bindplane, component),
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    int64Ptr(65534),
 							RunAsGroup: int64Ptr(65534),
@@ -112,13 +172,16 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 								Env: append(
 									getKubernetesEnvVars(bindplaneJobsContainerName),
 									append(
-										[]corev1.EnvVar{
-											{
-												Name:  bindplaneJobsModeEnvVar,
-												Value: bindplaneJobsModeValue,
+										append(
+											[]corev1.EnvVar{
+												{
+													Name:  bindplaneJobsModeEnvVar,
+													Value: modeValue,
+												},
 											},
-										},
-										getBindplaneConfigEnvVars(&bindplane.Spec.Bindplane.Config)...,
+											getBindplaneConfigEnvVars(bindplane)...,
+										),
+										getNatsClientEnvVars(bindplane, includeNatsClient)...,
 									)...,
 								),
 								Resources: corev1.ResourceRequirements{
@@ -195,8 +258,10 @@ func getBindplaneJobsPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindpl
 
 // getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
 // following the naming convention from override_test.go (BINDPLANE_*)
-func getBindplaneConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+// Also includes environment variables for Prometheus and Transform Agent services
+func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	var envVars []corev1.EnvVar
+	config := &bindplane.Spec.Bindplane.Config
 
 	// License
 	if config.License != "" {
@@ -328,15 +393,68 @@ func getBindplaneConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []
 		}
 	}
 
-	// EventBus configuration
-	if config.EventBus != nil {
-		if config.EventBus.Type != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_EVENT_BUS_TYPE",
-				Value: config.EventBus.Type,
-			})
-		}
-	}
+	// Prometheus configuration
+	prometheusServiceName := getResourceName(bindplane, prometheusComponent)
+	prometheusPort := strconv.Itoa(int(prometheusHTTPPort))
+
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "BINDPLANE_PROMETHEUS_ENABLE_REMOTE",
+		Value: "true",
+	})
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "BINDPLANE_PROMETHEUS_HOST",
+		Value: prometheusServiceName,
+	})
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "BINDPLANE_PROMETHEUS_PORT",
+		Value: prometheusPort,
+	})
+
+	// Transform Agent configuration
+	transformAgentServiceName := getResourceName(bindplane, transformAgentComponent)
+	transformAgentPort := strconv.Itoa(int(transformAgentHTTPPort))
+	transformAgentRemoteAgents := transformAgentServiceName + ":" + transformAgentPort
+
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "BINDPLANE_TRANSFORM_AGENT_ENABLE_REMOTE",
+		Value: "true",
+	})
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "BINDPLANE_TRANSFORM_AGENT_REMOTE_AGENTS",
+		Value: transformAgentRemoteAgents,
+	})
 
 	return envVars
+}
+
+// getNatsClientEnvVars returns the NATS client environment variables for jobs deployment
+func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsClient bool) []corev1.EnvVar {
+	if !includeNatsClient {
+		return nil
+	}
+
+	natsServiceName := getResourceName(bindplane, natsComponent)
+
+	return []corev1.EnvVar{
+		{
+			Name:  "BINDPLANE_EVENT_BUS_TYPE",
+			Value: "nats",
+		},
+		{
+			Name: "BINDPLANE_NATS_CLIENT_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name:  "BINDPLANE_NATS_CLIENT_ENDPOINT",
+			Value: fmt.Sprintf("nats://%s.%s:4222", natsServiceName, bindplane.Namespace),
+		},
+		{
+			Name:  "BINDPLANE_NATS_CLIENT_SUBJECT",
+			Value: "bindplane-event-bus",
+		},
+	}
 }

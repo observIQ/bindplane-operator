@@ -39,18 +39,6 @@ spec:
                           username:
                             type: string
                         type: object
-                      eventBus:
-                        properties:
-                          type:
-                            enum:
-                            - local
-                            - nats
-                            - googlePubSub
-                            - azure
-                            type: string
-                        required:
-                        - type
-                        type: object
                       license:
                         type: string
                       network:

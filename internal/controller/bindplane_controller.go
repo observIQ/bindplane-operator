@@ -110,6 +110,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile NATS resources
+	if err := r.reconcileNats(ctx, bindplane, log); err != nil {
+		log.Error(err, "unable to reconcile NATS")
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 

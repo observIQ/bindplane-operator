@@ -63,10 +63,6 @@ type BindplaneConfigSpec struct {
 
 	// Store configuration for Bindplane
 	Store StoreConfig `json:"store"`
-
-	// EventBus configuration for Bindplane
-	// +optional
-	EventBus *EventBusConfig `json:"eventBus,omitempty"`
 }
 
 // TransformAgentComponentSpec defines the Transform Agent component pod specification
@@ -206,47 +202,6 @@ type PostgresConfig struct {
 	// Schema specifies the database schema
 	// +optional
 	Schema string `json:"schema,omitempty"`
-}
-
-// EventBusConfig defines event bus configuration
-type EventBusConfig struct {
-	// Type specifies the event bus type. Supported values: "local", "nats", "googlePubSub", "azure"
-	// +kubebuilder:validation:Enum=local;nats;googlePubSub;azure
-	Type string `json:"type"`
-}
-
-// TransformAgentConfig defines transform agent configuration for internal use.
-// This type is not exposed in the CRD spec - it's an implementation detail that the
-// controller uses when generating the Bindplane configuration file.
-// Note: enableRemote will always be set to true by the controller.
-type TransformAgentConfig struct {
-	// EnableRemote will always be true (set by controller)
-	EnableRemote bool
-	// RemoteAgents specifies the list of remote agent endpoints
-	RemoteAgents []string
-}
-
-// PrometheusConfig defines Prometheus configuration for internal use.
-// This type is not exposed in the CRD spec - it's an implementation detail that the
-// controller uses when generating the Bindplane configuration file.
-// Note: enableRemote will always be set to true by the controller.
-type PrometheusConfig struct {
-	// EnableRemote will always be true (set by controller)
-	EnableRemote bool
-	// Host specifies the Prometheus host
-	Host string
-
-	// Port specifies the Prometheus port
-	Port string
-
-	// RemoteWrite configuration
-	RemoteWrite *PrometheusRemoteWriteConfig
-}
-
-// PrometheusRemoteWriteConfig defines remote write configuration for Prometheus
-type PrometheusRemoteWriteConfig struct {
-	// Endpoint specifies the remote write endpoint
-	Endpoint string
 }
 
 // BindplaneStatus defines the observed state of Bindplane.
