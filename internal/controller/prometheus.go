@@ -102,7 +102,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 					Spec: corev1.PodSpec{
 						ServiceAccountName: serviceName,
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup: int64Ptr(65534),
+							FSGroup: int64Ptr(defaultRunAsGroup),
 						},
 						Affinity: getPrometheusAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -156,11 +156,11 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 									TimeoutSeconds:      5,
 									FailureThreshold:    3,
 								},
-								SecurityContext: newContainerSecurityContext(WithRunAsUser(65534)),
+								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(60),
+						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getPrometheusPodTemplateSpec(bindplane),

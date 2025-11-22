@@ -92,7 +92,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 	labels := getLabels(bindplane, natsComponent)
 	selectorLabels := getSelectorLabels(bindplane, natsComponent)
 	serviceName := getResourceName(bindplane, natsComponent)
-	headlessServiceName := fmt.Sprintf("%s-headless", serviceName)
+	headlessServiceName := getNatsClusterServiceName(bindplane)
 
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -115,9 +115,9 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 					Spec: corev1.PodSpec{
 						ServiceAccountName: serviceName,
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    int64Ptr(65534),
-							RunAsGroup: int64Ptr(65534),
-							RunAsUser:  int64Ptr(65534),
+							FSGroup:    int64Ptr(defaultRunAsGroup),
+							RunAsGroup: int64Ptr(defaultRunAsGroup),
+							RunAsUser:  int64Ptr(defaultRunAsUser),
 						},
 						Affinity: getNatsAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -144,8 +144,14 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								Env: append(
 									getKubernetesEnvVars(natsContainerName),
 									append(
-										getNatsEnvVars(bindplane, serviceName, headlessServiceName),
-										getBindplaneConfigEnvVars(bindplane)...,
+										append(
+											append(
+												getNatsEnvVars(bindplane, serviceName, headlessServiceName),
+												getBindplaneConfigEnvVars(bindplane)...,
+											),
+											getPrometheusEnvVars(bindplane)...,
+										),
+										getTransformAgentEnvVars(bindplane)...,
 									)...,
 								),
 								Resources: corev1.ResourceRequirements{
@@ -160,7 +166,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/healthz",
+											Path: healthzCheckPath,
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
@@ -173,7 +179,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/healthz",
+											Path: healthzCheckPath,
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
@@ -181,23 +187,23 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/healthz",
+											Path: healthzCheckPath,
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
 								},
-								SecurityContext: newContainerSecurityContext(WithRunAsUser(65534)),
+								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
 								Lifecycle: &corev1.Lifecycle{
 									PreStop: &corev1.LifecycleHandler{
 										Exec: &corev1.ExecAction{
-											Command: []string{"sh", "-c", "sleep 5"},
+											Command: []string{preStopCommand, preStopArgs, preStopSleep},
 										},
 									},
 								},
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(60),
+						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getNatsPodTemplate(bindplane),
@@ -209,7 +215,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 func (r *BindplaneReconciler) natsHeadlessService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
 	labels := getLabels(bindplane, natsComponent)
 	selectorLabels := getSelectorLabels(bindplane, natsComponent)
-	serviceName := fmt.Sprintf("%s-headless", getResourceName(bindplane, natsComponent))
+	serviceName := getNatsClusterServiceName(bindplane)
 
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -245,7 +251,28 @@ func (r *BindplaneReconciler) natsHeadlessService(bindplane *bindplanev1alpha1.B
 }
 
 func (r *BindplaneReconciler) natsService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
-	return newService(bindplane, natsComponent, WithPort(natsClientPortName, natsClientPort))
+	labels := getLabels(bindplane, natsComponent)
+	selectorLabels := getSelectorLabels(bindplane, natsComponent)
+	serviceName := getNatsClientServiceName(bindplane)
+
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: bindplane.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: selectorLabels,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       natsClientPortName,
+					Port:       natsClientPort,
+					TargetPort: intstr.FromInt32(natsClientPort),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
 }
 
 // getNatsEnvVars returns the NATS-specific environment variables
@@ -255,72 +282,72 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, serviceName, headles
 
 	return []corev1.EnvVar{
 		{
-			Name:  bindplaneJobsModeEnvVar,
-			Value: "node",
+			Name:  bindplaneModeEnvVar,
+			Value: natsModeValue,
 		},
 		{
-			Name:  "BINDPLANE_EVENT_BUS_TYPE",
-			Value: "nats",
+			Name:  bindplaneEventBusTypeEnvVar,
+			Value: natsEventBusType,
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_ENABLE",
-			Value: "true",
+			Name:  bindplaneNatsServerEnableEnvVar,
+			Value: natsServerEnableValue,
 		},
 		{
-			Name: "BINDPLANE_NATS_SERVER_NAME",
+			Name: bindplaneNatsServerNameEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
+					FieldPath: metadataNameFieldPath,
 				},
 			},
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_CLIENT_HOST",
-			Value: "0.0.0.0",
+			Name:  bindplaneNatsServerClientHostEnvVar,
+			Value: natsBindAddress,
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_CLIENT_PORT",
+			Name:  bindplaneNatsServerClientPortEnvVar,
 			Value: strconv.Itoa(int(natsClientPort)),
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_HTTP_HOST",
-			Value: "0.0.0.0",
+			Name:  bindplaneNatsServerHTTPHostEnvVar,
+			Value: natsBindAddress,
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_HTTP_PORT",
+			Name:  bindplaneNatsServerHTTPPortEnvVar,
 			Value: strconv.Itoa(int(natsHTTPPort)),
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_CLUSTER_NAME",
+			Name:  bindplaneNatsServerClusterNameEnvVar,
 			Value: clusterName,
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_CLUSTER_HOST",
-			Value: "0.0.0.0",
+			Name:  bindplaneNatsServerClusterHostEnvVar,
+			Value: natsBindAddress,
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_CLUSTER_PORT",
+			Name:  bindplaneNatsServerClusterPortEnvVar,
 			Value: strconv.Itoa(int(natsClusterPort)),
 		},
 		{
-			Name:  "BINDPLANE_NATS_SERVER_CLUSTER_ROUTES",
+			Name:  bindplaneNatsServerClusterRoutesEnvVar,
 			Value: clusterRoutes,
 		},
 		{
-			Name: "BINDPLANE_NATS_CLIENT_NAME",
+			Name: bindplaneNatsClientNameEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
+					FieldPath: metadataNameFieldPath,
 				},
 			},
 		},
 		{
-			Name:  "BINDPLANE_NATS_CLIENT_ENDPOINT",
-			Value: "nats://127.0.0.1:4222",
+			Name:  bindplaneNatsClientEndpointEnvVar,
+			Value: fmt.Sprintf("%s%s", natsProtocolPrefix, natsLocalhostEndpoint),
 		},
 		{
-			Name:  "BINDPLANE_NATS_CLIENT_SUBJECT",
-			Value: "bindplane-event-bus",
+			Name:  bindplaneNatsClientSubjectEnvVar,
+			Value: natsClientSubject,
 		},
 	}
 }
@@ -329,7 +356,8 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, serviceName, headles
 func getNatsClusterRoutes(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName string) string {
 	var routes []string
 	for i := int32(0); i < natsReplicas; i++ {
-		route := fmt.Sprintf("nats://%s-%d.%s.%s:%d",
+		route := fmt.Sprintf("%s%s-%d.%s.%s:%d",
+			natsProtocolPrefix,
 			getResourceName(bindplane, natsComponent),
 			i,
 			headlessServiceName,

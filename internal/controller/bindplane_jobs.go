@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -44,8 +43,6 @@ const (
 	bindplaneJobsHTTPPort = int32(3001)
 	// bindplaneJobsHTTPPortName is the name of the HTTP port for Bindplane Jobs
 	bindplaneJobsHTTPPortName = "http"
-	// bindplaneJobsModeEnvVar is the environment variable name for Bindplane mode
-	bindplaneJobsModeEnvVar = "BINDPLANE_MODE"
 	// bindplaneJobsMigrateModeValue is the value for BINDPLANE_MODE for migrate jobs
 	bindplaneJobsMigrateModeValue = "migrate"
 	// bindplaneJobsModeValue is the value for BINDPLANE_MODE for regular jobs
@@ -153,9 +150,9 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 					Spec: corev1.PodSpec{
 						ServiceAccountName: getResourceName(bindplane, component),
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    int64Ptr(65534),
-							RunAsGroup: int64Ptr(65534),
-							RunAsUser:  int64Ptr(65534),
+							FSGroup:    int64Ptr(defaultRunAsGroup),
+							RunAsGroup: int64Ptr(defaultRunAsGroup),
+							RunAsUser:  int64Ptr(defaultRunAsUser),
 						},
 						Affinity: getBindplaneJobsAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -173,13 +170,19 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 									getKubernetesEnvVars(bindplaneJobsContainerName),
 									append(
 										append(
-											[]corev1.EnvVar{
-												{
-													Name:  bindplaneJobsModeEnvVar,
-													Value: modeValue,
-												},
-											},
-											getBindplaneConfigEnvVars(bindplane)...,
+											append(
+												append(
+													[]corev1.EnvVar{
+														{
+															Name:  bindplaneModeEnvVar,
+															Value: modeValue,
+														},
+													},
+													getBindplaneConfigEnvVars(bindplane)...,
+												),
+												getPrometheusEnvVars(bindplane)...,
+											),
+											getTransformAgentEnvVars(bindplane)...,
 										),
 										getNatsClientEnvVars(bindplane, includeNatsClient)...,
 									)...,
@@ -196,7 +199,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/health",
+											Path: healthCheckPath,
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
@@ -209,7 +212,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/health",
+											Path: healthCheckPath,
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
@@ -217,23 +220,23 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/health",
+											Path: healthCheckPath,
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
 								},
-								SecurityContext: newContainerSecurityContext(WithRunAsUser(65534)),
+								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
 								Lifecycle: &corev1.Lifecycle{
 									PreStop: &corev1.LifecycleHandler{
 										Exec: &corev1.ExecAction{
-											Command: []string{"sh", "-c", "sleep 5"},
+											Command: []string{preStopCommand, preStopArgs, preStopSleep},
 										},
 									},
 								},
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(60),
+						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getBindplaneJobsPodTemplate(bindplane),
@@ -258,7 +261,6 @@ func getBindplaneJobsPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindpl
 
 // getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
 // following the naming convention from override_test.go (BINDPLANE_*)
-// Also includes environment variables for Prometheus and Transform Agent services
 func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	var envVars []corev1.EnvVar
 	config := &bindplane.Spec.Bindplane.Config
@@ -266,7 +268,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	// License
 	if config.License != "" {
 		envVars = append(envVars, corev1.EnvVar{
-			Name:  "BINDPLANE_LICENSE",
+			Name:  bindplaneLicenseEnvVar,
 			Value: config.License,
 		})
 	}
@@ -275,19 +277,19 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	if config.Auth != nil {
 		if config.Auth.Type != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_AUTH_TYPE",
+				Name:  bindplaneAuthTypeEnvVar,
 				Value: config.Auth.Type,
 			})
 		}
 		if config.Auth.Username != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_USERNAME",
+				Name:  bindplaneUsernameEnvVar,
 				Value: config.Auth.Username,
 			})
 		}
 		if config.Auth.Password != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_PASSWORD",
+				Name:  bindplanePasswordEnvVar,
 				Value: config.Auth.Password,
 			})
 		}
@@ -297,19 +299,19 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	if config.Network != nil {
 		if config.Network.Host != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_HOST",
+				Name:  bindplaneHostEnvVar,
 				Value: config.Network.Host,
 			})
 		}
 		if config.Network.Port != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_PORT",
+				Name:  bindplanePortEnvVar,
 				Value: config.Network.Port,
 			})
 		}
 		if config.Network.RemoteURL != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_REMOTE_URL",
+				Name:  bindplaneRemoteURLEnvVar,
 				Value: config.Network.RemoteURL,
 			})
 		}
@@ -318,7 +320,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	// Store configuration
 	if config.Store.Type != "" {
 		envVars = append(envVars, corev1.EnvVar{
-			Name:  "BINDPLANE_STORE_TYPE",
+			Name:  bindplaneStoreTypeEnvVar,
 			Value: config.Store.Type,
 		})
 	}
@@ -327,104 +329,114 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	if config.Store.Postgres != nil {
 		if config.Store.Postgres.Host != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_HOST",
+				Name:  bindplanePostgresHostEnvVar,
 				Value: config.Store.Postgres.Host,
 			})
 		}
 		if config.Store.Postgres.Port != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_PORT",
+				Name:  bindplanePostgresPortEnvVar,
 				Value: config.Store.Postgres.Port,
 			})
 		}
 		if config.Store.Postgres.ConnectTimeout != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_CONNECT_TIMEOUT",
+				Name:  bindplanePostgresConnectTimeoutEnvVar,
 				Value: config.Store.Postgres.ConnectTimeout,
 			})
 		}
 		if config.Store.Postgres.StatementTimeout != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_STATEMENT_TIMEOUT",
+				Name:  bindplanePostgresStatementTimeoutEnvVar,
 				Value: config.Store.Postgres.StatementTimeout,
 			})
 		}
 		if config.Store.Postgres.Database != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_DATABASE",
+				Name:  bindplanePostgresDatabaseEnvVar,
 				Value: config.Store.Postgres.Database,
 			})
 		}
 		if config.Store.Postgres.SSLMode != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_SSL_MODE",
+				Name:  bindplanePostgresSSLModeEnvVar,
 				Value: config.Store.Postgres.SSLMode,
 			})
 		}
 		if config.Store.Postgres.Username != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_USERNAME",
+				Name:  bindplanePostgresUsernameEnvVar,
 				Value: config.Store.Postgres.Username,
 			})
 		}
 		if config.Store.Postgres.Password != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_PASSWORD",
+				Name:  bindplanePostgresPasswordEnvVar,
 				Value: config.Store.Postgres.Password,
 			})
 		}
 		if config.Store.Postgres.MaxConnections > 0 {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_MAX_CONNECTIONS",
+				Name:  bindplanePostgresMaxConnectionsEnvVar,
 				Value: strconv.Itoa(config.Store.Postgres.MaxConnections),
 			})
 		}
 		if config.Store.Postgres.MaxLifetime != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_MAX_LIFETIME",
+				Name:  bindplanePostgresMaxLifetimeEnvVar,
 				Value: config.Store.Postgres.MaxLifetime,
 			})
 		}
 		if config.Store.Postgres.Schema != "" {
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  "BINDPLANE_POSTGRES_SCHEMA",
+				Name:  bindplanePostgresSchemaEnvVar,
 				Value: config.Store.Postgres.Schema,
 			})
 		}
 	}
 
-	// Prometheus configuration
+	return envVars
+}
+
+// getPrometheusEnvVars returns the Prometheus environment variables
+// Used by jobs, jobs-migrate, and node deployments
+func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	prometheusServiceName := getResourceName(bindplane, prometheusComponent)
 	prometheusPort := strconv.Itoa(int(prometheusHTTPPort))
 
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "BINDPLANE_PROMETHEUS_ENABLE_REMOTE",
-		Value: "true",
-	})
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "BINDPLANE_PROMETHEUS_HOST",
-		Value: prometheusServiceName,
-	})
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "BINDPLANE_PROMETHEUS_PORT",
-		Value: prometheusPort,
-	})
+	return []corev1.EnvVar{
+		{
+			Name:  bindplanePrometheusEnableRemoteEnvVar,
+			Value: enableRemoteValue,
+		},
+		{
+			Name:  bindplanePrometheusHostEnvVar,
+			Value: prometheusServiceName,
+		},
+		{
+			Name:  bindplanePrometheusPortEnvVar,
+			Value: prometheusPort,
+		},
+	}
+}
 
-	// Transform Agent configuration
+// getTransformAgentEnvVars returns the Transform Agent environment variables
+// Used by jobs, jobs-migrate, and node deployments
+func getTransformAgentEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	transformAgentServiceName := getResourceName(bindplane, transformAgentComponent)
 	transformAgentPort := strconv.Itoa(int(transformAgentHTTPPort))
 	transformAgentRemoteAgents := transformAgentServiceName + ":" + transformAgentPort
 
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "BINDPLANE_TRANSFORM_AGENT_ENABLE_REMOTE",
-		Value: "true",
-	})
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "BINDPLANE_TRANSFORM_AGENT_REMOTE_AGENTS",
-		Value: transformAgentRemoteAgents,
-	})
-
-	return envVars
+	return []corev1.EnvVar{
+		{
+			Name:  bindplaneTransformAgentEnableRemoteEnvVar,
+			Value: enableRemoteValue,
+		},
+		{
+			Name:  bindplaneTransformAgentRemoteAgentsEnvVar,
+			Value: transformAgentRemoteAgents,
+		},
+	}
 }
 
 // getNatsClientEnvVars returns the NATS client environment variables for jobs deployment
@@ -433,28 +445,26 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 		return nil
 	}
 
-	natsServiceName := getResourceName(bindplane, natsComponent)
-
 	return []corev1.EnvVar{
 		{
-			Name:  "BINDPLANE_EVENT_BUS_TYPE",
-			Value: "nats",
+			Name:  bindplaneEventBusTypeEnvVar,
+			Value: natsEventBusType,
 		},
 		{
-			Name: "BINDPLANE_NATS_CLIENT_NAME",
+			Name: bindplaneNatsClientNameEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
+					FieldPath: metadataNameFieldPath,
 				},
 			},
 		},
 		{
-			Name:  "BINDPLANE_NATS_CLIENT_ENDPOINT",
-			Value: fmt.Sprintf("nats://%s.%s:4222", natsServiceName, bindplane.Namespace),
+			Name:  bindplaneNatsClientEndpointEnvVar,
+			Value: getNatsClientEndpoint(bindplane),
 		},
 		{
-			Name:  "BINDPLANE_NATS_CLIENT_SUBJECT",
-			Value: "bindplane-event-bus",
+			Name:  bindplaneNatsClientSubjectEnvVar,
+			Value: natsClientSubject,
 		},
 	}
 }

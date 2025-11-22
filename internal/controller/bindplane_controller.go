@@ -59,6 +59,120 @@ const (
 	kubernetesContainerNameEnvVar = "KUBERNETES_CONTAINER_NAME"
 )
 
+// Bindplane environment variable name constants
+const (
+	// Core Bindplane configuration
+	bindplaneModeEnvVar      = "BINDPLANE_MODE"
+	bindplaneLicenseEnvVar   = "BINDPLANE_LICENSE"
+	bindplaneAuthTypeEnvVar  = "BINDPLANE_AUTH_TYPE"
+	bindplaneUsernameEnvVar  = "BINDPLANE_USERNAME"
+	bindplanePasswordEnvVar  = "BINDPLANE_PASSWORD"
+	bindplaneHostEnvVar      = "BINDPLANE_HOST"
+	bindplanePortEnvVar      = "BINDPLANE_PORT"
+	bindplaneRemoteURLEnvVar = "BINDPLANE_REMOTE_URL"
+
+	// Store configuration
+	bindplaneStoreTypeEnvVar = "BINDPLANE_STORE_TYPE"
+
+	// Postgres configuration
+	bindplanePostgresHostEnvVar             = "BINDPLANE_POSTGRES_HOST"
+	bindplanePostgresPortEnvVar             = "BINDPLANE_POSTGRES_PORT"
+	bindplanePostgresConnectTimeoutEnvVar   = "BINDPLANE_POSTGRES_CONNECT_TIMEOUT"
+	bindplanePostgresStatementTimeoutEnvVar = "BINDPLANE_POSTGRES_STATEMENT_TIMEOUT"
+	bindplanePostgresDatabaseEnvVar         = "BINDPLANE_POSTGRES_DATABASE"
+	bindplanePostgresSSLModeEnvVar          = "BINDPLANE_POSTGRES_SSL_MODE"
+	bindplanePostgresUsernameEnvVar         = "BINDPLANE_POSTGRES_USERNAME"
+	bindplanePostgresPasswordEnvVar         = "BINDPLANE_POSTGRES_PASSWORD"
+	bindplanePostgresMaxConnectionsEnvVar   = "BINDPLANE_POSTGRES_MAX_CONNECTIONS"
+	bindplanePostgresMaxLifetimeEnvVar      = "BINDPLANE_POSTGRES_MAX_LIFETIME"
+	bindplanePostgresSchemaEnvVar           = "BINDPLANE_POSTGRES_SCHEMA"
+
+	// Prometheus configuration
+	bindplanePrometheusEnableRemoteEnvVar = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
+	bindplanePrometheusHostEnvVar         = "BINDPLANE_PROMETHEUS_HOST"
+	bindplanePrometheusPortEnvVar         = "BINDPLANE_PROMETHEUS_PORT"
+
+	// Transform Agent configuration
+	bindplaneTransformAgentEnableRemoteEnvVar = "BINDPLANE_TRANSFORM_AGENT_ENABLE_REMOTE"
+	bindplaneTransformAgentRemoteAgentsEnvVar = "BINDPLANE_TRANSFORM_AGENT_REMOTE_AGENTS"
+
+	// Event Bus configuration
+	bindplaneEventBusTypeEnvVar = "BINDPLANE_EVENT_BUS_TYPE"
+
+	// NATS client configuration
+	bindplaneNatsClientNameEnvVar     = "BINDPLANE_NATS_CLIENT_NAME"
+	bindplaneNatsClientEndpointEnvVar = "BINDPLANE_NATS_CLIENT_ENDPOINT"
+	bindplaneNatsClientSubjectEnvVar  = "BINDPLANE_NATS_CLIENT_SUBJECT"
+
+	// NATS server configuration
+	bindplaneNatsServerEnableEnvVar        = "BINDPLANE_NATS_SERVER_ENABLE"
+	bindplaneNatsServerNameEnvVar          = "BINDPLANE_NATS_SERVER_NAME"
+	bindplaneNatsServerClientHostEnvVar    = "BINDPLANE_NATS_SERVER_CLIENT_HOST"
+	bindplaneNatsServerClientPortEnvVar    = "BINDPLANE_NATS_SERVER_CLIENT_PORT"
+	bindplaneNatsServerHTTPHostEnvVar      = "BINDPLANE_NATS_SERVER_HTTP_HOST"
+	bindplaneNatsServerHTTPPortEnvVar      = "BINDPLANE_NATS_SERVER_HTTP_PORT"
+	bindplaneNatsServerClusterNameEnvVar   = "BINDPLANE_NATS_SERVER_CLUSTER_NAME"
+	bindplaneNatsServerClusterHostEnvVar   = "BINDPLANE_NATS_SERVER_CLUSTER_HOST"
+	bindplaneNatsServerClusterPortEnvVar   = "BINDPLANE_NATS_SERVER_CLUSTER_PORT"
+	bindplaneNatsServerClusterRoutesEnvVar = "BINDPLANE_NATS_SERVER_CLUSTER_ROUTES"
+)
+
+// Common security and pod constants
+const (
+	// defaultRunAsUser is the default user ID for security contexts
+	defaultRunAsUser = int64(65534)
+	// defaultRunAsGroup is the default group ID for security contexts
+	defaultRunAsGroup = int64(65534)
+	// defaultTerminationGracePeriodSeconds is the default termination grace period
+	defaultTerminationGracePeriodSeconds = int64(60)
+	// defaultContainerName is the default container name used across deployments
+	defaultContainerName = "server"
+	// defaultHTTPPortName is the default HTTP port name
+	defaultHTTPPortName = "http"
+	// metadataNameFieldPath is the field path for pod metadata.name
+	metadataNameFieldPath = "metadata.name"
+	// metadataNamespaceFieldPath is the field path for pod metadata.namespace
+	metadataNamespaceFieldPath = "metadata.namespace"
+	// preStopCommand is the command used in preStop lifecycle hooks
+	preStopCommand = "sh"
+	// preStopArgs is the arguments for preStop lifecycle hooks
+	preStopArgs = "-c"
+	// preStopSleep is the sleep command for preStop hooks
+	preStopSleep = "sleep 5"
+)
+
+// Health check path constants
+const (
+	// healthCheckPath is the HTTP path for health checks (used by jobs)
+	healthCheckPath = "/health"
+	// healthzCheckPath is the HTTP path for healthz checks (used by NATS and node)
+	healthzCheckPath = "/healthz"
+)
+
+// NATS constants
+const (
+	// natsServiceClientSuffix is the suffix for NATS client service name
+	natsServiceClientSuffix = "-client"
+	// natsServiceClusterSuffix is the suffix for NATS cluster service name
+	natsServiceClusterSuffix = "-cluster"
+	// natsEventBusType is the event bus type value for NATS
+	natsEventBusType = "nats"
+	// natsClientSubject is the NATS client subject name
+	natsClientSubject = "bindplane-event-bus"
+	// natsProtocolPrefix is the NATS protocol prefix
+	natsProtocolPrefix = "nats://"
+	// natsLocalhostEndpoint is the localhost NATS endpoint
+	natsLocalhostEndpoint = "127.0.0.1:4222"
+	// natsBindAddress is the bind address for NATS servers
+	natsBindAddress = "0.0.0.0"
+	// natsModeValue is the BINDPLANE_MODE value for NATS nodes
+	natsModeValue = "node"
+	// natsServerEnableValue is the value to enable NATS server
+	natsServerEnableValue = "true"
+	// enableRemoteValue is the value to enable remote services
+	enableRemoteValue = "true"
+)
+
 // BindplaneReconciler reconciles a Bindplane object
 type BindplaneReconciler struct {
 	client.Client
@@ -156,6 +270,21 @@ func getSelectorLabels(bindplane *bindplanev1alpha1.Bindplane, component string)
 // getResourceName returns a standardized resource name for a component
 func getResourceName(bindplane *bindplanev1alpha1.Bindplane, component string) string {
 	return fmt.Sprintf("%s-%s", bindplane.Name, component)
+}
+
+// getNatsClientServiceName returns the NATS client service name
+func getNatsClientServiceName(bindplane *bindplanev1alpha1.Bindplane) string {
+	return fmt.Sprintf("%s%s", getResourceName(bindplane, natsComponent), natsServiceClientSuffix)
+}
+
+// getNatsClusterServiceName returns the NATS cluster (headless) service name
+func getNatsClusterServiceName(bindplane *bindplanev1alpha1.Bindplane) string {
+	return fmt.Sprintf("%s%s", getResourceName(bindplane, natsComponent), natsServiceClusterSuffix)
+}
+
+// getNatsClientEndpoint returns the NATS client endpoint URL
+func getNatsClientEndpoint(bindplane *bindplanev1alpha1.Bindplane) string {
+	return fmt.Sprintf("%s%s.%s:%d", natsProtocolPrefix, getNatsClientServiceName(bindplane), bindplane.Namespace, natsClientPort)
 }
 
 // Generic reconcile functions

@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -61,6 +60,12 @@ func (r *BindplaneReconciler) reconcileNode(ctx context.Context, bindplane *bind
 		return err
 	}
 
+	// Reconcile Service
+	service := r.nodeService(bindplane)
+	if err := r.reconcileService(ctx, bindplane, service, log); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -93,9 +98,9 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 					Spec: corev1.PodSpec{
 						ServiceAccountName: getResourceName(bindplane, nodeComponent),
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    int64Ptr(65534),
-							RunAsGroup: int64Ptr(65534),
-							RunAsUser:  int64Ptr(65534),
+							FSGroup:    int64Ptr(defaultRunAsGroup),
+							RunAsGroup: int64Ptr(defaultRunAsGroup),
+							RunAsUser:  int64Ptr(defaultRunAsUser),
 						},
 						Affinity: getNodeAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -112,8 +117,17 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								Env: append(
 									getKubernetesEnvVars(nodeContainerName),
 									append(
-										getNodeEnvVars(bindplane),
-										getBindplaneConfigEnvVars(bindplane)...,
+										append(
+											append(
+												append(
+													getNodeEnvVars(bindplane),
+													getBindplaneConfigEnvVars(bindplane)...,
+												),
+												getPrometheusEnvVars(bindplane)...,
+											),
+											getTransformAgentEnvVars(bindplane)...,
+										),
+										getNatsClientEnvVars(bindplane, true)...,
 									)...,
 								),
 								Resources: corev1.ResourceRequirements{
@@ -128,7 +142,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/healthz",
+											Path: healthzCheckPath,
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
@@ -141,7 +155,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/healthz",
+											Path: healthzCheckPath,
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
@@ -149,23 +163,23 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: "/healthz",
+											Path: healthzCheckPath,
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
 								},
-								SecurityContext: newContainerSecurityContext(WithRunAsUser(65534)),
+								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
 								Lifecycle: &corev1.Lifecycle{
 									PreStop: &corev1.LifecycleHandler{
 										Exec: &corev1.ExecAction{
-											Command: []string{"sh", "-c", "sleep 5"},
+											Command: []string{preStopCommand, preStopArgs, preStopSleep},
 										},
 									},
 								},
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(60),
+						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getNodePodTemplate(bindplane),
@@ -175,34 +189,12 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 }
 
 // getNodeEnvVars returns the Node-specific environment variables
-// Same as NATS StatefulSet but without NATS server config, only client config
+// Includes mode and NATS client configuration (but not NATS server config)
 func getNodeEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
-	natsServiceName := getResourceName(bindplane, natsComponent)
-
 	return []corev1.EnvVar{
 		{
-			Name:  bindplaneJobsModeEnvVar,
+			Name:  bindplaneModeEnvVar,
 			Value: nodeModeValue,
-		},
-		{
-			Name:  "BINDPLANE_EVENT_BUS_TYPE",
-			Value: "nats",
-		},
-		{
-			Name: "BINDPLANE_NATS_CLIENT_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
-		{
-			Name:  "BINDPLANE_NATS_CLIENT_ENDPOINT",
-			Value: fmt.Sprintf("nats://%s.%s:4222", natsServiceName, bindplane.Namespace),
-		},
-		{
-			Name:  "BINDPLANE_NATS_CLIENT_SUBJECT",
-			Value: "bindplane-event-bus",
 		},
 	}
 }
@@ -218,4 +210,8 @@ func getNodeAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
 func getNodePodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
 	// Node doesn't have a pod template in the spec, so return nil
 	return nil
+}
+
+func (r *BindplaneReconciler) nodeService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
+	return newService(bindplane, nodeComponent, WithPort(nodeHTTPPortName, nodeHTTPPort))
 }
