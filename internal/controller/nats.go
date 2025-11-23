@@ -141,18 +141,12 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: append(
+								Env: combineEnvVars(
 									getKubernetesEnvVars(natsContainerName),
-									append(
-										append(
-											append(
-												getNatsEnvVars(bindplane, serviceName, headlessServiceName),
-												getBindplaneConfigEnvVars(bindplane)...,
-											),
-											getPrometheusEnvVars(bindplane)...,
-										),
-										getTransformAgentEnvVars(bindplane)...,
-									)...,
+									getNatsEnvVars(bindplane, serviceName, headlessServiceName),
+									getBindplaneConfigEnvVars(bindplane),
+									getPrometheusEnvVars(bindplane),
+									getTransformAgentEnvVars(bindplane),
 								),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{

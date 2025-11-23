@@ -394,6 +394,15 @@ func boolPtr(b bool) *bool {
 
 // getKubernetesEnvVars returns the common Kubernetes environment variables
 // that should be present in all pods deployed by this operator
+// combineEnvVars combines multiple slices of environment variables into a single slice
+func combineEnvVars(envVarSlices ...[]corev1.EnvVar) []corev1.EnvVar {
+	var result []corev1.EnvVar
+	for _, envVars := range envVarSlices {
+		result = append(result, envVars...)
+	}
+	return result
+}
+
 func getKubernetesEnvVars(containerName string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{

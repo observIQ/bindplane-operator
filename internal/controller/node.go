@@ -114,21 +114,13 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: append(
+								Env: combineEnvVars(
 									getKubernetesEnvVars(nodeContainerName),
-									append(
-										append(
-											append(
-												append(
-													getNodeEnvVars(bindplane),
-													getBindplaneConfigEnvVars(bindplane)...,
-												),
-												getPrometheusEnvVars(bindplane)...,
-											),
-											getTransformAgentEnvVars(bindplane)...,
-										),
-										getNatsClientEnvVars(bindplane, true)...,
-									)...,
+									getNodeEnvVars(bindplane),
+									getBindplaneConfigEnvVars(bindplane),
+									getPrometheusEnvVars(bindplane),
+									getTransformAgentEnvVars(bindplane),
+									getNatsClientEnvVars(bindplane, true),
 								),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{

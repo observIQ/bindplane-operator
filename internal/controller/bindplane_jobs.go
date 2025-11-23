@@ -166,26 +166,18 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: append(
+								Env: combineEnvVars(
 									getKubernetesEnvVars(bindplaneJobsContainerName),
-									append(
-										append(
-											append(
-												append(
-													[]corev1.EnvVar{
-														{
-															Name:  bindplaneModeEnvVar,
-															Value: modeValue,
-														},
-													},
-													getBindplaneConfigEnvVars(bindplane)...,
-												),
-												getPrometheusEnvVars(bindplane)...,
-											),
-											getTransformAgentEnvVars(bindplane)...,
-										),
-										getNatsClientEnvVars(bindplane, includeNatsClient)...,
-									)...,
+									[]corev1.EnvVar{
+										{
+											Name:  bindplaneModeEnvVar,
+											Value: modeValue,
+										},
+									},
+									getBindplaneConfigEnvVars(bindplane),
+									getPrometheusEnvVars(bindplane),
+									getTransformAgentEnvVars(bindplane),
+									getNatsClientEnvVars(bindplane, includeNatsClient),
 								),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
