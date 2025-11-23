@@ -102,7 +102,9 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 					Spec: corev1.PodSpec{
 						ServiceAccountName: serviceName,
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup: int64Ptr(defaultRunAsGroup),
+							FSGroup:    int64Ptr(defaultRunAsGroup),
+							RunAsGroup: int64Ptr(defaultRunAsGroup),
+							RunAsUser:  int64Ptr(defaultRunAsUser),
 						},
 						Affinity: getPrometheusAffinity(bindplane),
 						Containers: []corev1.Container{
