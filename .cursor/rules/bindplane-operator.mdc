@@ -63,12 +63,50 @@ The controller is organized with **one file per service** for scalability:
 - **`bindplane_controller.go`**: Main reconcile loop, shared helper functions, label constants, generic reconcile functions
 - **`transform_agent.go`**: Transform Agent service (ServiceAccount, Deployment, Service)
 - **`prometheus.go`**: Prometheus service (ServiceAccount, StatefulSet, Service)
+- **`bindplane_jobs.go`**: Bindplane Jobs and Jobs Migrate services (ServiceAccount, Deployment)
+- **`nats.go`**: NATS service (ServiceAccount, StatefulSet, Services)
+- **`node.go`**: Bindplane Node service (ServiceAccount, Deployment, Service)
 
 Each service file contains:
 - `reconcile<Service>()` - Orchestrates all resources for that service
 - `*<Service>ServiceAccount()` - Generates ServiceAccount
 - `*<Service>Deployment()` or `*<Service>StatefulSet()` - Generates workload
 - `*<Service>Service()` - Generates Service
+
+## Deployment Descriptions
+
+### Prometheus
+- **Type**: StatefulSet
+- **Purpose**: Stores short-term Bindplane metrics for agent health and agent throughput. Rollouts are stored in Postgres.
+- **Binary**: Operates a vanilla (unmodified) Prometheus binary
+
+### Transform Agent
+- **Type**: Deployment
+- **Purpose**: Powers Bindplane [Live Preview](https://docs.bindplane.com/feature-guides/live-preview) feature
+- **Binary**: Operates the Bindplane transform agent binary
+
+### Bindplane Jobs Migrate
+- **Type**: Deployment
+- **Purpose**: Manages Postgres setup and migrations
+- **Binary**: Operates the Bindplane binary
+- **Event Bus**: Does not connect to the event bus
+
+### Bindplane Jobs
+- **Type**: Deployment
+- **Purpose**: Manages periodic jobs, such as agent cleanup
+- **Binary**: Operates the Bindplane binary
+- **Event Bus**: Connects to the event bus
+
+### Bindplane NATS
+- **Type**: StatefulSet
+- **Purpose**: Operates the Bindplane distributed event bus, allowing Bindplane nodes to communicate
+- **Binary**: Operates the Bindplane binary with an embedded [NATS](https://nats.io/) server
+
+### Bindplane Node
+- **Type**: Deployment
+- **Purpose**: Exposes the Bindplane UI, API, and OpAMP endpoints
+- **Binary**: Operates the Bindplane binary
+- **Event Bus**: Connects to the Bindplane NATS event bus
 
 ## When to Use operator-sdk CLI
 
