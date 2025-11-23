@@ -108,24 +108,44 @@ func (r *BindplaneReconciler) bindplaneJobsServiceAccount(bindplane *bindplanev1
 }
 
 func (r *BindplaneReconciler) bindplaneJobsMigrateDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
+	// Jobs Migrate resources: 100m CPU, 2048Mi memory
+	resources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+	}
 	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsMigrateComponent, bindplaneJobsMigrateModeValue, appsv1.DeploymentStrategy{
 		Type: appsv1.RecreateDeploymentStrategyType,
-	}, false) // false = don't include NATS client config
+	}, false, resources) // false = don't include NATS client config
 }
 
 func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
 	// Use RollingUpdate strategy with maxSurge to allow overlapping pods
 	maxSurge := intstr.FromInt(1)
+	// Jobs resources: 1000m CPU, 1024Mi memory
+	resources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("1024Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1000m"),
+			corev1.ResourceMemory: resource.MustParse("1024Mi"),
+		},
+	}
 	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsComponent, bindplaneJobsModeValue, appsv1.DeploymentStrategy{
 		Type: appsv1.RollingUpdateDeploymentStrategyType,
 		RollingUpdate: &appsv1.RollingUpdateDeployment{
 			MaxSurge: &maxSurge,
 		},
-	}, true) // true = include NATS client config
+	}, true, resources) // true = include NATS client config
 }
 
 // bindplaneJobsDeploymentCommon creates a deployment for Bindplane Jobs with configurable component, mode, and strategy
-func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplanev1alpha1.Bindplane, component string, modeValue string, strategy appsv1.DeploymentStrategy, includeNatsClient bool) *appsv1.Deployment {
+func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplanev1alpha1.Bindplane, component string, modeValue string, strategy appsv1.DeploymentStrategy, includeNatsClient bool, resources corev1.ResourceRequirements) *appsv1.Deployment {
 	replicas := int32(1)
 	labels := getLabels(bindplane, component)
 	selectorLabels := getSelectorLabels(bindplane, component)
@@ -179,15 +199,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 									getTransformAgentEnvVars(bindplane),
 									getNatsClientEnvVars(bindplane, includeNatsClient),
 								),
-								Resources: corev1.ResourceRequirements{
-									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("1000Mi"),
-									},
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("1000m"),
-										corev1.ResourceMemory: resource.MustParse("1000Mi"),
-									},
-								},
+								Resources: resources,
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{

@@ -36,12 +36,20 @@ type BindplaneSpec struct {
 	// Prometheus pod specification
 	// +optional
 	Prometheus *PrometheusComponentSpec `json:"prometheus,omitempty"`
+
+	// NATS pod specification
+	// +optional
+	Nats *NatsComponentSpec `json:"nats,omitempty"`
 }
 
 // BindplaneComponentSpec defines the Bindplane component configuration and pod specification
 type BindplaneComponentSpec struct {
 	// Config contains Bindplane's configuration (license, auth, network, store, eventBus)
 	Config BindplaneConfigSpec `json:"config"`
+
+	// Replicas specifies the number of replicas for Bindplane Node deployment
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// PodTemplate defines pod template specification for Bindplane containers (for future use)
 	// +optional
@@ -67,6 +75,10 @@ type BindplaneConfigSpec struct {
 
 // TransformAgentComponentSpec defines the Transform Agent component pod specification
 type TransformAgentComponentSpec struct {
+	// Replicas specifies the number of replicas for Transform Agent deployment
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// PodTemplate defines pod template specification for Transform Agent
 	// +optional
 	// +kubebuilder:validation:Type=object
@@ -85,6 +97,19 @@ type PrometheusComponentSpec struct {
 	// Storage defines the persistent storage configuration for Prometheus
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
+}
+
+// NatsComponentSpec defines the NATS component pod specification
+type NatsComponentSpec struct {
+	// Replicas specifies the number of replicas for NATS StatefulSet
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// PodTemplate defines pod template specification for NATS
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 
 // StorageSpec defines persistent storage configuration

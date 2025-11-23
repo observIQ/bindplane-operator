@@ -43,7 +43,7 @@ const (
 	// nodeModeValue is the value for BINDPLANE_MODE
 	nodeModeValue = "node"
 	// nodeReplicas is the number of node replicas
-	nodeReplicas = int32(2)
+	nodeReplicas = int32(3)
 )
 
 // reconcileNode reconciles all Bindplane Node resources
@@ -75,6 +75,9 @@ func (r *BindplaneReconciler) nodeServiceAccount(bindplane *bindplanev1alpha1.Bi
 
 func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
 	replicas := nodeReplicas
+	if bindplane.Spec.Bindplane.Replicas != nil {
+		replicas = *bindplane.Spec.Bindplane.Replicas
+	}
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
 
@@ -124,11 +127,11 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("512Mi"),
+										corev1.ResourceMemory: resource.MustParse("2048Mi"),
 									},
 									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("200m"),
-										corev1.ResourceMemory: resource.MustParse("512Mi"),
+										corev1.ResourceCPU:    resource.MustParse("2000m"),
+										corev1.ResourceMemory: resource.MustParse("2048Mi"),
 									},
 								},
 								StartupProbe: &corev1.Probe{

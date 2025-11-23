@@ -51,7 +51,7 @@ const (
 	// natsClusterPortName is the name of the NATS cluster port
 	natsClusterPortName = "cluster"
 	// natsReplicas is the number of NATS replicas
-	natsReplicas = int32(3)
+	natsReplicas = int32(1)
 )
 
 // reconcileNats reconciles all NATS resources
@@ -89,6 +89,9 @@ func (r *BindplaneReconciler) natsServiceAccount(bindplane *bindplanev1alpha1.Bi
 
 func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindplane) *appsv1.StatefulSet {
 	replicas := natsReplicas
+	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil {
+		replicas = *bindplane.Spec.Nats.Replicas
+	}
 	labels := getLabels(bindplane, natsComponent)
 	selectorLabels := getSelectorLabels(bindplane, natsComponent)
 	serviceName := getResourceName(bindplane, natsComponent)
@@ -143,18 +146,19 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								},
 								Env: combineEnvVars(
 									getKubernetesEnvVars(natsContainerName),
-									getNatsEnvVars(bindplane, serviceName, headlessServiceName),
+									getNatsEnvVars(bindplane, serviceName, headlessServiceName, replicas),
 									getBindplaneConfigEnvVars(bindplane),
 									getPrometheusEnvVars(bindplane),
 									getTransformAgentEnvVars(bindplane),
 								),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("1000Mi"),
+										corev1.ResourceCPU:    resource.MustParse("500m"),
+										corev1.ResourceMemory: resource.MustParse("500Mi"),
 									},
 									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("1000m"),
-										corev1.ResourceMemory: resource.MustParse("1000Mi"),
+										corev1.ResourceCPU:    resource.MustParse("250m"),
+										corev1.ResourceMemory: resource.MustParse("500Mi"),
 									},
 								},
 								StartupProbe: &corev1.Probe{
@@ -270,9 +274,9 @@ func (r *BindplaneReconciler) natsService(bindplane *bindplanev1alpha1.Bindplane
 }
 
 // getNatsEnvVars returns the NATS-specific environment variables
-func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, serviceName, headlessServiceName string) []corev1.EnvVar {
+func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, serviceName, headlessServiceName string, replicas int32) []corev1.EnvVar {
 	clusterName := fmt.Sprintf("%s-%s", bindplane.Name, natsComponent)
-	clusterRoutes := getNatsClusterRoutes(bindplane, headlessServiceName)
+	clusterRoutes := getNatsClusterRoutes(bindplane, headlessServiceName, replicas)
 
 	return []corev1.EnvVar{
 		{
@@ -347,9 +351,10 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, serviceName, headles
 }
 
 // getNatsClusterRoutes generates the cluster routes string for NATS
-func getNatsClusterRoutes(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName string) string {
+// It generates routes based on the actual replica count (e.g., 3 replicas = all 3 hostnames, 1 replica = first hostname only)
+func getNatsClusterRoutes(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName string, replicas int32) string {
 	var routes []string
-	for i := int32(0); i < natsReplicas; i++ {
+	for i := int32(0); i < replicas; i++ {
 		route := fmt.Sprintf("%s%s-%d.%s.%s:%d",
 			natsProtocolPrefix,
 			getResourceName(bindplane, natsComponent),
@@ -378,6 +383,8 @@ func getNatsAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
 
 // getNatsPodTemplate returns the user-provided pod template spec for NATS
 func getNatsPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
-	// NATS doesn't have a pod template in the spec, so return nil
+	if bindplane.Spec.Nats != nil {
+		return bindplane.Spec.Nats.PodTemplate
+	}
 	return nil
 }

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -531,22 +532,40 @@ func newService(bindplane *bindplanev1alpha1.Bindplane, component string, opts .
 }
 
 // mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.
-// Operator-managed fields (ServiceAccountName, containers, labels) take precedence.
+// It supports ANY arbitrary field in the pod spec, while protecting only critical operator-managed fields.
+// Protected fields: ServiceAccountName, container names/images/ports/env/command/args, protected labels, TerminationGracePeriodSeconds
 func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *bindplanev1alpha1.PodTemplateSpec) corev1.PodTemplateSpec {
 	if userProvided == nil {
 		return operatorManaged
 	}
 
+	// Deep copy operator-managed spec as the base
 	merged := operatorManaged.DeepCopy()
 
-	// Merge metadata (labels and annotations)
-	// Protect operator-managed selector labels from user overrides
-	// These labels are critical for service selectors to match pods
+	// Save protected fields before merging
+	protectedServiceAccountName := merged.Spec.ServiceAccountName
+	protectedTerminationGracePeriodSeconds := merged.Spec.TerminationGracePeriodSeconds
+	protectedContainers := make([]corev1.Container, len(merged.Spec.Containers))
+	for i, c := range merged.Spec.Containers {
+		protectedContainers[i] = *c.DeepCopy()
+	}
 	protectedLabelKeys := []string{
 		labelKeyName,
 		labelKeyInstance,
 		labelKeyComponent,
 	}
+	protectedLabels := make(map[string]string)
+	for _, key := range protectedLabelKeys {
+		if val, exists := merged.ObjectMeta.Labels[key]; exists {
+			protectedLabels[key] = val
+		}
+	}
+
+	// Deep merge user-provided spec on top of operator spec
+	// This allows ANY field to be overridden
+	userSpecCopy := userProvided.Spec.DeepCopy()
+
+	// Merge metadata (labels and annotations)
 	if userProvided.ObjectMeta.Labels != nil {
 		if merged.ObjectMeta.Labels == nil {
 			merged.ObjectMeta.Labels = make(map[string]string)
@@ -574,118 +593,115 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 		}
 	}
 
-	// Merge pod spec - allow user overrides for scheduling-related fields
-	userSpec := userProvided.Spec
-
-	// Allow user to override affinity
-	if userSpec.Affinity != nil {
-		merged.Spec.Affinity = userSpec.Affinity
+	// Merge all pod spec fields using JSON marshal/unmarshal for deep merge
+	// This allows ANY field to be merged, not just a curated list
+	operatorSpecJSON, err := json.Marshal(merged.Spec)
+	if err != nil {
+		// Fallback to operator spec if marshal fails
+		return *merged
 	}
 
-	// Allow user to override tolerations
-	if userSpec.Tolerations != nil {
-		merged.Spec.Tolerations = userSpec.Tolerations
+	userSpecJSON, err := json.Marshal(userSpecCopy)
+	if err != nil {
+		// Fallback to operator spec if marshal fails
+		return *merged
 	}
 
-	// Allow user to override nodeSelector
-	if userSpec.NodeSelector != nil {
-		merged.Spec.NodeSelector = userSpec.NodeSelector
+	// Merge JSON objects
+	var operatorSpecMap map[string]interface{}
+	var userSpecMap map[string]interface{}
+	if err := json.Unmarshal(operatorSpecJSON, &operatorSpecMap); err != nil {
+		return *merged
+	}
+	if err := json.Unmarshal(userSpecJSON, &userSpecMap); err != nil {
+		return *merged
 	}
 
-	// Allow user to override runtimeClassName
-	if userSpec.RuntimeClassName != nil {
-		merged.Spec.RuntimeClassName = userSpec.RuntimeClassName
+	// Deep merge user spec into operator spec
+	mergeMaps(operatorSpecMap, userSpecMap)
+
+	// Convert back to PodSpec
+	mergedJSON, err := json.Marshal(operatorSpecMap)
+	if err != nil {
+		return *merged
+	}
+	if err := json.Unmarshal(mergedJSON, &merged.Spec); err != nil {
+		return *merged
 	}
 
-	// Allow user to override priorityClassName
-	if userSpec.PriorityClassName != "" {
-		merged.Spec.PriorityClassName = userSpec.PriorityClassName
-	}
+	// Restore protected fields
+	merged.Spec.ServiceAccountName = protectedServiceAccountName
+	merged.Spec.TerminationGracePeriodSeconds = protectedTerminationGracePeriodSeconds
 
-	// Allow user to override schedulerName
-	if userSpec.SchedulerName != "" {
-		merged.Spec.SchedulerName = userSpec.SchedulerName
-	}
-
-	// Allow user to override hostNetwork, hostPID, hostIPC
-	if userSpec.HostNetwork {
-		merged.Spec.HostNetwork = userSpec.HostNetwork
-	}
-	if userSpec.HostPID {
-		merged.Spec.HostPID = userSpec.HostPID
-	}
-	if userSpec.HostIPC {
-		merged.Spec.HostIPC = userSpec.HostIPC
-	}
-
-	// Allow user to override DNS settings
-	if userSpec.DNSPolicy != "" {
-		merged.Spec.DNSPolicy = userSpec.DNSPolicy
-	}
-	if userSpec.DNSConfig != nil {
-		merged.Spec.DNSConfig = userSpec.DNSConfig
-	}
-
-	// Allow user to override initContainers (but preserve operator containers)
-	if len(userSpec.InitContainers) > 0 {
-		merged.Spec.InitContainers = userSpec.InitContainers
-	}
-
-	// Allow user to override volumes (merge with operator volumes)
-	if len(userSpec.Volumes) > 0 {
-		// Create a map of existing volumes by name to avoid duplicates
-		volumeMap := make(map[string]corev1.Volume)
-		for _, vol := range merged.Spec.Volumes {
-			volumeMap[vol.Name] = vol
+	// Merge containers by name - allow user to override any container field except protected ones
+	if len(userProvided.Spec.Containers) > 0 {
+		containerMap := make(map[string]corev1.Container)
+		for _, c := range protectedContainers {
+			containerMap[c.Name] = c
 		}
-		// Add user volumes, allowing them to override operator volumes with same name
-		for _, vol := range userSpec.Volumes {
-			volumeMap[vol.Name] = vol
-		}
-		// Convert back to slice
-		merged.Spec.Volumes = make([]corev1.Volume, 0, len(volumeMap))
-		for _, vol := range volumeMap {
-			merged.Spec.Volumes = append(merged.Spec.Volumes, vol)
-		}
-	}
 
-	// Allow user to override imagePullSecrets
-	if len(userSpec.ImagePullSecrets) > 0 {
-		merged.Spec.ImagePullSecrets = userSpec.ImagePullSecrets
-	}
+		// For each user container, merge it with the operator container
+		for _, userContainer := range userProvided.Spec.Containers {
+			if operatorContainer, exists := containerMap[userContainer.Name]; exists {
+				// Deep copy operator container
+				mergedContainer := operatorContainer.DeepCopy()
 
-	// Allow user to override securityContext (merge carefully)
-	if userSpec.SecurityContext != nil {
-		// Merge security context - user values override operator values
-		if merged.Spec.SecurityContext == nil {
-			merged.Spec.SecurityContext = &corev1.PodSecurityContext{}
-		}
-		userSC := userSpec.SecurityContext
-		if userSC.FSGroup != nil {
-			merged.Spec.SecurityContext.FSGroup = userSC.FSGroup
-		}
-		if userSC.RunAsGroup != nil {
-			merged.Spec.SecurityContext.RunAsGroup = userSC.RunAsGroup
-		}
-		if userSC.RunAsUser != nil {
-			merged.Spec.SecurityContext.RunAsUser = userSC.RunAsUser
-		}
-		if userSC.RunAsNonRoot != nil {
-			merged.Spec.SecurityContext.RunAsNonRoot = userSC.RunAsNonRoot
-		}
-		if userSC.SupplementalGroups != nil {
-			merged.Spec.SecurityContext.SupplementalGroups = userSC.SupplementalGroups
-		}
-		if userSC.SELinuxOptions != nil {
-			merged.Spec.SecurityContext.SELinuxOptions = userSC.SELinuxOptions
-		}
-		if userSC.SeccompProfile != nil {
-			merged.Spec.SecurityContext.SeccompProfile = userSC.SeccompProfile
-		}
-	}
+				// Merge user container fields using JSON
+				operatorContainerJSON, _ := json.Marshal(mergedContainer)
+				userContainerJSON, _ := json.Marshal(userContainer)
+				var operatorContainerMap map[string]interface{}
+				var userContainerMap map[string]interface{}
+				if err := json.Unmarshal(operatorContainerJSON, &operatorContainerMap); err == nil {
+					if err := json.Unmarshal(userContainerJSON, &userContainerMap); err == nil {
+						mergeMaps(operatorContainerMap, userContainerMap)
+						mergedContainerJSON, _ := json.Marshal(operatorContainerMap)
+						json.Unmarshal(mergedContainerJSON, mergedContainer)
+					}
+				}
 
-	// Note: ServiceAccountName, Containers, and TerminationGracePeriodSeconds are
-	// operator-managed and are NOT overridden by user input
+				// Restore protected container fields
+				mergedContainer.Name = operatorContainer.Name
+				mergedContainer.Image = operatorContainer.Image
+				mergedContainer.Ports = operatorContainer.Ports
+				mergedContainer.Env = operatorContainer.Env
+				mergedContainer.Command = operatorContainer.Command
+				mergedContainer.Args = operatorContainer.Args
+
+				containerMap[userContainer.Name] = *mergedContainer
+			}
+		}
+
+		// Update merged containers
+		merged.Spec.Containers = make([]corev1.Container, len(protectedContainers))
+		for i, c := range protectedContainers {
+			if updated, exists := containerMap[c.Name]; exists {
+				merged.Spec.Containers[i] = updated
+			} else {
+				merged.Spec.Containers[i] = c
+			}
+		}
+	} else {
+		// No user containers, use protected containers
+		merged.Spec.Containers = protectedContainers
+	}
 
 	return *merged
+}
+
+// mergeMaps recursively merges map b into map a
+func mergeMaps(a, b map[string]interface{}) {
+	for k, v := range b {
+		if v == nil {
+			continue
+		}
+		if av, exists := a[k]; exists {
+			if avMap, ok := av.(map[string]interface{}); ok {
+				if bvMap, ok := v.(map[string]interface{}); ok {
+					mergeMaps(avMap, bvMap)
+					continue
+				}
+			}
+		}
+		a[k] = v
+	}
 }

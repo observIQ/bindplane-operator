@@ -73,6 +73,9 @@ func (r *BindplaneReconciler) transformAgentServiceAccount(bindplane *bindplanev
 
 func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
 	replicas := int32(2)
+	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.Replicas != nil {
+		replicas = *bindplane.Spec.TransformAgent.Replicas
+	}
 	labels := getLabels(bindplane, transformAgentComponent)
 	selectorLabels := getSelectorLabels(bindplane, transformAgentComponent)
 
@@ -114,11 +117,11 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								Env: getKubernetesEnvVars(transformAgentContainerName),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("100Mi"),
+										corev1.ResourceMemory: resource.MustParse("1024Mi"),
 									},
 									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("100m"),
-										corev1.ResourceMemory: resource.MustParse("100Mi"),
+										corev1.ResourceCPU:    resource.MustParse("250m"),
+										corev1.ResourceMemory: resource.MustParse("1024Mi"),
 									},
 								},
 								StartupProbe: &corev1.Probe{
