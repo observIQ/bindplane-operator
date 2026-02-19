@@ -126,14 +126,8 @@ const (
 	defaultRunAsGroup = int64(65534)
 	// defaultTerminationGracePeriodSeconds is the default termination grace period
 	defaultTerminationGracePeriodSeconds = int64(60)
-	// defaultContainerName is the default container name used across deployments
-	defaultContainerName = "server"
-	// defaultHTTPPortName is the default HTTP port name
-	defaultHTTPPortName = "http"
 	// metadataNameFieldPath is the field path for pod metadata.name
 	metadataNameFieldPath = "metadata.name"
-	// metadataNamespaceFieldPath is the field path for pod metadata.namespace
-	metadataNamespaceFieldPath = "metadata.namespace"
 	// preStopCommand is the command used in preStop lifecycle hooks
 	preStopCommand = "sh"
 	// preStopArgs is the arguments for preStop lifecycle hooks
@@ -556,7 +550,7 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 	}
 	protectedLabels := make(map[string]string)
 	for _, key := range protectedLabelKeys {
-		if val, exists := merged.ObjectMeta.Labels[key]; exists {
+		if val, exists := merged.Labels[key]; exists {
 			protectedLabels[key] = val
 		}
 	}
@@ -566,11 +560,11 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 	userSpecCopy := userProvided.Spec.DeepCopy()
 
 	// Merge metadata (labels and annotations)
-	if userProvided.ObjectMeta.Labels != nil {
-		if merged.ObjectMeta.Labels == nil {
-			merged.ObjectMeta.Labels = make(map[string]string)
+	if userProvided.Labels != nil {
+		if merged.Labels == nil {
+			merged.Labels = make(map[string]string)
 		}
-		for k, v := range userProvided.ObjectMeta.Labels {
+		for k, v := range userProvided.Labels {
 			// Skip protected labels - operator-managed labels take precedence
 			isProtected := false
 			for _, protectedKey := range protectedLabelKeys {
@@ -580,16 +574,16 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 				}
 			}
 			if !isProtected {
-				merged.ObjectMeta.Labels[k] = v
+				merged.Labels[k] = v
 			}
 		}
 	}
-	if userProvided.ObjectMeta.Annotations != nil {
-		if merged.ObjectMeta.Annotations == nil {
-			merged.ObjectMeta.Annotations = make(map[string]string)
+	if userProvided.Annotations != nil {
+		if merged.Annotations == nil {
+			merged.Annotations = make(map[string]string)
 		}
-		for k, v := range userProvided.ObjectMeta.Annotations {
-			merged.ObjectMeta.Annotations[k] = v
+		for k, v := range userProvided.Annotations {
+			merged.Annotations[k] = v
 		}
 	}
 
@@ -655,7 +649,10 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 					if err := json.Unmarshal(userContainerJSON, &userContainerMap); err == nil {
 						mergeMaps(operatorContainerMap, userContainerMap)
 						mergedContainerJSON, _ := json.Marshal(operatorContainerMap)
-						json.Unmarshal(mergedContainerJSON, mergedContainer)
+						if err := json.Unmarshal(mergedContainerJSON, mergedContainer); err != nil {
+							// Keep operator container values when container merge fails.
+							mergedContainer = operatorContainer.DeepCopy()
+						}
 					}
 				}
 

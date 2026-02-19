@@ -119,7 +119,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								},
 								Env: combineEnvVars(
 									getKubernetesEnvVars(nodeContainerName),
-									getNodeEnvVars(bindplane),
+									getNodeEnvVars(),
 									getBindplaneConfigEnvVars(bindplane),
 									getPrometheusEnvVars(bindplane),
 									getTransformAgentEnvVars(bindplane),
@@ -185,7 +185,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 
 // getNodeEnvVars returns the Node-specific environment variables
 // Includes mode and NATS client configuration (but not NATS server config)
-func getNodeEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+func getNodeEnvVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  bindplaneModeEnvVar,

@@ -146,7 +146,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								},
 								Env: combineEnvVars(
 									getKubernetesEnvVars(natsContainerName),
-									getNatsEnvVars(bindplane, serviceName, headlessServiceName, replicas),
+									getNatsEnvVars(bindplane, headlessServiceName, replicas),
 									getBindplaneConfigEnvVars(bindplane),
 									getPrometheusEnvVars(bindplane),
 									getTransformAgentEnvVars(bindplane),
@@ -274,7 +274,7 @@ func (r *BindplaneReconciler) natsService(bindplane *bindplanev1alpha1.Bindplane
 }
 
 // getNatsEnvVars returns the NATS-specific environment variables
-func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, serviceName, headlessServiceName string, replicas int32) []corev1.EnvVar {
+func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName string, replicas int32) []corev1.EnvVar {
 	clusterName := fmt.Sprintf("%s-%s", bindplane.Name, natsComponent)
 	clusterRoutes := getNatsClusterRoutes(bindplane, headlessServiceName, replicas)
 

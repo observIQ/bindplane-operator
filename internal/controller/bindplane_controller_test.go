@@ -482,8 +482,8 @@ var _ = Describe("mergePodTemplateSpec", func() {
 		})
 
 		It("should handle nil labels and annotations in operator-managed template", func() {
-			operatorManaged.ObjectMeta.Labels = nil
-			operatorManaged.ObjectMeta.Annotations = nil
+			operatorManaged.Labels = nil
+			operatorManaged.Annotations = nil
 
 			userProvided := &bindplanev1alpha1.PodTemplateSpec{
 				PodTemplateSpec: corev1.PodTemplateSpec{
