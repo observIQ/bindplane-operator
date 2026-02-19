@@ -208,7 +208,9 @@ endif
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply --server-side -f -
+	@$(KUSTOMIZE) build config/crd > /tmp/crds.yaml && \
+	($(KUBECTL) create -f /tmp/crds.yaml 2>/dev/null || $(KUBECTL) replace -f /tmp/crds.yaml) && \
+	rm -f /tmp/crds.yaml
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.

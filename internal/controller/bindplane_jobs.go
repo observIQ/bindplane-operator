@@ -150,6 +150,17 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 	labels := getLabels(bindplane, component)
 	selectorLabels := getSelectorLabels(bindplane, component)
 
+	// Get the appropriate PodTemplate and Affinity based on component
+	var podTemplate *bindplanev1alpha1.PodTemplateSpec
+	var affinity *corev1.Affinity
+	if component == bindplaneJobsMigrateComponent {
+		podTemplate = getBindplaneJobsMigratePodTemplate(bindplane)
+		affinity = getBindplaneJobsMigrateAffinity(bindplane)
+	} else {
+		podTemplate = getBindplaneJobsPodTemplate(bindplane)
+		affinity = getBindplaneJobsAffinity(bindplane)
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, component),
@@ -174,7 +185,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 							RunAsGroup: int64Ptr(defaultRunAsGroup),
 							RunAsUser:  int64Ptr(defaultRunAsUser),
 						},
-						Affinity: getBindplaneJobsAffinity(bindplane),
+						Affinity: affinity,
 						Containers: []corev1.Container{
 							{
 								Name:  bindplaneJobsContainerName,
@@ -243,7 +254,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
 					},
 				},
-				getBindplaneJobsPodTemplate(bindplane),
+				podTemplate,
 			),
 		},
 	}
@@ -252,22 +263,42 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 // getBindplaneJobsAffinity returns the affinity configuration for Bindplane Jobs pods
 // This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
 func getBindplaneJobsAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
-	if bindplane.Spec.Bindplane.PodTemplate != nil {
-		return bindplane.Spec.Bindplane.PodTemplate.Spec.Affinity
+	if bindplane.Spec.BindplaneJobs != nil && bindplane.Spec.BindplaneJobs.PodTemplate != nil {
+		return bindplane.Spec.BindplaneJobs.PodTemplate.Spec.Affinity
 	}
 	return nil
 }
 
 // getBindplaneJobsPodTemplate returns the user-provided pod template spec for Bindplane Jobs
 func getBindplaneJobsPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
-	return bindplane.Spec.Bindplane.PodTemplate
+	if bindplane.Spec.BindplaneJobs != nil {
+		return bindplane.Spec.BindplaneJobs.PodTemplate
+	}
+	return nil
+}
+
+// getBindplaneJobsMigrateAffinity returns the affinity configuration for Bindplane Jobs Migrate pods
+// This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
+func getBindplaneJobsMigrateAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
+	if bindplane.Spec.BindplaneJobsMigrate != nil && bindplane.Spec.BindplaneJobsMigrate.PodTemplate != nil {
+		return bindplane.Spec.BindplaneJobsMigrate.PodTemplate.Spec.Affinity
+	}
+	return nil
+}
+
+// getBindplaneJobsMigratePodTemplate returns the user-provided pod template spec for Bindplane Jobs Migrate
+func getBindplaneJobsMigratePodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
+	if bindplane.Spec.BindplaneJobsMigrate != nil {
+		return bindplane.Spec.BindplaneJobsMigrate.PodTemplate
+	}
+	return nil
 }
 
 // getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
 // following the naming convention from override_test.go (BINDPLANE_*)
 func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	var envVars []corev1.EnvVar
-	config := &bindplane.Spec.Bindplane.Config
+	config := &bindplane.Spec.Config
 
 	// License
 	if config.License != "" {

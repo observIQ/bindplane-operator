@@ -26,8 +26,20 @@ import (
 
 // BindplaneSpec defines the desired state of Bindplane.
 type BindplaneSpec struct {
+	// Config contains Bindplane's configuration (license, auth, network, store, eventBus)
+	// This config is shared by Node, Jobs, and Jobs Migrate
+	Config BindplaneConfigSpec `json:"config"`
+
 	// Bindplane configuration and pod specification
 	Bindplane BindplaneComponentSpec `json:"bindplane"`
+
+	// Bindplane Jobs pod specification
+	// +optional
+	BindplaneJobs *BindplaneJobsComponentSpec `json:"bindplaneJobs,omitempty"`
+
+	// Bindplane Jobs Migrate pod specification
+	// +optional
+	BindplaneJobsMigrate *BindplaneJobsMigrateComponentSpec `json:"bindplaneJobsMigrate,omitempty"`
 
 	// Transform Agent pod specification
 	// +optional
@@ -42,17 +54,36 @@ type BindplaneSpec struct {
 	Nats *NatsComponentSpec `json:"nats,omitempty"`
 }
 
-// BindplaneComponentSpec defines the Bindplane component configuration and pod specification
+// BindplaneComponentSpec defines the Bindplane component pod specification
 type BindplaneComponentSpec struct {
-	// Config contains Bindplane's configuration (license, auth, network, store, eventBus)
-	Config BindplaneConfigSpec `json:"config"`
-
 	// Replicas specifies the number of replicas for Bindplane Node deployment
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// PodTemplate defines pod template specification for Bindplane containers (for future use)
+	// PodTemplate defines pod template specification for Bindplane Node
 	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+}
+
+// BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification
+type BindplaneJobsComponentSpec struct {
+	// PodTemplate defines pod template specification for Bindplane Jobs
+	// Note: Jobs are restricted to 1 replica and cannot be scaled
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+}
+
+// BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification
+type BindplaneJobsMigrateComponentSpec struct {
+	// PodTemplate defines pod template specification for Bindplane Jobs Migrate
+	// Note: Jobs Migrate are restricted to 1 replica and cannot be scaled
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 

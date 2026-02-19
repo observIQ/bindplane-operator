@@ -6,36 +6,58 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: bindplane-sample
 spec:
+  config:
+    license: "your-license-key-here"
+    auth:
+      type: system
+      username: admin
+      password: password
+    network:
+      host: 0.0.0.0
+      port: "3001"
+      remoteURL: http://bindplane:3001
+    store:
+      type: postgres
+      postgres:
+        host: postgres.example.com
+        port: "5432"
+        database: bindplane
+        username: bindplane
+        password: bindplane
   bindplane:
-    config:
-      license: "your-license-key-here"
-      auth:
-        type: system
-        username: admin
-        password: password
-      network:
-        host: 0.0.0.0
-        port: "3001"
-        remoteURL: http://bindplane:3001
-      store:
-        type: postgres
-        postgres:
-          host: postgres.example.com
-          port: "5432"
-          database: bindplane
-          username: bindplane
-          password: bindplane
     # Configure Bindplane Node for small deployments (2 replicas, reduced resources)
     replicas: 2
     podTemplate:
       spec:
         containers:
-          # This podTemplate applies to Bindplane Node, Jobs, and Jobs Migrate
-          # All use container name "server"
           - name: server
             resources:
               requests:
                 cpu: 500m
+                memory: 1024Mi
+              limits:
+                memory: 1024Mi
+  bindplaneJobs:
+    # Configure Bindplane Jobs for small deployments
+    podTemplate:
+      spec:
+        containers:
+          - name: server
+            resources:
+              requests:
+                cpu: 100m
+                memory: 1024Mi
+              limits:
+                memory: 1024Mi
+  bindplaneJobsMigrate:
+    # Configure Bindplane Jobs Migrate for small deployments
+    podTemplate:
+      spec:
+        containers:
+          - name: server
+            resources:
+              requests:
+                cpu: 100m
                 memory: 1024Mi
               limits:
                 memory: 1024Mi

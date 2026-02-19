@@ -203,8 +203,7 @@ func getNodeAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
 
 // getNodePodTemplate returns the user-provided pod template spec for Node
 func getNodePodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
-	// Node doesn't have a pod template in the spec, so return nil
-	return nil
+	return bindplane.Spec.Bindplane.PodTemplate
 }
 
 func (r *BindplaneReconciler) nodeService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
