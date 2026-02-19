@@ -52,7 +52,17 @@ var _ = Describe("Bindplane Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: bindplanev1alpha1.BindplaneSpec{
+						Config: bindplanev1alpha1.BindplaneConfigSpec{
+							License: "test-license",
+							Store: bindplanev1alpha1.StoreConfig{
+								Type: "postgres",
+								Postgres: &bindplanev1alpha1.PostgresConfig{
+									Host: "postgres-host",
+								},
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

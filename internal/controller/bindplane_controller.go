@@ -530,10 +530,24 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 
 	// Save protected fields before merging
 	protectedServiceAccountName := merged.Spec.ServiceAccountName
-	protectedTerminationGracePeriodSeconds := merged.Spec.TerminationGracePeriodSeconds
+
+	// Copy the pointed-to value (not just the pointer) to avoid json.Unmarshal
+	// modifying the saved value in-place through the shared pointer.
+	var protectedTerminationGracePeriodSeconds *int64
+	if v := merged.Spec.TerminationGracePeriodSeconds; v != nil {
+		c := *v
+		protectedTerminationGracePeriodSeconds = &c
+	}
+
 	protectedContainers := make([]corev1.Container, len(merged.Spec.Containers))
 	for i, c := range merged.Spec.Containers {
 		protectedContainers[i] = *c.DeepCopy()
+	}
+
+	// Save operator volumes before the JSON merge overwrites the array.
+	protectedVolumes := make([]corev1.Volume, len(merged.Spec.Volumes))
+	for i, v := range merged.Spec.Volumes {
+		protectedVolumes[i] = *v.DeepCopy()
 	}
 	protectedLabelKeys := []string{
 		labelKeyName,
@@ -664,6 +678,29 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 	} else {
 		// No user containers, use protected containers
 		merged.Spec.Containers = protectedContainers
+	}
+
+	// Merge volumes by name: start from the operator set, then add or override
+	// with user-provided volumes. This mirrors the container merge strategy.
+	if len(userProvided.Spec.Volumes) > 0 {
+		volumeMap := make(map[string]corev1.Volume, len(protectedVolumes))
+		volumeOrder := make([]string, 0, len(protectedVolumes))
+		for _, v := range protectedVolumes {
+			volumeMap[v.Name] = v
+			volumeOrder = append(volumeOrder, v.Name)
+		}
+		for _, userVol := range userProvided.Spec.Volumes {
+			if _, exists := volumeMap[userVol.Name]; !exists {
+				volumeOrder = append(volumeOrder, userVol.Name)
+			}
+			volumeMap[userVol.Name] = userVol
+		}
+		merged.Spec.Volumes = make([]corev1.Volume, 0, len(volumeOrder))
+		for _, name := range volumeOrder {
+			merged.Spec.Volumes = append(merged.Spec.Volumes, volumeMap[name])
+		}
+	} else {
+		merged.Spec.Volumes = protectedVolumes
 	}
 
 	return *merged
