@@ -11060,13 +11060,8 @@ spec:
                         required:
                         - host
                         type: object
-                      type:
-                        enum:
-                        - postgres
-                        type: string
                     required:
                     - postgres
-                    - type
                     type: object
                 required:
                 - license

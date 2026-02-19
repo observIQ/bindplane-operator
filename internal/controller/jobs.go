@@ -386,13 +386,11 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 		Value: remoteURL,
 	})
 
-	// Store configuration
-	if config.Store.Type != "" {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  bindplaneStoreTypeEnvVar,
-			Value: config.Store.Type,
-		})
-	}
+	// Store type is always postgres
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  bindplaneStoreTypeEnvVar,
+		Value: "postgres",
+	})
 
 	// Postgres configuration
 	if config.Store.Postgres != nil {

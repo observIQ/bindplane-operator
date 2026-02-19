@@ -56,7 +56,6 @@ var _ = Describe("Bindplane Controller", func() {
 						Config: bindplanev1alpha1.BindplaneConfigSpec{
 							License: "test-license",
 							Store: bindplanev1alpha1.StoreConfig{
-								Type: "postgres",
 								Postgres: &bindplanev1alpha1.PostgresConfig{
 									Host: "postgres-host",
 								},

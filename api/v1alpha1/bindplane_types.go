@@ -228,11 +228,7 @@ type NetworkConfig struct {
 
 // StoreConfig defines store configuration
 type StoreConfig struct {
-	// Type specifies the store type. Currently only "postgres" is supported.
-	// +kubebuilder:validation:Enum=postgres
-	Type string `json:"type"`
-
-	// Postgres configuration (only used when type is "postgres")
+	// Postgres configuration
 	Postgres *PostgresConfig `json:"postgres"`
 }
 

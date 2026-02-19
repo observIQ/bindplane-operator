@@ -238,7 +238,7 @@ $(LOCALBIN):
 
 ## Tool versions are pinned in tools/go.mod and tools/go.sum.
 ## To update a tool: cd tools && go get -tool <package>@<version> && go mod tidy
-TOOLS_MOD := tools/go.mod
+TOOLS_MOD := $(CURDIR)/tools/go.mod
 
 ## Tool commands - versions are locked in tools/go.mod
 KUBECTL ?= kubectl

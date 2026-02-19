@@ -105,11 +105,7 @@ When a Secret reference is set, the kubelet resolves the secret value at pod sta
 
 ## Store
 
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.store.type` | `BINDPLANE_STORE_TYPE` | — | Yes |
-
-Currently only `postgres` is supported for `spec.config.store.type`.
+The store type is always `postgres`. `BINDPLANE_STORE_TYPE` is automatically set to `postgres` by the operator.
 
 ### PostgreSQL
 
