@@ -8,7 +8,7 @@ This guide explains how to build and run the Bindplane Operator locally using Mi
 - Docker (or your preferred container runtime) installed
 - `kubectl` configured to use your Minikube cluster
 - `make` installed
-- Go 1.24+ installed
+- Go 1.26+ installed
 
 ## Step 1: Start Minikube
 
@@ -87,8 +87,6 @@ Install the Custom Resource Definitions into your Minikube cluster:
 make install
 ```
 
-**Note:** The CRD installation uses server-side apply (`--server-side` flag) to avoid Kubernetes annotation size limits. This is required because the CRD includes embedded PodTemplateSpec schemas.
-
 This will apply the CRDs defined in `config/crd/bases/`.
 
 Verify the CRDs are installed:
@@ -112,16 +110,19 @@ The Makefile is configured to use `bindplane-operator:local` by default, so you 
 - Create the operator namespace (`bindplane-operator-system` by default)
 - Use the `bindplane-operator:local` image you built in Step 3
 
+**Note:** `make deploy` uses server-side apply (`kubectl apply --server-side --force-conflicts`) so that the large Bindplane CRD does not hit the Kubernetes annotation size limit (262144 bytes for `kubectl.kubernetes.io/last-applied-configuration`).
+
 If you need to use a different image, you can override it:
 
 ```bash
 make deploy IMG=your-image:tag
 ```
 
-Alternatively, you can use kustomize directly (which will use the hardcoded image from `config/manager/kustomization.yaml`):
+Alternatively, you can use kustomize directly (use server-side apply to avoid CRD annotation size limits):
 
 ```bash
-kustomize build config/default | kubectl apply -f -
+cd config/manager && kustomize edit set image controller=bindplane-operator:local
+kustomize build config/default | kubectl apply --server-side --force-conflicts -f -
 ```
 
 ## Step 7: Verify the Operator is Running

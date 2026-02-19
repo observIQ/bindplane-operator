@@ -47,6 +47,8 @@ spec:
               number: 3001
 EOF
 
+set +x
+
 echo ""
 echo "Ingress created! To access the bindplane node service:"
 echo "1. Add 'bindplane-node.local' to /etc/hosts pointing to \$(minikube ip)"
