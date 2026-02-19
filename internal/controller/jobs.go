@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -118,14 +119,24 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateDeployment(bindplane *bindplan
 			corev1.ResourceMemory: resource.MustParse("2048Mi"),
 		},
 	}
+	// maxSurge=0 ensures the old pod is deleted before the new pod is created,
+	// so only one migrate pod runs at a time.
+	maxSurge := intstr.FromInt32(0)
+	maxUnavailable := intstr.FromInt32(1)
 	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsMigrateComponent, bindplaneJobsMigrateModeValue, appsv1.DeploymentStrategy{
-		Type: appsv1.RecreateDeploymentStrategyType,
+		Type: appsv1.RollingUpdateDeploymentStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateDeployment{
+			MaxSurge:       &maxSurge,
+			MaxUnavailable: &maxUnavailable,
+		},
 	}, false, resources) // false = don't include NATS client config
 }
 
 func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
-	// Use RollingUpdate strategy with maxSurge to allow overlapping pods
-	maxSurge := intstr.FromInt(1)
+	// maxSurge=1 allows a new pod to start before the old one is deleted,
+	// so two pods may briefly run in parallel during a rollout.
+	maxSurge := intstr.FromInt32(1)
+	maxUnavailable := intstr.FromInt32(0)
 	// Jobs resources: 1000m CPU, 1024Mi memory
 	resources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
@@ -139,7 +150,8 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsComponent, bindplaneJobsModeValue, appsv1.DeploymentStrategy{
 		Type: appsv1.RollingUpdateDeploymentStrategyType,
 		RollingUpdate: &appsv1.RollingUpdateDeployment{
-			MaxSurge: &maxSurge,
+			MaxSurge:       &maxSurge,
+			MaxUnavailable: &maxUnavailable,
 		},
 	}, true, resources) // true = include NATS client config
 }
@@ -352,13 +364,20 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 				Value: config.Network.Port,
 			})
 		}
-		if config.Network.RemoteURL != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplaneRemoteURLEnvVar,
-				Value: config.Network.RemoteURL,
-			})
-		}
 	}
+
+	// Remote URL is always set; user-provided value takes precedence over the default.
+	remoteURL := ""
+	if config.Network != nil {
+		remoteURL = config.Network.RemoteURL
+	}
+	if remoteURL == "" {
+		remoteURL = fmt.Sprintf("http://%s-%s:%d", bindplane.Name, nodeComponent, nodeHTTPPort)
+	}
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  bindplaneRemoteURLEnvVar,
+		Value: remoteURL,
+	})
 
 	// Store configuration
 	if config.Store.Type != "" {

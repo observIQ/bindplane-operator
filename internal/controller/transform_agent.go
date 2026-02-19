@@ -79,6 +79,9 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 	labels := getLabels(bindplane, transformAgentComponent)
 	selectorLabels := getSelectorLabels(bindplane, transformAgentComponent)
 
+	maxSurge := intstr.FromInt32(1)
+	maxUnavailable := intstr.FromInt32(1)
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, transformAgentComponent),
@@ -87,6 +90,13 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       &maxSurge,
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},

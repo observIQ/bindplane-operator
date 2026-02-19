@@ -199,7 +199,9 @@ type NetworkConfig struct {
 	// +optional
 	Port string `json:"port,omitempty"`
 
-	// RemoteURL specifies the remote URL
+	// RemoteURL specifies the remote URL for Bindplane.
+	// Defaults to http://<bindplane-name>-node:3001 (the internal node service URL).
+	// Override this when using ingress, e.g. https://bindplane.my-corp.net
 	// +optional
 	RemoteURL string `json:"remoteURL,omitempty"`
 }

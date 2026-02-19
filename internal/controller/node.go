@@ -81,6 +81,9 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
 
+	maxSurge := intstr.FromInt32(1)
+	maxUnavailable := intstr.FromInt32(1)
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, nodeComponent),
@@ -89,7 +92,13 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			// Default rollout strategy (RollingUpdate)
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       &maxSurge,
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
@@ -137,7 +146,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthzCheckPath,
+											Path: healthCheckPath,
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
@@ -150,7 +159,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthzCheckPath,
+											Path: healthCheckPath,
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
@@ -162,7 +171,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthzCheckPath,
+											Path: healthCheckPath,
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
