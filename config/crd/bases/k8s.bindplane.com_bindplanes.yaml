@@ -10948,6 +10948,83 @@ spec:
                 properties:
                   auth:
                     properties:
+                      ldap:
+                        properties:
+                          baseDN:
+                            type: string
+                          bindPassword:
+                            type: string
+                          bindPasswordSecret:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          bindUser:
+                            type: string
+                          port:
+                            type: string
+                          protocol:
+                            type: string
+                          searchFilter:
+                            type: string
+                          server:
+                            type: string
+                          tlsCA:
+                            type: string
+                          tlsCert:
+                            type: string
+                          tlsKey:
+                            type: string
+                          tlsSkipVerify:
+                            type: boolean
+                        type: object
+                      oidc:
+                        properties:
+                          clientID:
+                            type: string
+                          clientIDSecret:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          clientSecret:
+                            type: string
+                          clientSecretSecret:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          issuer:
+                            type: string
+                          scopes:
+                            items:
+                              type: string
+                            type: array
+                        type: object
                       password:
                         type: string
                       passwordSecret:
@@ -10963,7 +11040,14 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      sessionsStrictMode:
+                        type: boolean
                       type:
+                        enum:
+                        - system
+                        - ldap
+                        - active-directory
+                        - oidc
                         type: string
                       username:
                         type: string

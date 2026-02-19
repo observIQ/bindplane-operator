@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -330,6 +331,71 @@ func secretOrValue(name, value string, ref *corev1.SecretKeySelector) *corev1.En
 	return nil
 }
 
+// getLDAPEnvVars returns LDAP / Active Directory environment variables.
+// Returns nil when ldap is nil.
+func getLDAPEnvVars(ldap *bindplanev1alpha1.LDAPConfig) []corev1.EnvVar {
+	if ldap == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if ldap.Protocol != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPProtocolEnvVar, Value: ldap.Protocol})
+	}
+	if ldap.Server != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPServerEnvVar, Value: ldap.Server})
+	}
+	if ldap.Port != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPPortEnvVar, Value: ldap.Port})
+	}
+	if ldap.BaseDN != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPBaseDNEnvVar, Value: ldap.BaseDN})
+	}
+	if ldap.BindUser != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPBindUserEnvVar, Value: ldap.BindUser})
+	}
+	if ev := secretOrValue(bindplaneLDAPBindPasswordEnvVar, ldap.BindPassword, ldap.BindPasswordSecret); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ldap.SearchFilter != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPSearchFilterEnvVar, Value: ldap.SearchFilter})
+	}
+	if ldap.TLSCert != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSCertEnvVar, Value: ldap.TLSCert})
+	}
+	if ldap.TLSKey != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSKeyEnvVar, Value: ldap.TLSKey})
+	}
+	if ldap.TLSCA != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSCAEnvVar, Value: ldap.TLSCA})
+	}
+	if ldap.TLSSkipVerify {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSSkipVerifyEnvVar, Value: "true"})
+	}
+	return envVars
+}
+
+// getOIDCEnvVars returns OIDC environment variables.
+// Returns nil when oidc is nil.
+func getOIDCEnvVars(oidc *bindplanev1alpha1.OIDCConfig) []corev1.EnvVar {
+	if oidc == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if ev := secretOrValue(bindplaneOIDCClientIDEnvVar, oidc.ClientID, oidc.ClientIDSecret); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ev := secretOrValue(bindplaneOIDCClientSecretEnvVar, oidc.ClientSecret, oidc.ClientSecretSecret); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if oidc.Issuer != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCIssuerEnvVar, Value: oidc.Issuer})
+	}
+	if len(oidc.Scopes) > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCScopesEnvVar, Value: strings.Join(oidc.Scopes, ",")})
+	}
+	return envVars
+}
+
 // getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
 // following the naming convention from override_test.go (BINDPLANE_*)
 func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
@@ -349,12 +415,24 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 				Value: config.Auth.Type,
 			})
 		}
+		if config.Auth.SessionsStrictMode {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  bindplaneAuthSessionsStrictModeEnvVar,
+				Value: "true",
+			})
+		}
 		if ev := secretOrValue(bindplaneUsernameEnvVar, config.Auth.Username, config.Auth.UsernameSecret); ev != nil {
 			envVars = append(envVars, *ev)
 		}
 		if ev := secretOrValue(bindplanePasswordEnvVar, config.Auth.Password, config.Auth.PasswordSecret); ev != nil {
 			envVars = append(envVars, *ev)
 		}
+
+		// LDAP / Active Directory
+		envVars = append(envVars, getLDAPEnvVars(config.Auth.LDAP)...)
+
+		// OIDC
+		envVars = append(envVars, getOIDCEnvVars(config.Auth.OIDC)...)
 	}
 
 	// Network configuration

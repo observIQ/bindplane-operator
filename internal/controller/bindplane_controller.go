@@ -65,14 +65,34 @@ const (
 // Bindplane environment variable name constants
 const (
 	// Core Bindplane configuration
-	bindplaneModeEnvVar      = "BINDPLANE_MODE"
-	bindplaneLicenseEnvVar   = "BINDPLANE_LICENSE"
-	bindplaneAuthTypeEnvVar  = "BINDPLANE_AUTH_TYPE"
-	bindplaneUsernameEnvVar  = "BINDPLANE_USERNAME"
-	bindplanePasswordEnvVar  = "BINDPLANE_PASSWORD" // #nosec G101 -- env var name, not a credential
-	bindplaneHostEnvVar      = "BINDPLANE_HOST"
-	bindplanePortEnvVar      = "BINDPLANE_PORT"
-	bindplaneRemoteURLEnvVar = "BINDPLANE_REMOTE_URL"
+	bindplaneModeEnvVar                   = "BINDPLANE_MODE"
+	bindplaneLicenseEnvVar                = "BINDPLANE_LICENSE"
+	bindplaneAuthTypeEnvVar               = "BINDPLANE_AUTH_TYPE"
+	bindplaneAuthSessionsStrictModeEnvVar = "BINDPLANE_AUTH_SESSIONS_STRICT_MODE"
+	bindplaneUsernameEnvVar               = "BINDPLANE_USERNAME"
+	bindplanePasswordEnvVar               = "BINDPLANE_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplaneHostEnvVar                   = "BINDPLANE_HOST"
+	bindplanePortEnvVar                   = "BINDPLANE_PORT"
+	bindplaneRemoteURLEnvVar              = "BINDPLANE_REMOTE_URL"
+
+	// LDAP / Active Directory configuration
+	bindplaneLDAPProtocolEnvVar      = "BINDPLANE_LDAP_PROTOCOL"
+	bindplaneLDAPServerEnvVar        = "BINDPLANE_LDAP_SERVER"
+	bindplaneLDAPPortEnvVar          = "BINDPLANE_LDAP_PORT"
+	bindplaneLDAPBaseDNEnvVar        = "BINDPLANE_LDAP_BASE_DN"
+	bindplaneLDAPBindUserEnvVar      = "BINDPLANE_LDAP_BIND_USER"
+	bindplaneLDAPBindPasswordEnvVar  = "BINDPLANE_LDAP_BIND_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplaneLDAPSearchFilterEnvVar  = "BINDPLANE_LDAP_SEARCH_FILTER"
+	bindplaneLDAPTLSCertEnvVar       = "BINDPLANE_LDAP_TLS_CERT"
+	bindplaneLDAPTLSKeyEnvVar        = "BINDPLANE_LDAP_TLS_KEY"
+	bindplaneLDAPTLSCAEnvVar         = "BINDPLANE_LDAP_TLS_CA"
+	bindplaneLDAPTLSSkipVerifyEnvVar = "BINDPLANE_LDAP_TLS_SKIP_VERIFY"
+
+	// OIDC configuration
+	bindplaneOIDCClientIDEnvVar     = "BINDPLANE_OIDC_OAUTH2_CLIENT_ID"
+	bindplaneOIDCClientSecretEnvVar = "BINDPLANE_OIDC_OAUTH2_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential
+	bindplaneOIDCIssuerEnvVar       = "BINDPLANE_OIDC_ISSUER"
+	bindplaneOIDCScopesEnvVar       = "BINDPLANE_OIDC_SCOPES"
 
 	// Store configuration
 	bindplaneStoreTypeEnvVar = "BINDPLANE_STORE_TYPE"

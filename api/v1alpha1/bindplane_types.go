@@ -184,8 +184,9 @@ type PodTemplateSpec struct {
 
 // AuthConfig defines authentication configuration
 type AuthConfig struct {
-	// Type specifies the authentication type (e.g., "system")
+	// Type specifies the authentication type.
 	// +optional
+	// +kubebuilder:validation:Enum=system;ldap;active-directory;oidc
 	Type string `json:"type,omitempty"`
 
 	// Username for authentication
@@ -206,7 +207,100 @@ type AuthConfig struct {
 	// +optional
 	PasswordSecret *corev1.SecretKeySelector `json:"passwordSecret,omitempty"`
 
+	// SessionsStrictMode enables strict mode for session cookies.
+	// +optional
+	SessionsStrictMode bool `json:"sessionsStrictMode,omitempty"`
+
+	// LDAP is the configuration for ldap or active-directory auth types.
+	// +optional
+	LDAP *LDAPConfig `json:"ldap,omitempty"`
+
+	// OIDC is the configuration for the oidc auth type.
+	// +optional
+	OIDC *OIDCConfig `json:"oidc,omitempty"`
+
 	// Note: sessionSecret is not exposed - it will be dynamically generated and stored as a Kubernetes secret
+}
+
+// LDAPConfig defines LDAP and Active Directory authentication configuration
+type LDAPConfig struct {
+	// Protocol to use when connecting to the LDAP server. One of: ldap|ldaps
+	// +optional
+	Protocol string `json:"protocol,omitempty"`
+
+	// Server is the LDAP server hostname
+	// +optional
+	Server string `json:"server,omitempty"`
+
+	// Port is the LDAP server port
+	// +optional
+	Port string `json:"port,omitempty"`
+
+	// BaseDN is the base distinguished name for user searches
+	// +optional
+	BaseDN string `json:"baseDN,omitempty"`
+
+	// BindUser is the username used to bind to the LDAP server
+	// +optional
+	BindUser string `json:"bindUser,omitempty"`
+
+	// BindPassword is the password used to bind to the LDAP server
+	// +optional
+	BindPassword string `json:"bindPassword,omitempty"`
+
+	// BindPasswordSecret references a Kubernetes Secret containing the LDAP bind password.
+	// Takes precedence over BindPassword if both are set.
+	// +optional
+	BindPasswordSecret *corev1.SecretKeySelector `json:"bindPasswordSecret,omitempty"`
+
+	// SearchFilter is the LDAP search filter used to locate users
+	// +optional
+	SearchFilter string `json:"searchFilter,omitempty"`
+
+	// TLSCert is the path to the TLS certificate for mutual TLS
+	// +optional
+	TLSCert string `json:"tlsCert,omitempty"`
+
+	// TLSKey is the path to the TLS private key for mutual TLS
+	// +optional
+	TLSKey string `json:"tlsKey,omitempty"`
+
+	// TLSCA is the path to the TLS CA certificate
+	// +optional
+	TLSCA string `json:"tlsCA,omitempty"`
+
+	// TLSSkipVerify disables TLS certificate verification
+	// +optional
+	TLSSkipVerify bool `json:"tlsSkipVerify,omitempty"`
+}
+
+// OIDCConfig defines OpenID Connect authentication configuration
+type OIDCConfig struct {
+	// ClientID is the OIDC OAuth2 client ID
+	// +optional
+	ClientID string `json:"clientID,omitempty"`
+
+	// ClientIDSecret references a Kubernetes Secret containing the OIDC client ID.
+	// Takes precedence over ClientID if both are set.
+	// +optional
+	ClientIDSecret *corev1.SecretKeySelector `json:"clientIDSecret,omitempty"`
+
+	// ClientSecret is the OIDC OAuth2 client secret
+	// +optional
+	ClientSecret string `json:"clientSecret,omitempty"`
+
+	// ClientSecretSecret references a Kubernetes Secret containing the OIDC client secret.
+	// Takes precedence over ClientSecret if both are set.
+	// +optional
+	ClientSecretSecret *corev1.SecretKeySelector `json:"clientSecretSecret,omitempty"`
+
+	// Issuer is the URL of the OIDC provider
+	// +optional
+	Issuer string `json:"issuer,omitempty"`
+
+	// Scopes is the list of OAuth2 scopes to request
+	// +optional
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // NetworkConfig defines network configuration
