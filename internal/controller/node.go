@@ -42,8 +42,6 @@ const (
 	nodeHTTPPortName = "http"
 	// nodeModeValue is the value for BINDPLANE_MODE
 	nodeModeValue = "node"
-	// nodeReplicas is the number of node replicas
-	nodeReplicas = int32(3)
 )
 
 // reconcileNode reconciles all Bindplane Node resources
@@ -74,10 +72,7 @@ func (r *BindplaneReconciler) nodeServiceAccount(bindplane *bindplanev1alpha1.Bi
 }
 
 func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
-	replicas := nodeReplicas
-	if bindplane.Spec.Bindplane.Replicas != nil {
-		replicas = *bindplane.Spec.Bindplane.Replicas
-	}
+	replicas := *bindplane.Spec.Bindplane.Replicas
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
 

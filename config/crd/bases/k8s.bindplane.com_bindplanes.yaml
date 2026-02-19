@@ -3664,6 +3664,7 @@ spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                   replicas:
+                    default: 3
                     format: int32
                     type: integer
                 type: object
@@ -11007,6 +11008,7 @@ spec:
                 - store
                 type: object
               nats:
+                default: {}
                 properties:
                   podTemplate:
                     properties:
@@ -14644,6 +14646,7 @@ spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                   replicas:
+                    default: 1
                     format: int32
                     type: integer
                 type: object
@@ -18384,6 +18387,7 @@ spec:
                     type: object
                 type: object
               transformAgent:
+                default: {}
                 properties:
                   podTemplate:
                     properties:
@@ -22021,6 +22025,7 @@ spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                   replicas:
+                    default: 2
                     format: int32
                     type: integer
                 type: object

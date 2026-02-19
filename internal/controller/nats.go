@@ -51,8 +51,6 @@ const (
 	natsClusterPort = int32(6222)
 	// natsClusterPortName is the name of the NATS cluster port
 	natsClusterPortName = "cluster"
-	// natsReplicas is the number of NATS replicas
-	natsReplicas = int32(1)
 )
 
 // reconcileNats reconciles all NATS resources
@@ -89,10 +87,7 @@ func (r *BindplaneReconciler) natsServiceAccount(bindplane *bindplanev1alpha1.Bi
 }
 
 func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindplane) *appsv1.StatefulSet {
-	replicas := natsReplicas
-	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil {
-		replicas = *bindplane.Spec.Nats.Replicas
-	}
+	replicas := *bindplane.Spec.Nats.Replicas
 	labels := getLabels(bindplane, natsComponent)
 	selectorLabels := getSelectorLabels(bindplane, natsComponent)
 	serviceName := getResourceName(bindplane, natsComponent)

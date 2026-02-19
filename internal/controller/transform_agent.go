@@ -72,10 +72,7 @@ func (r *BindplaneReconciler) transformAgentServiceAccount(bindplane *bindplanev
 }
 
 func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
-	replicas := int32(2)
-	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.Replicas != nil {
-		replicas = *bindplane.Spec.TransformAgent.Replicas
-	}
+	replicas := *bindplane.Spec.TransformAgent.Replicas
 	labels := getLabels(bindplane, transformAgentComponent)
 	selectorLabels := getSelectorLabels(bindplane, transformAgentComponent)
 
