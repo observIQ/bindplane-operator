@@ -354,7 +354,7 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName 
 // getNatsClusterRoutes generates the cluster routes string for NATS
 // It generates routes based on the actual replica count (e.g., 3 replicas = all 3 hostnames, 1 replica = first hostname only)
 func getNatsClusterRoutes(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName string, replicas int32) string {
-	var routes []string
+	routes := make([]string, 0, replicas)
 	for i := range replicas {
 		route := fmt.Sprintf("%s%s-%d.%s.%s:%d",
 			natsProtocolPrefix,

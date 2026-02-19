@@ -379,18 +379,6 @@ func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *b
 	return nil
 }
 
-// Helper functions
-
-//go:fix inline
-func int64Ptr(i int64) *int64 {
-	return new(i)
-}
-
-//go:fix inline
-func boolPtr(b bool) *bool {
-	return new(b)
-}
-
 // getKubernetesEnvVars returns the common Kubernetes environment variables
 // that should be present in all pods deployed by this operator
 // combineEnvVars combines multiple slices of environment variables into a single slice
