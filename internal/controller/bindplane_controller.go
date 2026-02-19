@@ -69,7 +69,7 @@ const (
 	bindplaneLicenseEnvVar   = "BINDPLANE_LICENSE"
 	bindplaneAuthTypeEnvVar  = "BINDPLANE_AUTH_TYPE"
 	bindplaneUsernameEnvVar  = "BINDPLANE_USERNAME"
-	bindplanePasswordEnvVar  = "BINDPLANE_PASSWORD"
+	bindplanePasswordEnvVar  = "BINDPLANE_PASSWORD" // #nosec G101 -- env var name, not a credential
 	bindplaneHostEnvVar      = "BINDPLANE_HOST"
 	bindplanePortEnvVar      = "BINDPLANE_PORT"
 	bindplaneRemoteURLEnvVar = "BINDPLANE_REMOTE_URL"
@@ -85,7 +85,7 @@ const (
 	bindplanePostgresDatabaseEnvVar         = "BINDPLANE_POSTGRES_DATABASE"
 	bindplanePostgresSSLModeEnvVar          = "BINDPLANE_POSTGRES_SSL_MODE"
 	bindplanePostgresUsernameEnvVar         = "BINDPLANE_POSTGRES_USERNAME"
-	bindplanePostgresPasswordEnvVar         = "BINDPLANE_POSTGRES_PASSWORD"
+	bindplanePostgresPasswordEnvVar         = "BINDPLANE_POSTGRES_PASSWORD" // #nosec G101 -- env var name, not a credential
 	bindplanePostgresMaxConnectionsEnvVar   = "BINDPLANE_POSTGRES_MAX_CONNECTIONS"
 	bindplanePostgresMaxLifetimeEnvVar      = "BINDPLANE_POSTGRES_MAX_LIFETIME"
 	bindplanePostgresSchemaEnvVar           = "BINDPLANE_POSTGRES_SCHEMA"
