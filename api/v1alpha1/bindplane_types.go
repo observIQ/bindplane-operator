@@ -95,6 +95,11 @@ type BindplaneConfigSpec struct {
 	// License is the Bindplane license key
 	License string `json:"license"`
 
+	// LicenseSecret references a Kubernetes Secret containing the Bindplane license key.
+	// Takes precedence over License if both are set.
+	// +optional
+	LicenseSecret *corev1.SecretKeySelector `json:"licenseSecret,omitempty"`
+
 	// Auth configuration for Bindplane
 	// +optional
 	Auth *AuthConfig `json:"auth,omitempty"`
@@ -187,9 +192,19 @@ type AuthConfig struct {
 	// +optional
 	Username string `json:"username,omitempty"`
 
+	// UsernameSecret references a Kubernetes Secret containing the auth username.
+	// Takes precedence over Username if both are set.
+	// +optional
+	UsernameSecret *corev1.SecretKeySelector `json:"usernameSecret,omitempty"`
+
 	// Password for authentication
 	// +optional
 	Password string `json:"password,omitempty"`
+
+	// PasswordSecret references a Kubernetes Secret containing the auth password.
+	// Takes precedence over Password if both are set.
+	// +optional
+	PasswordSecret *corev1.SecretKeySelector `json:"passwordSecret,omitempty"`
 
 	// Note: sessionSecret is not exposed - it will be dynamically generated and stored as a Kubernetes secret
 }
@@ -250,9 +265,19 @@ type PostgresConfig struct {
 	// +optional
 	Username string `json:"username,omitempty"`
 
+	// UsernameSecret references a Kubernetes Secret containing the PostgreSQL username.
+	// Takes precedence over Username if both are set.
+	// +optional
+	UsernameSecret *corev1.SecretKeySelector `json:"usernameSecret,omitempty"`
+
 	// Password specifies the PostgreSQL password
 	// +optional
 	Password string `json:"password,omitempty"`
+
+	// PasswordSecret references a Kubernetes Secret containing the PostgreSQL password.
+	// Takes precedence over Password if both are set.
+	// +optional
+	PasswordSecret *corev1.SecretKeySelector `json:"passwordSecret,omitempty"`
 
 	// MaxConnections specifies the maximum number of connections
 	// +optional

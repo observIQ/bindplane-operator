@@ -314,6 +314,22 @@ func getBindplaneJobsMigratePodTemplate(bindplane *bindplanev1alpha1.Bindplane) 
 	return nil
 }
 
+// secretOrValue returns an EnvVar sourced from a Secret when ref is set, or from
+// a plain value when value is non-empty. Returns nil when neither is provided.
+// Secret ref takes precedence when both are set.
+func secretOrValue(name, value string, ref *corev1.SecretKeySelector) *corev1.EnvVar {
+	if ref != nil {
+		return &corev1.EnvVar{
+			Name:      name,
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: ref},
+		}
+	}
+	if value != "" {
+		return &corev1.EnvVar{Name: name, Value: value}
+	}
+	return nil
+}
+
 // getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
 // following the naming convention from override_test.go (BINDPLANE_*)
 func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
@@ -321,11 +337,8 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	config := &bindplane.Spec.Config
 
 	// License
-	if config.License != "" {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  bindplaneLicenseEnvVar,
-			Value: config.License,
-		})
+	if ev := secretOrValue(bindplaneLicenseEnvVar, config.License, config.LicenseSecret); ev != nil {
+		envVars = append(envVars, *ev)
 	}
 
 	// Auth configuration
@@ -336,17 +349,11 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 				Value: config.Auth.Type,
 			})
 		}
-		if config.Auth.Username != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplaneUsernameEnvVar,
-				Value: config.Auth.Username,
-			})
+		if ev := secretOrValue(bindplaneUsernameEnvVar, config.Auth.Username, config.Auth.UsernameSecret); ev != nil {
+			envVars = append(envVars, *ev)
 		}
-		if config.Auth.Password != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePasswordEnvVar,
-				Value: config.Auth.Password,
-			})
+		if ev := secretOrValue(bindplanePasswordEnvVar, config.Auth.Password, config.Auth.PasswordSecret); ev != nil {
+			envVars = append(envVars, *ev)
 		}
 	}
 
@@ -425,17 +432,11 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 				Value: config.Store.Postgres.SSLMode,
 			})
 		}
-		if config.Store.Postgres.Username != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresUsernameEnvVar,
-				Value: config.Store.Postgres.Username,
-			})
+		if ev := secretOrValue(bindplanePostgresUsernameEnvVar, config.Store.Postgres.Username, config.Store.Postgres.UsernameSecret); ev != nil {
+			envVars = append(envVars, *ev)
 		}
-		if config.Store.Postgres.Password != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresPasswordEnvVar,
-				Value: config.Store.Postgres.Password,
-			})
+		if ev := secretOrValue(bindplanePostgresPasswordEnvVar, config.Store.Postgres.Password, config.Store.Postgres.PasswordSecret); ev != nil {
+			envVars = append(envVars, *ev)
 		}
 		if config.Store.Postgres.MaxConnections > 0 {
 			envVars = append(envVars, corev1.EnvVar{
