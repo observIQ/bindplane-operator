@@ -146,6 +146,23 @@ const (
 	healthzCheckPath = "/healthz"
 )
 
+// Probe timing constants
+const (
+	// Startup probe: allow up to 100s (20 × 5s) for the container to become ready.
+	probeStartupInitialDelaySeconds int32 = 0
+	probeStartupPeriodSeconds       int32 = 5
+	probeStartupFailureThreshold    int32 = 20
+	probeStartupSuccessThreshold    int32 = 1
+	probeStartupTimeoutSeconds      int32 = 1
+
+	// Liveness and readiness probes rely on the startup probe for the initial window,
+	// so InitialDelaySeconds is omitted (defaults to 0).
+	probePeriodSeconds    int32 = 10
+	probeFailureThreshold int32 = 3
+	probeSuccessThreshold int32 = 1
+	probeTimeoutSeconds   int32 = 5
+)
+
 // NATS constants
 const (
 	// natsServiceClientSuffix is the suffix for NATS client service name
@@ -530,50 +547,64 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 
 	// Save protected fields before merging
 	protectedServiceAccountName := merged.Spec.ServiceAccountName
+	protectedTerminationGracePeriodSeconds := copyInt64Ptr(merged.Spec.TerminationGracePeriodSeconds)
+	protectedContainers := deepCopyContainers(merged.Spec.Containers)
+	protectedVolumes := deepCopyVolumes(merged.Spec.Volumes)
 
-	// Copy the pointed-to value (not just the pointer) to avoid json.Unmarshal
-	// modifying the saved value in-place through the shared pointer.
-	var protectedTerminationGracePeriodSeconds *int64
-	if v := merged.Spec.TerminationGracePeriodSeconds; v != nil {
-		c := *v
-		protectedTerminationGracePeriodSeconds = &c
+	protectedLabelKeys := []string{labelKeyName, labelKeyInstance, labelKeyComponent}
+
+	mergeTemplateMetadata(merged, userProvided, protectedLabelKeys)
+
+	// Merge all pod spec fields via JSON deep-merge; fall back to operator spec on any error.
+	if err := mergeSpecViaJSON(&merged.Spec, userProvided.Spec.DeepCopy()); err != nil {
+		return *merged
 	}
 
-	protectedContainers := make([]corev1.Container, len(merged.Spec.Containers))
-	for i, c := range merged.Spec.Containers {
-		protectedContainers[i] = *c.DeepCopy()
-	}
+	// Restore protected fields overwritten by the JSON merge
+	merged.Spec.ServiceAccountName = protectedServiceAccountName
+	merged.Spec.TerminationGracePeriodSeconds = protectedTerminationGracePeriodSeconds
+	merged.Spec.Containers = mergeContainers(protectedContainers, userProvided.Spec.Containers)
+	merged.Spec.Volumes = mergeVolumes(protectedVolumes, userProvided.Spec.Volumes)
 
-	// Save operator volumes before the JSON merge overwrites the array.
-	protectedVolumes := make([]corev1.Volume, len(merged.Spec.Volumes))
-	for i, v := range merged.Spec.Volumes {
-		protectedVolumes[i] = *v.DeepCopy()
-	}
-	protectedLabelKeys := []string{
-		labelKeyName,
-		labelKeyInstance,
-		labelKeyComponent,
-	}
-	protectedLabels := make(map[string]string)
-	for _, key := range protectedLabelKeys {
-		if val, exists := merged.Labels[key]; exists {
-			protectedLabels[key] = val
-		}
-	}
+	return *merged
+}
 
-	// Deep merge user-provided spec on top of operator spec
-	// This allows ANY field to be overridden
-	userSpecCopy := userProvided.Spec.DeepCopy()
+// copyInt64Ptr returns a copy of a *int64 to avoid aliasing issues across JSON round-trips.
+func copyInt64Ptr(v *int64) *int64 {
+	if v == nil {
+		return nil
+	}
+	c := *v
+	return &c
+}
 
-	// Merge metadata (labels and annotations)
+// deepCopyContainers returns a deep copy of a container slice.
+func deepCopyContainers(src []corev1.Container) []corev1.Container {
+	out := make([]corev1.Container, len(src))
+	for i, c := range src {
+		out[i] = *c.DeepCopy()
+	}
+	return out
+}
+
+// deepCopyVolumes returns a deep copy of a volume slice.
+func deepCopyVolumes(src []corev1.Volume) []corev1.Volume {
+	out := make([]corev1.Volume, len(src))
+	for i, v := range src {
+		out[i] = *v.DeepCopy()
+	}
+	return out
+}
+
+// mergeTemplateMetadata applies user-provided labels and annotations onto merged,
+// skipping any label keys in protectedLabelKeys.
+func mergeTemplateMetadata(merged *corev1.PodTemplateSpec, userProvided *bindplanev1alpha1.PodTemplateSpec, protectedLabelKeys []string) {
 	if userProvided.Labels != nil {
 		if merged.Labels == nil {
 			merged.Labels = make(map[string]string)
 		}
 		for k, v := range userProvided.Labels {
-			// Skip protected labels - operator-managed labels take precedence
-			isProtected := slices.Contains(protectedLabelKeys, k)
-			if !isProtected {
+			if !slices.Contains(protectedLabelKeys, k) {
 				merged.Labels[k] = v
 			}
 		}
@@ -584,126 +615,121 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 		}
 		maps.Copy(merged.Annotations, userProvided.Annotations)
 	}
+}
 
-	// Merge all pod spec fields using JSON marshal/unmarshal for deep merge
-	// This allows ANY field to be merged, not just a curated list
-	operatorSpecJSON, err := json.Marshal(merged.Spec)
+// mergeSpecViaJSON deep-merges userSpec into dst using JSON marshal/unmarshal.
+func mergeSpecViaJSON(dst *corev1.PodSpec, userSpec *corev1.PodSpec) error {
+	dstJSON, err := json.Marshal(dst)
 	if err != nil {
-		// Fallback to operator spec if marshal fails
-		return *merged
+		return err
 	}
-
-	userSpecJSON, err := json.Marshal(userSpecCopy)
+	userJSON, err := json.Marshal(userSpec)
 	if err != nil {
-		// Fallback to operator spec if marshal fails
-		return *merged
+		return err
 	}
 
-	// Merge JSON objects
-	var operatorSpecMap map[string]any
-	var userSpecMap map[string]any
-	if err := json.Unmarshal(operatorSpecJSON, &operatorSpecMap); err != nil {
-		return *merged
+	var dstMap, userMap map[string]any
+	if err := json.Unmarshal(dstJSON, &dstMap); err != nil {
+		return err
 	}
-	if err := json.Unmarshal(userSpecJSON, &userSpecMap); err != nil {
-		return *merged
+	if err := json.Unmarshal(userJSON, &userMap); err != nil {
+		return err
 	}
 
-	// Deep merge user spec into operator spec
-	mergeMaps(operatorSpecMap, userSpecMap)
+	mergeMaps(dstMap, userMap)
 
-	// Convert back to PodSpec
-	mergedJSON, err := json.Marshal(operatorSpecMap)
+	merged, err := json.Marshal(dstMap)
 	if err != nil {
-		return *merged
+		return err
 	}
-	if err := json.Unmarshal(mergedJSON, &merged.Spec); err != nil {
-		return *merged
+	return json.Unmarshal(merged, dst)
+}
+
+// mergeContainers merges user-provided containers into the operator-managed set by name.
+// Protected fields (Name, Image, Ports, Env, Command, Args) are always restored from the operator container.
+func mergeContainers(protected []corev1.Container, userContainers []corev1.Container) []corev1.Container {
+	if len(userContainers) == 0 {
+		return protected
 	}
 
-	// Restore protected fields
-	merged.Spec.ServiceAccountName = protectedServiceAccountName
-	merged.Spec.TerminationGracePeriodSeconds = protectedTerminationGracePeriodSeconds
+	containerMap := make(map[string]corev1.Container, len(protected))
+	for _, c := range protected {
+		containerMap[c.Name] = c
+	}
 
-	// Merge containers by name - allow user to override any container field except protected ones
-	if len(userProvided.Spec.Containers) > 0 {
-		containerMap := make(map[string]corev1.Container)
-		for _, c := range protectedContainers {
-			containerMap[c.Name] = c
+	for _, userContainer := range userContainers {
+		if operatorContainer, exists := containerMap[userContainer.Name]; exists {
+			containerMap[userContainer.Name] = mergeSingleContainer(operatorContainer, userContainer)
 		}
+	}
 
-		// For each user container, merge it with the operator container
-		for _, userContainer := range userProvided.Spec.Containers {
-			if operatorContainer, exists := containerMap[userContainer.Name]; exists {
-				// Deep copy operator container
-				mergedContainer := operatorContainer.DeepCopy()
+	result := make([]corev1.Container, len(protected))
+	for i, c := range protected {
+		if updated, exists := containerMap[c.Name]; exists {
+			result[i] = updated
+		} else {
+			result[i] = c
+		}
+	}
+	return result
+}
 
-				// Merge user container fields using JSON
-				operatorContainerJSON, _ := json.Marshal(mergedContainer)
-				userContainerJSON, _ := json.Marshal(userContainer)
-				var operatorContainerMap map[string]any
-				var userContainerMap map[string]any
-				if err := json.Unmarshal(operatorContainerJSON, &operatorContainerMap); err == nil {
-					if err := json.Unmarshal(userContainerJSON, &userContainerMap); err == nil {
-						mergeMaps(operatorContainerMap, userContainerMap)
-						mergedContainerJSON, _ := json.Marshal(operatorContainerMap)
-						if err := json.Unmarshal(mergedContainerJSON, mergedContainer); err != nil {
-							// Keep operator container values when container merge fails.
-							mergedContainer = operatorContainer.DeepCopy()
-						}
-					}
+// mergeSingleContainer merges userContainer fields into operatorContainer via JSON,
+// then restores protected fields.
+func mergeSingleContainer(operatorContainer, userContainer corev1.Container) corev1.Container {
+	mergedContainer := operatorContainer.DeepCopy()
+
+	operatorJSON, _ := json.Marshal(mergedContainer)
+	userJSON, _ := json.Marshal(userContainer)
+
+	var operatorMap, userMap map[string]any
+	if err := json.Unmarshal(operatorJSON, &operatorMap); err == nil {
+		if err := json.Unmarshal(userJSON, &userMap); err == nil {
+			mergeMaps(operatorMap, userMap)
+			if mergedJSON, err := json.Marshal(operatorMap); err == nil {
+				if err := json.Unmarshal(mergedJSON, mergedContainer); err != nil {
+					mergedContainer = operatorContainer.DeepCopy()
 				}
-
-				// Restore protected container fields
-				mergedContainer.Name = operatorContainer.Name
-				mergedContainer.Image = operatorContainer.Image
-				mergedContainer.Ports = operatorContainer.Ports
-				mergedContainer.Env = operatorContainer.Env
-				mergedContainer.Command = operatorContainer.Command
-				mergedContainer.Args = operatorContainer.Args
-
-				containerMap[userContainer.Name] = *mergedContainer
 			}
 		}
-
-		// Update merged containers
-		merged.Spec.Containers = make([]corev1.Container, len(protectedContainers))
-		for i, c := range protectedContainers {
-			if updated, exists := containerMap[c.Name]; exists {
-				merged.Spec.Containers[i] = updated
-			} else {
-				merged.Spec.Containers[i] = c
-			}
-		}
-	} else {
-		// No user containers, use protected containers
-		merged.Spec.Containers = protectedContainers
 	}
 
-	// Merge volumes by name: start from the operator set, then add or override
-	// with user-provided volumes. This mirrors the container merge strategy.
-	if len(userProvided.Spec.Volumes) > 0 {
-		volumeMap := make(map[string]corev1.Volume, len(protectedVolumes))
-		volumeOrder := make([]string, 0, len(protectedVolumes))
-		for _, v := range protectedVolumes {
-			volumeMap[v.Name] = v
-			volumeOrder = append(volumeOrder, v.Name)
-		}
-		for _, userVol := range userProvided.Spec.Volumes {
-			if _, exists := volumeMap[userVol.Name]; !exists {
-				volumeOrder = append(volumeOrder, userVol.Name)
-			}
-			volumeMap[userVol.Name] = userVol
-		}
-		merged.Spec.Volumes = make([]corev1.Volume, 0, len(volumeOrder))
-		for _, name := range volumeOrder {
-			merged.Spec.Volumes = append(merged.Spec.Volumes, volumeMap[name])
-		}
-	} else {
-		merged.Spec.Volumes = protectedVolumes
+	// Restore protected container fields
+	mergedContainer.Name = operatorContainer.Name
+	mergedContainer.Image = operatorContainer.Image
+	mergedContainer.Ports = operatorContainer.Ports
+	mergedContainer.Env = operatorContainer.Env
+	mergedContainer.Command = operatorContainer.Command
+	mergedContainer.Args = operatorContainer.Args
+
+	return *mergedContainer
+}
+
+// mergeVolumes merges user-provided volumes into the operator-managed set by name.
+// Operator volumes are preserved; user volumes may add new entries or override existing ones.
+func mergeVolumes(protected []corev1.Volume, userVolumes []corev1.Volume) []corev1.Volume {
+	if len(userVolumes) == 0 {
+		return protected
 	}
 
-	return *merged
+	volumeMap := make(map[string]corev1.Volume, len(protected))
+	volumeOrder := make([]string, 0, len(protected))
+	for _, v := range protected {
+		volumeMap[v.Name] = v
+		volumeOrder = append(volumeOrder, v.Name)
+	}
+	for _, userVol := range userVolumes {
+		if _, exists := volumeMap[userVol.Name]; !exists {
+			volumeOrder = append(volumeOrder, userVol.Name)
+		}
+		volumeMap[userVol.Name] = userVol
+	}
+
+	result := make([]corev1.Volume, 0, len(volumeOrder))
+	for _, name := range volumeOrder {
+		result = append(result, volumeMap[name])
+	}
+	return result
 }
 
 // mergeMaps recursively merges map b into map a

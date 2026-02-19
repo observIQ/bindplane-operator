@@ -135,6 +135,19 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 										MountPath: "/prometheus",
 									},
 								},
+								StartupProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: prometheusLivenessProbePath,
+											Port: intstr.FromString(prometheusHTTPPortName),
+										},
+									},
+									InitialDelaySeconds: probeStartupInitialDelaySeconds,
+									PeriodSeconds:       probeStartupPeriodSeconds,
+									FailureThreshold:    probeStartupFailureThreshold,
+									SuccessThreshold:    probeStartupSuccessThreshold,
+									TimeoutSeconds:      probeStartupTimeoutSeconds,
+								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
@@ -142,10 +155,10 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 											Port: intstr.FromString(prometheusHTTPPortName),
 										},
 									},
-									InitialDelaySeconds: 30,
-									PeriodSeconds:       10,
-									TimeoutSeconds:      5,
-									FailureThreshold:    3,
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
@@ -154,10 +167,10 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 											Port: intstr.FromString(prometheusHTTPPortName),
 										},
 									},
-									InitialDelaySeconds: 5,
-									PeriodSeconds:       10,
-									TimeoutSeconds:      5,
-									FailureThreshold:    3,
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,

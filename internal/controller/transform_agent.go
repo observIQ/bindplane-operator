@@ -131,6 +131,11 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
+									InitialDelaySeconds: probeStartupInitialDelaySeconds,
+									PeriodSeconds:       probeStartupPeriodSeconds,
+									FailureThreshold:    probeStartupFailureThreshold,
+									SuccessThreshold:    probeStartupSuccessThreshold,
+									TimeoutSeconds:      probeStartupTimeoutSeconds,
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
@@ -139,6 +144,10 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
@@ -147,6 +156,10 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,

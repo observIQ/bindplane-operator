@@ -218,11 +218,11 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
-									FailureThreshold:    20,
-									InitialDelaySeconds: 0,
-									PeriodSeconds:       5,
-									SuccessThreshold:    1,
-									TimeoutSeconds:      1,
+									InitialDelaySeconds: probeStartupInitialDelaySeconds,
+									PeriodSeconds:       probeStartupPeriodSeconds,
+									FailureThreshold:    probeStartupFailureThreshold,
+									SuccessThreshold:    probeStartupSuccessThreshold,
+									TimeoutSeconds:      probeStartupTimeoutSeconds,
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
@@ -231,6 +231,10 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
@@ -239,6 +243,10 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,

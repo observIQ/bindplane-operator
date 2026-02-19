@@ -169,11 +169,11 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
-									FailureThreshold:    20,
-									InitialDelaySeconds: 0,
-									PeriodSeconds:       5,
-									SuccessThreshold:    1,
-									TimeoutSeconds:      1,
+									InitialDelaySeconds: probeStartupInitialDelaySeconds,
+									PeriodSeconds:       probeStartupPeriodSeconds,
+									FailureThreshold:    probeStartupFailureThreshold,
+									SuccessThreshold:    probeStartupSuccessThreshold,
+									TimeoutSeconds:      probeStartupTimeoutSeconds,
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
@@ -182,6 +182,10 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
@@ -190,6 +194,10 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
+									PeriodSeconds:    probePeriodSeconds,
+									FailureThreshold: probeFailureThreshold,
+									SuccessThreshold: probeSuccessThreshold,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
