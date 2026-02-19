@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -118,9 +119,9 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 					Spec: corev1.PodSpec{
 						ServiceAccountName: serviceName,
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    int64Ptr(defaultRunAsGroup),
-							RunAsGroup: int64Ptr(defaultRunAsGroup),
-							RunAsUser:  int64Ptr(defaultRunAsUser),
+							FSGroup:    new(defaultRunAsGroup),
+							RunAsGroup: new(defaultRunAsGroup),
+							RunAsUser:  new(defaultRunAsUser),
 						},
 						Affinity: getNatsAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -201,7 +202,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								},
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
+						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getNatsPodTemplate(bindplane),
@@ -354,7 +355,7 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName 
 // It generates routes based on the actual replica count (e.g., 3 replicas = all 3 hostnames, 1 replica = first hostname only)
 func getNatsClusterRoutes(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName string, replicas int32) string {
 	var routes []string
-	for i := int32(0); i < replicas; i++ {
+	for i := range replicas {
 		route := fmt.Sprintf("%s%s-%d.%s.%s:%d",
 			natsProtocolPrefix,
 			getResourceName(bindplane, natsComponent),
@@ -364,14 +365,14 @@ func getNatsClusterRoutes(bindplane *bindplanev1alpha1.Bindplane, headlessServic
 			natsClusterPort)
 		routes = append(routes, route)
 	}
-	result := ""
+	var result strings.Builder
 	for i, route := range routes {
 		if i > 0 {
-			result += ","
+			result.WriteString(",")
 		}
-		result += route
+		result.WriteString(route)
 	}
-	return result
+	return result.String()
 }
 
 // getNatsAffinity returns the affinity configuration for NATS pods

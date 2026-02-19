@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -379,12 +381,14 @@ func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *b
 
 // Helper functions
 
+//go:fix inline
 func int64Ptr(i int64) *int64 {
-	return &i
+	return new(i)
 }
 
+//go:fix inline
 func boolPtr(b bool) *bool {
-	return &b
+	return new(b)
 }
 
 // getKubernetesEnvVars returns the common Kubernetes environment variables
@@ -443,7 +447,7 @@ func WithRunAsUser(userID int64) securityContextOption {
 func newContainerSecurityContext(opts ...securityContextOption) *corev1.SecurityContext {
 	// Apply default options
 	options := &securityContextOptions{
-		runAsUser: int64Ptr(65534), // Default to nobody user
+		runAsUser: new(int64(65534)), // Default to nobody user
 	}
 
 	// Apply all option functions
@@ -452,12 +456,12 @@ func newContainerSecurityContext(opts ...securityContextOption) *corev1.Security
 	}
 
 	return &corev1.SecurityContext{
-		AllowPrivilegeEscalation: boolPtr(false),
+		AllowPrivilegeEscalation: new(false),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},
-		ReadOnlyRootFilesystem: boolPtr(true),
-		RunAsNonRoot:           boolPtr(true),
+		ReadOnlyRootFilesystem: new(true),
+		RunAsNonRoot:           new(true),
 		RunAsUser:              options.runAsUser,
 	}
 }
@@ -566,13 +570,7 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 		}
 		for k, v := range userProvided.Labels {
 			// Skip protected labels - operator-managed labels take precedence
-			isProtected := false
-			for _, protectedKey := range protectedLabelKeys {
-				if k == protectedKey {
-					isProtected = true
-					break
-				}
-			}
+			isProtected := slices.Contains(protectedLabelKeys, k)
 			if !isProtected {
 				merged.Labels[k] = v
 			}
@@ -582,9 +580,7 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 		if merged.Annotations == nil {
 			merged.Annotations = make(map[string]string)
 		}
-		for k, v := range userProvided.Annotations {
-			merged.Annotations[k] = v
-		}
+		maps.Copy(merged.Annotations, userProvided.Annotations)
 	}
 
 	// Merge all pod spec fields using JSON marshal/unmarshal for deep merge
@@ -602,8 +598,8 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 	}
 
 	// Merge JSON objects
-	var operatorSpecMap map[string]interface{}
-	var userSpecMap map[string]interface{}
+	var operatorSpecMap map[string]any
+	var userSpecMap map[string]any
 	if err := json.Unmarshal(operatorSpecJSON, &operatorSpecMap); err != nil {
 		return *merged
 	}
@@ -643,8 +639,8 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 				// Merge user container fields using JSON
 				operatorContainerJSON, _ := json.Marshal(mergedContainer)
 				userContainerJSON, _ := json.Marshal(userContainer)
-				var operatorContainerMap map[string]interface{}
-				var userContainerMap map[string]interface{}
+				var operatorContainerMap map[string]any
+				var userContainerMap map[string]any
 				if err := json.Unmarshal(operatorContainerJSON, &operatorContainerMap); err == nil {
 					if err := json.Unmarshal(userContainerJSON, &userContainerMap); err == nil {
 						mergeMaps(operatorContainerMap, userContainerMap)
@@ -686,14 +682,14 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 }
 
 // mergeMaps recursively merges map b into map a
-func mergeMaps(a, b map[string]interface{}) {
+func mergeMaps(a, b map[string]any) {
 	for k, v := range b {
 		if v == nil {
 			continue
 		}
 		if av, exists := a[k]; exists {
-			if avMap, ok := av.(map[string]interface{}); ok {
-				if bvMap, ok := v.(map[string]interface{}); ok {
+			if avMap, ok := av.(map[string]any); ok {
+				if bvMap, ok := v.(map[string]any); ok {
 					mergeMaps(avMap, bvMap)
 					continue
 				}

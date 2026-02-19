@@ -98,9 +98,9 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 					Spec: corev1.PodSpec{
 						ServiceAccountName: getResourceName(bindplane, transformAgentComponent),
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    int64Ptr(defaultRunAsGroup),
-							RunAsGroup: int64Ptr(defaultRunAsGroup),
-							RunAsUser:  int64Ptr(defaultRunAsUser),
+							FSGroup:    new(defaultRunAsGroup),
+							RunAsGroup: new(defaultRunAsGroup),
+							RunAsUser:  new(defaultRunAsUser),
 						},
 						Affinity: getTransformAgentAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -152,7 +152,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								ImagePullPolicy: corev1.PullIfNotPresent,
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
+						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getTransformAgentPodTemplate(bindplane),

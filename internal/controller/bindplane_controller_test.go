@@ -395,11 +395,11 @@ var _ = Describe("mergePodTemplateSpec", func() {
 						Image: "operator-image:latest",
 					},
 				},
-				TerminationGracePeriodSeconds: int64Ptr(60),
+				TerminationGracePeriodSeconds: new(int64(60)),
 				SecurityContext: &corev1.PodSecurityContext{
-					FSGroup:    int64Ptr(65534),
-					RunAsGroup: int64Ptr(65534),
-					RunAsUser:  int64Ptr(65534),
+					FSGroup:    new(int64(65534)),
+					RunAsGroup: new(int64(65534)),
+					RunAsUser:  new(int64(65534)),
 				},
 				Volumes: []corev1.Volume{
 					{
@@ -762,13 +762,13 @@ var _ = Describe("mergePodTemplateSpec", func() {
 
 	Context("when merging securityContext", func() {
 		It("should merge user securityContext fields with operator securityContext", func() {
-			userFSGroup := int64Ptr(1000)
+			userFSGroup := new(int64(1000))
 			userProvided := &bindplanev1alpha1.PodTemplateSpec{
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:   userFSGroup,
-							RunAsUser: int64Ptr(1000),
+							RunAsUser: new(int64(1000)),
 						},
 					},
 				},
@@ -778,9 +778,9 @@ var _ = Describe("mergePodTemplateSpec", func() {
 
 			Expect(result.Spec.SecurityContext).ToNot(BeNil())
 			Expect(result.Spec.SecurityContext.FSGroup).To(Equal(userFSGroup))
-			Expect(result.Spec.SecurityContext.RunAsUser).To(Equal(int64Ptr(1000)))
+			Expect(result.Spec.SecurityContext.RunAsUser).To(Equal(new(int64(1000))))
 			// Operator-managed fields should be preserved if not overridden
-			Expect(result.Spec.SecurityContext.RunAsGroup).To(Equal(int64Ptr(65534)))
+			Expect(result.Spec.SecurityContext.RunAsGroup).To(Equal(new(int64(65534))))
 		})
 
 		It("should handle nil securityContext in operator-managed template", func() {
@@ -790,7 +790,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup: int64Ptr(1000),
+							FSGroup: new(int64(1000)),
 						},
 					},
 				},
@@ -799,7 +799,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			result := mergePodTemplateSpec(operatorManaged, userProvided)
 
 			Expect(result.Spec.SecurityContext).ToNot(BeNil())
-			Expect(result.Spec.SecurityContext.FSGroup).To(Equal(int64Ptr(1000)))
+			Expect(result.Spec.SecurityContext.FSGroup).To(Equal(new(int64(1000))))
 		})
 	})
 
@@ -843,14 +843,14 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			userProvided := &bindplanev1alpha1.PodTemplateSpec{
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						TerminationGracePeriodSeconds: int64Ptr(30),
+						TerminationGracePeriodSeconds: new(int64(30)),
 					},
 				},
 			}
 
 			result := mergePodTemplateSpec(operatorManaged, userProvided)
 
-			Expect(result.Spec.TerminationGracePeriodSeconds).To(Equal(int64Ptr(60)))
+			Expect(result.Spec.TerminationGracePeriodSeconds).To(Equal(new(int64(60))))
 		})
 	})
 
@@ -967,7 +967,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			Expect(result.Spec.ServiceAccountName).To(Equal("operator-managed-sa"))
 			Expect(result.Spec.Containers).To(HaveLen(1))
 			Expect(result.Spec.Containers[0].Name).To(Equal("operator-container"))
-			Expect(result.Spec.TerminationGracePeriodSeconds).To(Equal(int64Ptr(60)))
+			Expect(result.Spec.TerminationGracePeriodSeconds).To(Equal(new(int64(60))))
 		})
 	})
 })

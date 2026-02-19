@@ -101,9 +101,9 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 					Spec: corev1.PodSpec{
 						ServiceAccountName: getResourceName(bindplane, nodeComponent),
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    int64Ptr(defaultRunAsGroup),
-							RunAsGroup: int64Ptr(defaultRunAsGroup),
-							RunAsUser:  int64Ptr(defaultRunAsUser),
+							FSGroup:    new(defaultRunAsGroup),
+							RunAsGroup: new(defaultRunAsGroup),
+							RunAsUser:  new(defaultRunAsUser),
 						},
 						Affinity: getNodeAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -174,7 +174,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								},
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
+						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getNodePodTemplate(bindplane),

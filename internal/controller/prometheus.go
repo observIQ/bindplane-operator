@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"maps"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -102,9 +103,9 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 					Spec: corev1.PodSpec{
 						ServiceAccountName: serviceName,
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    int64Ptr(defaultRunAsGroup),
-							RunAsGroup: int64Ptr(defaultRunAsGroup),
-							RunAsUser:  int64Ptr(defaultRunAsUser),
+							FSGroup:    new(defaultRunAsGroup),
+							RunAsGroup: new(defaultRunAsGroup),
+							RunAsUser:  new(defaultRunAsUser),
 						},
 						Affinity: getPrometheusAffinity(bindplane),
 						Containers: []corev1.Container{
@@ -162,7 +163,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 								ImagePullPolicy: corev1.PullIfNotPresent,
 							},
 						},
-						TerminationGracePeriodSeconds: int64Ptr(defaultTerminationGracePeriodSeconds),
+						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),
 					},
 				},
 				getPrometheusPodTemplateSpec(bindplane),
@@ -232,15 +233,11 @@ func getPrometheusVolumeClaimTemplate(bindplane *bindplanev1alpha1.Bindplane, la
 				if pvcMeta.Labels == nil {
 					pvcMeta.Labels = make(map[string]string)
 				}
-				for k, v := range userTemplate.Metadata.Labels {
-					pvcMeta.Labels[k] = v
-				}
+				maps.Copy(pvcMeta.Labels, userTemplate.Metadata.Labels)
 			}
 			if userTemplate.Metadata.Annotations != nil {
 				pvcMeta.Annotations = make(map[string]string)
-				for k, v := range userTemplate.Metadata.Annotations {
-					pvcMeta.Annotations[k] = v
-				}
+				maps.Copy(pvcMeta.Annotations, userTemplate.Metadata.Annotations)
 			}
 		}
 
