@@ -117,10 +117,18 @@ Set `spec.config.auth.type` to `ldap` or `active-directory`. Both types share th
 | `spec.config.auth.ldap.bindUser` | `BINDPLANE_LDAP_BIND_USER` | — | No |
 | `spec.config.auth.ldap.bindPassword` | `BINDPLANE_LDAP_BIND_PASSWORD` | — | No |
 | `spec.config.auth.ldap.searchFilter` | `BINDPLANE_LDAP_SEARCH_FILTER` | — | No |
-| `spec.config.auth.ldap.tlsCert` | `BINDPLANE_LDAP_TLS_CERT` | — | No |
-| `spec.config.auth.ldap.tlsKey` | `BINDPLANE_LDAP_TLS_KEY` | — | No |
-| `spec.config.auth.ldap.tlsCA` | `BINDPLANE_LDAP_TLS_CA` | — | No |
+| `spec.config.auth.ldap.tls` | (see below) | — | No |
 | `spec.config.auth.ldap.tlsSkipVerify` | `BINDPLANE_LDAP_TLS_SKIP_VERIFY` | `false` | No |
+
+**LDAP TLS:** Specify a TLS CA for TLS verification. Specify a certificate and private key for TLS
+with client auth (mutual TLS).
+
+| TLS Field | Description |
+|---|---|
+| `spec.config.auth.ldap.tls.secretName` | Name of the Secret containing the cert, key, and optionally CA |
+| `spec.config.auth.ldap.tls.certKey` | Key in the Secret for the TLS certificate (mutual TLS) |
+| `spec.config.auth.ldap.tls.keyKey` | Key in the Secret for the TLS private key (mutual TLS) |
+| `spec.config.auth.ldap.tls.caKey` | Key in the Secret for the CA certificate (optional; omit to use system CAs) |
 
 Example (LDAP with TLS):
 
@@ -138,7 +146,11 @@ spec:
         bindPasswordSecret:
           name: ldap-secrets
           key: bind-password
-        tlsCA: /etc/ssl/certs/ca.pem
+        tls:
+          secretName: ldap-tls-secret
+          certKey: tls.crt
+          keyKey: tls.key
+          caKey: ca.crt
 ```
 
 Example (Active Directory):

@@ -162,6 +162,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 	replicas := int32(1)
 	labels := getLabels(bindplane, component)
 	selectorLabels := getSelectorLabels(bindplane, component)
+	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
 
 	// Get the appropriate PodTemplate and Affinity based on component
 	var podTemplate *bindplanev1alpha1.PodTemplateSpec
@@ -192,6 +193,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PodSpec{
+						Volumes:            ldapVols,
 						ServiceAccountName: getResourceName(bindplane, component),
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    new(defaultRunAsGroup),
@@ -201,8 +203,9 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 						Affinity: affinity,
 						Containers: []corev1.Container{
 							{
-								Name:  bindplaneJobsContainerName,
-								Image: bindplaneJobsImage,
+								Name:         bindplaneJobsContainerName,
+								Image:        bindplaneJobsImage,
+								VolumeMounts: ldapMounts,
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          bindplaneJobsHTTPPortName,
@@ -359,14 +362,16 @@ func getLDAPEnvVars(ldap *bindplanev1alpha1.LDAPConfig) []corev1.EnvVar {
 	if ldap.SearchFilter != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPSearchFilterEnvVar, Value: ldap.SearchFilter})
 	}
-	if ldap.TLSCert != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSCertEnvVar, Value: ldap.TLSCert})
-	}
-	if ldap.TLSKey != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSKeyEnvVar, Value: ldap.TLSKey})
-	}
-	if ldap.TLSCA != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSCAEnvVar, Value: ldap.TLSCA})
+	if ldap.TLS != nil {
+		if ldap.TLS.CertKey != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSCertEnvVar, Value: ldapTLSMountPath + "/" + ldap.TLS.CertKey})
+		}
+		if ldap.TLS.KeyKey != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSKeyEnvVar, Value: ldapTLSMountPath + "/" + ldap.TLS.KeyKey})
+		}
+		if ldap.TLS.CAKey != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSCAEnvVar, Value: ldapTLSMountPath + "/" + ldap.TLS.CAKey})
+		}
 	}
 	if ldap.TLSSkipVerify {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSSkipVerifyEnvVar, Value: "true"})

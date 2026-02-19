@@ -88,6 +88,10 @@ const (
 	bindplaneLDAPTLSCAEnvVar         = "BINDPLANE_LDAP_TLS_CA"
 	bindplaneLDAPTLSSkipVerifyEnvVar = "BINDPLANE_LDAP_TLS_SKIP_VERIFY"
 
+	// LDAP TLS volume mount (operator-managed path; user specifies only Secret name and keys)
+	ldapTLSVolumeName = "ldap-tls"
+	ldapTLSMountPath  = "/etc/bindplane/ldap-tls"
+
 	// OIDC configuration
 	bindplaneOIDCClientIDEnvVar     = "BINDPLANE_OIDC_OAUTH2_CLIENT_ID"
 	bindplaneOIDCClientSecretEnvVar = "BINDPLANE_OIDC_OAUTH2_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential
@@ -552,6 +556,38 @@ func newService(bindplane *bindplanev1alpha1.Bindplane, component string, opts .
 			Ports:    options.ports,
 		},
 	}
+}
+
+// getLDAPTLSVolumeAndMount returns a Secret volume and mount for LDAP TLS when config.Auth.LDAP.TLS is set.
+// The Secret is mounted at ldapTLSMountPath; TLS env vars are set to the computed file paths (mountPath/key).
+// Returns (nil, nil) when LDAP TLS is not configured.
+func getLDAPTLSVolumeAndMount(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	tls := getLDAPTLSConfig(bindplane)
+	if tls == nil || tls.SecretName == "" {
+		return nil, nil
+	}
+	vol := corev1.Volume{
+		Name: ldapTLSVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: tls.SecretName,
+			},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      ldapTLSVolumeName,
+		MountPath: ldapTLSMountPath,
+		ReadOnly:  true,
+	}
+	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
+}
+
+// getLDAPTLSConfig returns the LDAP TLS config when present.
+func getLDAPTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.LDAPTLSConfig {
+	if bindplane.Spec.Config.Auth == nil || bindplane.Spec.Config.Auth.LDAP == nil {
+		return nil
+	}
+	return bindplane.Spec.Config.Auth.LDAP.TLS
 }
 
 // mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.

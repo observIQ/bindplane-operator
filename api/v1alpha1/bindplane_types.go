@@ -257,21 +257,35 @@ type LDAPConfig struct {
 	// +optional
 	SearchFilter string `json:"searchFilter,omitempty"`
 
-	// TLSCert is the path to the TLS certificate for mutual TLS
+	// TLS configures TLS for LDAP using a Secret. The operator mounts the Secret and sets
+	// BINDPLANE_LDAP_TLS_CERT, BINDPLANE_LDAP_TLS_KEY, and BINDPLANE_LDAP_TLS_CA to the
+	// mounted file paths. Omit TLS to disable mutual TLS / custom CA.
 	// +optional
-	TLSCert string `json:"tlsCert,omitempty"`
-
-	// TLSKey is the path to the TLS private key for mutual TLS
-	// +optional
-	TLSKey string `json:"tlsKey,omitempty"`
-
-	// TLSCA is the path to the TLS CA certificate
-	// +optional
-	TLSCA string `json:"tlsCA,omitempty"`
+	TLS *LDAPTLSConfig `json:"tls,omitempty"`
 
 	// TLSSkipVerify disables TLS certificate verification
 	// +optional
 	TLSSkipVerify bool `json:"tlsSkipVerify,omitempty"`
+}
+
+// LDAPTLSConfig defines TLS for LDAP by referencing a Secret. The Secret is mounted
+// at a fixed path; the operator sets the TLS env vars to the mounted file paths.
+// Users specify only the secret name and key names, not mount paths.
+type LDAPTLSConfig struct {
+	// SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA.
+	SecretName string `json:"secretName"`
+
+	// CertKey is the key in the Secret for the TLS certificate (for mutual TLS).
+	// +optional
+	CertKey string `json:"certKey,omitempty"`
+
+	// KeyKey is the key in the Secret for the TLS private key (for mutual TLS).
+	// +optional
+	KeyKey string `json:"keyKey,omitempty"`
+
+	// CAKey is the key in the Secret for the CA certificate. Omit to use system CAs.
+	// +optional
+	CAKey string `json:"caKey,omitempty"`
 }
 
 // OIDCConfig defines OpenID Connect authentication configuration

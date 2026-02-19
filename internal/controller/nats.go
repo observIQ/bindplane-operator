@@ -92,6 +92,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 	selectorLabels := getSelectorLabels(bindplane, natsComponent)
 	serviceName := getResourceName(bindplane, natsComponent)
 	headlessServiceName := getNatsClusterServiceName(bindplane)
+	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
 
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -112,6 +113,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PodSpec{
+						Volumes:            ldapVols,
 						ServiceAccountName: serviceName,
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    new(defaultRunAsGroup),
@@ -121,8 +123,9 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 						Affinity: getNatsAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
-								Name:  natsContainerName,
-								Image: natsImage,
+								Name:         natsContainerName,
+								Image:        natsImage,
+								VolumeMounts: ldapMounts,
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          natsClientPortName,

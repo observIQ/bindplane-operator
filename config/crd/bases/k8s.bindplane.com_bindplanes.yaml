@@ -10977,12 +10977,19 @@ spec:
                             type: string
                           server:
                             type: string
-                          tlsCA:
-                            type: string
-                          tlsCert:
-                            type: string
-                          tlsKey:
-                            type: string
+                          tls:
+                            properties:
+                              caKey:
+                                type: string
+                              certKey:
+                                type: string
+                              keyKey:
+                                type: string
+                              secretName:
+                                type: string
+                            required:
+                            - secretName
+                            type: object
                           tlsSkipVerify:
                             type: boolean
                         type: object
