@@ -11,7 +11,8 @@ The operator uses Kubernetes Custom Resource Definitions (CRDs) to provide a dec
 ## Documentation
 
 - **[Architecture](docs/architecture.md)** — Operator design and components
-- **[Configuration](docs/configuration.md)** — CRD spec and configuration options
+- **[Configuration](docs/configuration/configuration.md)** — Bindplane configuration (license, auth, store, etc.)
+- **[API Reference (CRD)](docs/configuration/api.md)** — Full list of Bindplane custom resource options
 - **[Deployment](docs/deployment.md)** — Deployment sizing guidance
 - **[Minikube](docs/minikube.md)** — Running the operator on Minikube
 

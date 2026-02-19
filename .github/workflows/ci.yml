@@ -68,3 +68,25 @@ jobs:
 
       - name: Run gosec security scanner
         run: make gosec
+
+  api-docs:
+    name: API docs up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Generate API docs
+        run: make generate-api-docs
+
+      - name: Check docs are up to date
+        run: |
+          git diff --exit-code docs/ || (
+            echo "::error::docs/ has uncommitted changes after 'make generate-api-docs'. Run 'make generate-api-docs' and commit the changes."
+            exit 1
+          )

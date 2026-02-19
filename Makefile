@@ -108,6 +108,15 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: generate-api-docs
+generate-api-docs: ## Generate CRD API reference documentation at docs/configuration/api.md.
+	@mkdir -p docs/configuration
+	$(CRD_REF_DOCS) \
+		--source-path=$(CURDIR) \
+		--config=docs/configuration/.crd-ref-docs-config.yaml \
+		--renderer=markdown \
+		--output-path=docs/configuration/api.md
+
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
@@ -246,6 +255,7 @@ KIND = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/kind/cmd/kind
 KUSTOMIZE = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/kustomize/kustomize/v5
 CONTROLLER_GEN = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/controller-tools/cmd/controller-gen
 ENVTEST = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/controller-runtime/tools/setup-envtest
+CRD_REF_DOCS = go tool -modfile=$(TOOLS_MOD) github.com/elastic/crd-ref-docs
 GOLANGCI_LINT = go tool -modfile=$(TOOLS_MOD) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOSEC = go tool -modfile=$(TOOLS_MOD) github.com/securego/gosec/v2/cmd/gosec
 

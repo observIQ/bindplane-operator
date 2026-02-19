@@ -1,5 +1,7 @@
 # Bindplane Configuration
 
+This document describes **Bindplane configuration**—the `spec.config` field and related Bindplane server settings (license, auth, network, store). For the full list of custom resource options (all CRD fields, including component specs and pod templates), see the [API Reference](api.md).
+
 Configuration is provided via the `spec.config` field of the `Bindplane` custom resource. The operator translates these fields into environment variables on the Node, NATS, Jobs, and Jobs Migrate deployments.
 
 ## Table of contents
