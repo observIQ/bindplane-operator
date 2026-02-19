@@ -149,6 +149,10 @@ lint-fix: ## Run golangci-lint linter and perform fixes
 lint-config: ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+.PHONY: gosec
+gosec: ## Run gosec security scanner
+	$(GOSEC) ./...
+
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
@@ -243,6 +247,7 @@ KUSTOMIZE = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/kustomize/kustomize/v5
 CONTROLLER_GEN = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/controller-tools/cmd/controller-gen
 ENVTEST = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/controller-runtime/tools/setup-envtest
 GOLANGCI_LINT = go tool -modfile=$(TOOLS_MOD) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+GOSEC = go tool -modfile=$(TOOLS_MOD) github.com/securego/gosec/v2/cmd/gosec
 
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
