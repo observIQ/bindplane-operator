@@ -77,9 +77,9 @@ spec:
         - name: LDAP_ADMIN_PASSWORD
           value: stageadmin
         - name: LDAP_USERS
-          value: stage,pruser
+          value: user
         - name: LDAP_PASSWORDS
-          value: stagepassword,prpassword
+          value: password
         - name: LDAP_TLS_CERT_FILE
           value: /ldap.crt
         - name: LDAP_TLS_KEY_FILE
