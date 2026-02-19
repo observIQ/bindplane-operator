@@ -353,10 +353,10 @@ func getLDAPEnvVars(ldap *bindplanev1alpha1.LDAPConfig) []corev1.EnvVar {
 	if ldap.BaseDN != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPBaseDNEnvVar, Value: ldap.BaseDN})
 	}
-	if ldap.BindUser != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPBindUserEnvVar, Value: ldap.BindUser})
+	if ev := secretOrValue(bindplaneLDAPBindUserEnvVar, ldap.BindUser, ldap.BindUserSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
 	}
-	if ev := secretOrValue(bindplaneLDAPBindPasswordEnvVar, ldap.BindPassword, ldap.BindPasswordSecret); ev != nil {
+	if ev := secretOrValue(bindplaneLDAPBindPasswordEnvVar, ldap.BindPassword, ldap.BindPasswordSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
 	if ldap.SearchFilter != "" {
@@ -386,10 +386,10 @@ func getOIDCEnvVars(oidc *bindplanev1alpha1.OIDCConfig) []corev1.EnvVar {
 		return nil
 	}
 	var envVars []corev1.EnvVar
-	if ev := secretOrValue(bindplaneOIDCClientIDEnvVar, oidc.ClientID, oidc.ClientIDSecret); ev != nil {
+	if ev := secretOrValue(bindplaneOIDCClientIDEnvVar, oidc.ClientID, oidc.ClientIDSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
-	if ev := secretOrValue(bindplaneOIDCClientSecretEnvVar, oidc.ClientSecret, oidc.ClientSecretSecret); ev != nil {
+	if ev := secretOrValue(bindplaneOIDCClientSecretEnvVar, oidc.ClientSecret, oidc.ClientSecretSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
 	if oidc.Issuer != "" {
@@ -408,7 +408,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	config := &bindplane.Spec.Config
 
 	// License
-	if ev := secretOrValue(bindplaneLicenseEnvVar, config.License, config.LicenseSecret); ev != nil {
+	if ev := secretOrValue(bindplaneLicenseEnvVar, config.License, config.LicenseSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
 
@@ -426,10 +426,10 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 				Value: "true",
 			})
 		}
-		if ev := secretOrValue(bindplaneUsernameEnvVar, config.Auth.Username, config.Auth.UsernameSecret); ev != nil {
+		if ev := secretOrValue(bindplaneUsernameEnvVar, config.Auth.Username, config.Auth.UsernameSecretRef); ev != nil {
 			envVars = append(envVars, *ev)
 		}
-		if ev := secretOrValue(bindplanePasswordEnvVar, config.Auth.Password, config.Auth.PasswordSecret); ev != nil {
+		if ev := secretOrValue(bindplanePasswordEnvVar, config.Auth.Password, config.Auth.PasswordSecretRef); ev != nil {
 			envVars = append(envVars, *ev)
 		}
 
@@ -513,10 +513,10 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 				Value: config.Store.Postgres.SSLMode,
 			})
 		}
-		if ev := secretOrValue(bindplanePostgresUsernameEnvVar, config.Store.Postgres.Username, config.Store.Postgres.UsernameSecret); ev != nil {
+		if ev := secretOrValue(bindplanePostgresUsernameEnvVar, config.Store.Postgres.Username, config.Store.Postgres.UsernameSecretRef); ev != nil {
 			envVars = append(envVars, *ev)
 		}
-		if ev := secretOrValue(bindplanePostgresPasswordEnvVar, config.Store.Postgres.Password, config.Store.Postgres.PasswordSecret); ev != nil {
+		if ev := secretOrValue(bindplanePostgresPasswordEnvVar, config.Store.Postgres.Password, config.Store.Postgres.PasswordSecretRef); ev != nil {
 			envVars = append(envVars, *ev)
 		}
 		if config.Store.Postgres.MaxConnections > 0 {

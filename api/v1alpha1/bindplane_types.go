@@ -95,10 +95,10 @@ type BindplaneConfigSpec struct {
 	// License is the Bindplane license key
 	License string `json:"license"`
 
-	// LicenseSecret references a Kubernetes Secret containing the Bindplane license key.
+	// LicenseSecretRef references a Kubernetes Secret containing the Bindplane license key.
 	// Takes precedence over License if both are set.
 	// +optional
-	LicenseSecret *corev1.SecretKeySelector `json:"licenseSecret,omitempty"`
+	LicenseSecretRef *corev1.SecretKeySelector `json:"licenseSecretRef,omitempty"`
 
 	// Auth configuration for Bindplane
 	// +optional
@@ -193,19 +193,19 @@ type AuthConfig struct {
 	// +optional
 	Username string `json:"username,omitempty"`
 
-	// UsernameSecret references a Kubernetes Secret containing the auth username.
+	// UsernameSecretRef references a Kubernetes Secret containing the auth username.
 	// Takes precedence over Username if both are set.
 	// +optional
-	UsernameSecret *corev1.SecretKeySelector `json:"usernameSecret,omitempty"`
+	UsernameSecretRef *corev1.SecretKeySelector `json:"usernameSecretRef,omitempty"`
 
 	// Password for authentication
 	// +optional
 	Password string `json:"password,omitempty"`
 
-	// PasswordSecret references a Kubernetes Secret containing the auth password.
+	// PasswordSecretRef references a Kubernetes Secret containing the auth password.
 	// Takes precedence over Password if both are set.
 	// +optional
-	PasswordSecret *corev1.SecretKeySelector `json:"passwordSecret,omitempty"`
+	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
 	// SessionsStrictMode enables strict mode for session cookies.
 	// +optional
@@ -244,14 +244,19 @@ type LDAPConfig struct {
 	// +optional
 	BindUser string `json:"bindUser,omitempty"`
 
+	// BindUserSecretRef references a Kubernetes Secret containing the LDAP bind username.
+	// Takes precedence over BindUser if both are set.
+	// +optional
+	BindUserSecretRef *corev1.SecretKeySelector `json:"bindUserSecretRef,omitempty"`
+
 	// BindPassword is the password used to bind to the LDAP server
 	// +optional
 	BindPassword string `json:"bindPassword,omitempty"`
 
-	// BindPasswordSecret references a Kubernetes Secret containing the LDAP bind password.
+	// BindPasswordSecretRef references a Kubernetes Secret containing the LDAP bind password.
 	// Takes precedence over BindPassword if both are set.
 	// +optional
-	BindPasswordSecret *corev1.SecretKeySelector `json:"bindPasswordSecret,omitempty"`
+	BindPasswordSecretRef *corev1.SecretKeySelector `json:"bindPasswordSecretRef,omitempty"`
 
 	// SearchFilter is the LDAP search filter used to locate users
 	// +optional
@@ -294,19 +299,19 @@ type OIDCConfig struct {
 	// +optional
 	ClientID string `json:"clientID,omitempty"`
 
-	// ClientIDSecret references a Kubernetes Secret containing the OIDC client ID.
+	// ClientIDSecretRef references a Kubernetes Secret containing the OIDC client ID.
 	// Takes precedence over ClientID if both are set.
 	// +optional
-	ClientIDSecret *corev1.SecretKeySelector `json:"clientIDSecret,omitempty"`
+	ClientIDSecretRef *corev1.SecretKeySelector `json:"clientIDSecretRef,omitempty"`
 
 	// ClientSecret is the OIDC OAuth2 client secret
 	// +optional
 	ClientSecret string `json:"clientSecret,omitempty"`
 
-	// ClientSecretSecret references a Kubernetes Secret containing the OIDC client secret.
+	// ClientSecretSecretRef references a Kubernetes Secret containing the OIDC client secret.
 	// Takes precedence over ClientSecret if both are set.
 	// +optional
-	ClientSecretSecret *corev1.SecretKeySelector `json:"clientSecretSecret,omitempty"`
+	ClientSecretSecretRef *corev1.SecretKeySelector `json:"clientSecretSecretRef,omitempty"`
 
 	// Issuer is the URL of the OIDC provider
 	// +optional
@@ -369,19 +374,19 @@ type PostgresConfig struct {
 	// +optional
 	Username string `json:"username,omitempty"`
 
-	// UsernameSecret references a Kubernetes Secret containing the PostgreSQL username.
+	// UsernameSecretRef references a Kubernetes Secret containing the PostgreSQL username.
 	// Takes precedence over Username if both are set.
 	// +optional
-	UsernameSecret *corev1.SecretKeySelector `json:"usernameSecret,omitempty"`
+	UsernameSecretRef *corev1.SecretKeySelector `json:"usernameSecretRef,omitempty"`
 
 	// Password specifies the PostgreSQL password
 	// +optional
 	Password string `json:"password,omitempty"`
 
-	// PasswordSecret references a Kubernetes Secret containing the PostgreSQL password.
+	// PasswordSecretRef references a Kubernetes Secret containing the PostgreSQL password.
 	// Takes precedence over Password if both are set.
 	// +optional
-	PasswordSecret *corev1.SecretKeySelector `json:"passwordSecret,omitempty"`
+	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
 	// MaxConnections specifies the maximum number of connections
 	// +optional

@@ -10954,7 +10954,7 @@ spec:
                             type: string
                           bindPassword:
                             type: string
-                          bindPasswordSecret:
+                          bindPasswordSecretRef:
                             properties:
                               key:
                                 type: string
@@ -10969,6 +10969,19 @@ spec:
                             x-kubernetes-map-type: atomic
                           bindUser:
                             type: string
+                          bindUserSecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
                           port:
                             type: string
                           protocol:
@@ -10997,7 +11010,7 @@ spec:
                         properties:
                           clientID:
                             type: string
-                          clientIDSecret:
+                          clientIDSecretRef:
                             properties:
                               key:
                                 type: string
@@ -11012,7 +11025,7 @@ spec:
                             x-kubernetes-map-type: atomic
                           clientSecret:
                             type: string
-                          clientSecretSecret:
+                          clientSecretSecretRef:
                             properties:
                               key:
                                 type: string
@@ -11034,7 +11047,7 @@ spec:
                         type: object
                       password:
                         type: string
-                      passwordSecret:
+                      passwordSecretRef:
                         properties:
                           key:
                             type: string
@@ -11058,7 +11071,7 @@ spec:
                         type: string
                       username:
                         type: string
-                      usernameSecret:
+                      usernameSecretRef:
                         properties:
                           key:
                             type: string
@@ -11074,7 +11087,7 @@ spec:
                     type: object
                   license:
                     type: string
-                  licenseSecret:
+                  licenseSecretRef:
                     properties:
                       key:
                         type: string
@@ -11112,7 +11125,7 @@ spec:
                             type: string
                           password:
                             type: string
-                          passwordSecret:
+                          passwordSecretRef:
                             properties:
                               key:
                                 type: string
@@ -11135,7 +11148,7 @@ spec:
                             type: string
                           username:
                             type: string
-                          usernameSecret:
+                          usernameSecretRef:
                             properties:
                               key:
                                 type: string
