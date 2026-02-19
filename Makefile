@@ -238,6 +238,10 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 install-postgres-operator: ## Install CloudNativePG operator and deploy a test PostgreSQL cluster in the postgres namespace.
 	@scripts/install-postgres-operator.sh
 
+.PHONY: install-openldap
+install-openldap: ## Deploy OpenLDAP from test/helper/openldap for the minikube stack.
+	@scripts/install-openldap.sh
+
 ##@ Dependencies
 
 ## Location for envtest Kubernetes API server binaries
