@@ -8,6 +8,13 @@ Bindplane is a telemetry pipeline built on [OpenTelemetry](https://opentelemetry
 
 The operator uses Kubernetes Custom Resource Definitions (CRDs) to provide a declarative API for managing Bindplane deployments, making it easy to configure, deploy, and maintain Bindplane infrastructure in your Kubernetes cluster.
 
+## Documentation
+
+- **[Architecture](docs/architecture.md)** — Operator design and components
+- **[Configuration](docs/configuration.md)** — CRD spec and configuration options
+- **[Deployment](docs/deployment.md)** — Deployment sizing guidance
+- **[Minikube](docs/minikube.md)** — Running the operator on Minikube
+
 ## Learn More
 
 - **[Bindplane](https://bindplane.com/)**: Learn more about Bindplane and its capabilities
