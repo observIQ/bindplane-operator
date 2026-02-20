@@ -13,6 +13,22 @@ Package v1alpha1 contains API Schema definitions for the bindplane v1alpha1 API 
 
 
 
+#### AuditTrailConfig
+
+
+
+AuditTrailConfig defines audit trail configuration
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `retentionDays` _integer_ | RetentionDays is the number of days to retain audit trail events. | 365 | Optional: \{\} <br /> |
+
+
 #### AuthConfig
 
 
@@ -89,6 +105,11 @@ _Appears in:_
 | `auth` _[AuthConfig](#authconfig)_ | Auth configuration for Bindplane |  | Optional: \{\} <br /> |
 | `network` _[NetworkConfig](#networkconfig)_ | Network configuration for Bindplane |  | Optional: \{\} <br /> |
 | `store` _[StoreConfig](#storeconfig)_ | Store configuration for Bindplane |  |  |
+| `tracing` _[TracingConfig](#tracingconfig)_ | Tracing configuration for Bindplane. When omitted or type empty, tracing is disabled. |  | Optional: \{\} <br /> |
+| `metrics` _[MetricsConfig](#metricsconfig)_ | Metrics configuration for Bindplane. When omitted, defaults to prometheus type with interval 60s and endpoint /metrics. |  | Optional: \{\} <br /> |
+| `offline` _boolean_ | Offline enables offline mode for the server. Omit or leave unset to leave offline mode disabled; set only when directed. |  | Optional: \{\} <br /> |
+| `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
+| `auditTrail` _[AuditTrailConfig](#audittrailconfig)_ | AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365. |  | Optional: \{\} <br /> |
 
 
 #### BindplaneJobsComponentSpec
@@ -194,6 +215,61 @@ _Appears in:_
 | `caKey` _string_ | CAKey is the key in the Secret for the CA certificate. Omit to use system CAs. |  | Optional: \{\} <br /> |
 
 
+#### MetricsConfig
+
+
+
+MetricsConfig defines metrics configuration
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type specifies the metrics type. One of: otlp, prometheus. | prometheus | Enum: [otlp prometheus] <br />Optional: \{\} <br /> |
+| `interval` _string_ | Interval is the interval at which to export metrics (e.g. 60s). Used when Type is otlp. | 60s | Optional: \{\} <br /> |
+| `prometheus` _[MetricsPrometheusConfig](#metricsprometheusconfig)_ | Prometheus configures Prometheus metrics when Type is prometheus. |  | Optional: \{\} <br /> |
+| `otlp` _[MetricsOTLPConfig](#metricsotlpconfig)_ | OTLP configures OTLP metrics when Type is otlp. |  | Optional: \{\} <br /> |
+
+
+#### MetricsOTLPConfig
+
+
+
+MetricsOTLPConfig defines OTLP metrics configuration
+
+
+
+_Appears in:_
+- [MetricsConfig](#metricsconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `endpoint` _string_ | Endpoint is the gRPC endpoint to send metrics to (e.g. localhost:4317). |  | Optional: \{\} <br /> |
+| `insecure` _boolean_ | Insecure disables TLS verification for the OTLP connection. |  | Optional: \{\} <br /> |
+
+
+#### MetricsPrometheusConfig
+
+
+
+MetricsPrometheusConfig defines Prometheus metrics configuration
+
+
+
+_Appears in:_
+- [MetricsConfig](#metricsconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `endpoint` _string_ | Endpoint is the HTTP path to serve metrics on (e.g. /metrics). | /metrics | Optional: \{\} <br /> |
+| `username` _string_ | Username is the basic auth username for the metrics endpoint, if any. |  | Optional: \{\} <br /> |
+| `password` _string_ | Password is the basic auth password for the metrics endpoint. |  | Optional: \{\} <br /> |
+| `passwordSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | PasswordSecretRef references a Kubernetes Secret containing the metrics endpoint password.<br />Takes precedence over Password if both are set. |  | Optional: \{\} <br /> |
+
+
 #### NatsComponentSpec
 
 
@@ -227,6 +303,8 @@ _Appears in:_
 | `host` _string_ | Host specifies the bind address |  | Optional: \{\} <br /> |
 | `port` _string_ | Port specifies the port to listen on |  | Optional: \{\} <br /> |
 | `remoteURL` _string_ | RemoteURL specifies the remote URL for Bindplane.<br />Defaults to http://<bindplane-name>-node:3001 (the internal node service URL).<br />Override this when using ingress, e.g. https://bindplane.my-corp.net |  | Optional: \{\} <br /> |
+| `webURL` _string_ | WebURL is the URL used by the client for the web interface. Defaults to RemoteURL when not set. Only set when explicitly configuring. |  | Optional: \{\} <br /> |
+| `corsAllowedOrigins` _string_ | CorsAllowedOrigins is the allowed origin for CORS requests. Only set when explicitly configuring. |  | Optional: \{\} <br /> |
 
 
 #### OIDCConfig
@@ -350,6 +428,41 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `postgres` _[PostgresConfig](#postgresconfig)_ | Postgres configuration |  |  |
+
+
+#### TracingConfig
+
+
+
+TracingConfig defines tracing configuration
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type specifies the tracing type. One of: otlp, google. When empty, tracing is disabled. |  | Enum: [otlp google] <br />Optional: \{\} <br /> |
+| `otlp` _[TracingOTLPConfig](#tracingotlpconfig)_ | OTLP configures OTLP tracing when Type is otlp. |  | Optional: \{\} <br /> |
+| `samplingRate` _string_ | SamplingRate is the ratio between 0 and 1 of traces to keep. Omit or 0 to disable sampling. |  | Optional: \{\} <br /> |
+
+
+#### TracingOTLPConfig
+
+
+
+TracingOTLPConfig defines OTLP tracing configuration
+
+
+
+_Appears in:_
+- [TracingConfig](#tracingconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `endpoint` _string_ | Endpoint is the OTLP endpoint to send traces to (e.g. http://localhost:4317). |  | Optional: \{\} <br /> |
+| `insecure` _boolean_ | Insecure disables TLS verification for the OTLP connection. |  | Optional: \{\} <br /> |
 
 
 #### TransformAgentComponentSpec

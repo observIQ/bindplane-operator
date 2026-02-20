@@ -67,15 +67,20 @@ const (
 // Bindplane environment variable name constants
 const (
 	// Core Bindplane configuration
-	bindplaneModeEnvVar                   = "BINDPLANE_MODE"
-	bindplaneLicenseEnvVar                = "BINDPLANE_LICENSE"
-	bindplaneAuthTypeEnvVar               = "BINDPLANE_AUTH_TYPE"
-	bindplaneAuthSessionsStrictModeEnvVar = "BINDPLANE_AUTH_SESSIONS_STRICT_MODE"
-	bindplaneUsernameEnvVar               = "BINDPLANE_USERNAME"
-	bindplanePasswordEnvVar               = "BINDPLANE_PASSWORD" // #nosec G101 -- env var name, not a credential
-	bindplaneHostEnvVar                   = "BINDPLANE_HOST"
-	bindplanePortEnvVar                   = "BINDPLANE_PORT"
-	bindplaneRemoteURLEnvVar              = "BINDPLANE_REMOTE_URL"
+	bindplaneModeEnvVar                    = "BINDPLANE_MODE"
+	bindplaneLicenseEnvVar                 = "BINDPLANE_LICENSE"
+	bindplaneAuthTypeEnvVar                = "BINDPLANE_AUTH_TYPE"
+	bindplaneAuthSessionsStrictModeEnvVar  = "BINDPLANE_AUTH_SESSIONS_STRICT_MODE"
+	bindplaneUsernameEnvVar                = "BINDPLANE_USERNAME"
+	bindplanePasswordEnvVar                = "BINDPLANE_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplaneHostEnvVar                    = "BINDPLANE_HOST"
+	bindplanePortEnvVar                    = "BINDPLANE_PORT"
+	bindplaneRemoteURLEnvVar               = "BINDPLANE_REMOTE_URL"
+	bindplaneWebURLEnvVar                  = "BINDPLANE_WEB_URL"
+	bindplaneCorsAllowedOriginsEnvVar      = "BINDPLANE_CORS_ALLOWED_ORIGINS"
+	bindplaneOfflineEnvVar                 = "BINDPLANE_OFFLINE"
+	bindplaneMaxConcurrencyEnvVar          = "BINDPLANE_MAX_CONCURRENCY"
+	bindplaneAuditTrailRetentionDaysEnvVar = "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS"
 
 	// LDAP / Active Directory configuration
 	bindplaneLDAPProtocolEnvVar      = "BINDPLANE_LDAP_PROTOCOL"
@@ -102,6 +107,21 @@ const (
 
 	// Store configuration
 	bindplaneStoreTypeEnvVar = "BINDPLANE_STORE_TYPE"
+
+	// Tracing configuration
+	bindplaneTracingTypeEnvVar         = "BINDPLANE_TRACING_TYPE"
+	bindplaneTracingOTLPEndpointEnvVar = "BINDPLANE_TRACING_OTLP_ENDPOINT"
+	bindplaneTracingOTLPInsecureEnvVar = "BINDPLANE_TRACING_OTLP_INSECURE"
+	bindplaneTracingSamplingRateEnvVar = "BINDPLANE_TRACING_SAMPLING_RATE"
+
+	// Metrics configuration
+	bindplaneMetricsTypeEnvVar               = "BINDPLANE_METRICS_TYPE"
+	bindplaneMetricsIntervalEnvVar           = "BINDPLANE_METRICS_INTERVAL"
+	bindplaneMetricsPrometheusEndpointEnvVar = "BINDPLANE_METRICS_PROMETHEUS_ENDPOINT"
+	bindplaneMetricsPrometheusUsernameEnvVar = "BINDPLANE_METRICS_PROMETHEUS_USERNAME"
+	bindplaneMetricsPrometheusPasswordEnvVar = "BINDPLANE_METRICS_PROMETHEUS_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplaneMetricsOTLPEndpointEnvVar       = "BINDPLANE_METRICS_OTLP_ENDPOINT"
+	bindplaneMetricsOTLPInsecureEnvVar       = "BINDPLANE_METRICS_OTLP_INSECURE"
 
 	// Postgres configuration
 	bindplanePostgresHostEnvVar             = "BINDPLANE_POSTGRES_HOST"

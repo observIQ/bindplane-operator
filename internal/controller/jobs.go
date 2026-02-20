@@ -401,144 +401,203 @@ func getOIDCEnvVars(oidc *bindplanev1alpha1.OIDCConfig) []corev1.EnvVar {
 	return envVars
 }
 
-// getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
-// following the naming convention from override_test.go (BINDPLANE_*)
-func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+// getAuthConfigEnvVars returns env vars for spec.config.auth.
+func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig) []corev1.EnvVar {
+	if auth == nil {
+		return nil
+	}
 	var envVars []corev1.EnvVar
-	config := &bindplane.Spec.Config
-
-	// License
-	if ev := secretOrValue(bindplaneLicenseEnvVar, config.License, config.LicenseSecretRef); ev != nil {
+	if auth.Type != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuthTypeEnvVar, Value: auth.Type})
+	}
+	if auth.SessionsStrictMode {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuthSessionsStrictModeEnvVar, Value: "true"})
+	}
+	if ev := secretOrValue(bindplaneUsernameEnvVar, auth.Username, auth.UsernameSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
-
-	// Auth configuration
-	if config.Auth != nil {
-		if config.Auth.Type != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplaneAuthTypeEnvVar,
-				Value: config.Auth.Type,
-			})
-		}
-		if config.Auth.SessionsStrictMode {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplaneAuthSessionsStrictModeEnvVar,
-				Value: "true",
-			})
-		}
-		if ev := secretOrValue(bindplaneUsernameEnvVar, config.Auth.Username, config.Auth.UsernameSecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-		if ev := secretOrValue(bindplanePasswordEnvVar, config.Auth.Password, config.Auth.PasswordSecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-
-		// LDAP / Active Directory
-		envVars = append(envVars, getLDAPEnvVars(config.Auth.LDAP)...)
-
-		// OIDC
-		envVars = append(envVars, getOIDCEnvVars(config.Auth.OIDC)...)
+	if ev := secretOrValue(bindplanePasswordEnvVar, auth.Password, auth.PasswordSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
 	}
+	envVars = append(envVars, getLDAPEnvVars(auth.LDAP)...)
+	envVars = append(envVars, getOIDCEnvVars(auth.OIDC)...)
+	return envVars
+}
 
-	// Network configuration
-	if config.Network != nil {
-		if config.Network.Host != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplaneHostEnvVar,
-				Value: config.Network.Host,
-			})
+// getNetworkConfigEnvVars returns env vars for spec.config.network (host, port, remoteURL).
+func getNetworkConfigEnvVars(network *bindplanev1alpha1.NetworkConfig, bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	var envVars []corev1.EnvVar
+	if network != nil {
+		if network.Host != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneHostEnvVar, Value: network.Host})
 		}
-		if config.Network.Port != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePortEnvVar,
-				Value: config.Network.Port,
-			})
+		if network.Port != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplanePortEnvVar, Value: network.Port})
+		}
+		if network.WebURL != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneWebURLEnvVar, Value: network.WebURL})
+		}
+		if network.CorsAllowedOrigins != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneCorsAllowedOriginsEnvVar, Value: network.CorsAllowedOrigins})
 		}
 	}
-
-	// Remote URL is always set; user-provided value takes precedence over the default.
 	remoteURL := ""
-	if config.Network != nil {
-		remoteURL = config.Network.RemoteURL
+	if network != nil {
+		remoteURL = network.RemoteURL
 	}
 	if remoteURL == "" {
 		remoteURL = fmt.Sprintf("http://%s-%s:%d", bindplane.Name, nodeComponent, nodeHTTPPort)
 	}
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  bindplaneRemoteURLEnvVar,
-		Value: remoteURL,
-	})
+	envVars = append(envVars, corev1.EnvVar{Name: bindplaneRemoteURLEnvVar, Value: remoteURL})
+	return envVars
+}
 
-	// Store type is always postgres
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  bindplaneStoreTypeEnvVar,
-		Value: "postgres",
-	})
+// getPostgresConfigEnvVars returns env vars for spec.config.store.postgres.
+func getPostgresConfigEnvVars(pg *bindplanev1alpha1.PostgresConfig) []corev1.EnvVar {
+	if pg == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if pg.Host != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresHostEnvVar, Value: pg.Host})
+	}
+	if pg.Port != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresPortEnvVar, Value: pg.Port})
+	}
+	if pg.ConnectTimeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresConnectTimeoutEnvVar, Value: pg.ConnectTimeout})
+	}
+	if pg.StatementTimeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresStatementTimeoutEnvVar, Value: pg.StatementTimeout})
+	}
+	if pg.Database != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresDatabaseEnvVar, Value: pg.Database})
+	}
+	if pg.SSLMode != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresSSLModeEnvVar, Value: pg.SSLMode})
+	}
+	if ev := secretOrValue(bindplanePostgresUsernameEnvVar, pg.Username, pg.UsernameSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ev := secretOrValue(bindplanePostgresPasswordEnvVar, pg.Password, pg.PasswordSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if pg.MaxConnections > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresMaxConnectionsEnvVar, Value: strconv.Itoa(pg.MaxConnections)})
+	}
+	if pg.MaxLifetime != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresMaxLifetimeEnvVar, Value: pg.MaxLifetime})
+	}
+	if pg.Schema != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePostgresSchemaEnvVar, Value: pg.Schema})
+	}
+	return envVars
+}
 
-	// Postgres configuration
-	if config.Store.Postgres != nil {
-		if config.Store.Postgres.Host != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresHostEnvVar,
-				Value: config.Store.Postgres.Host,
-			})
+// getTracingConfigEnvVars returns env vars for spec.config.tracing. Returns nil when tracing is disabled.
+func getTracingConfigEnvVars(tracing *bindplanev1alpha1.TracingConfig) []corev1.EnvVar {
+	if tracing == nil || tracing.Type == "" {
+		return nil
+	}
+	envVars := []corev1.EnvVar{
+		{Name: bindplaneTracingTypeEnvVar, Value: tracing.Type},
+	}
+	if tracing.Type == "otlp" && tracing.OTLP != nil {
+		if tracing.OTLP.Endpoint != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingOTLPEndpointEnvVar, Value: tracing.OTLP.Endpoint})
 		}
-		if config.Store.Postgres.Port != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresPortEnvVar,
-				Value: config.Store.Postgres.Port,
-			})
-		}
-		if config.Store.Postgres.ConnectTimeout != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresConnectTimeoutEnvVar,
-				Value: config.Store.Postgres.ConnectTimeout,
-			})
-		}
-		if config.Store.Postgres.StatementTimeout != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresStatementTimeoutEnvVar,
-				Value: config.Store.Postgres.StatementTimeout,
-			})
-		}
-		if config.Store.Postgres.Database != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresDatabaseEnvVar,
-				Value: config.Store.Postgres.Database,
-			})
-		}
-		if config.Store.Postgres.SSLMode != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresSSLModeEnvVar,
-				Value: config.Store.Postgres.SSLMode,
-			})
-		}
-		if ev := secretOrValue(bindplanePostgresUsernameEnvVar, config.Store.Postgres.Username, config.Store.Postgres.UsernameSecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-		if ev := secretOrValue(bindplanePostgresPasswordEnvVar, config.Store.Postgres.Password, config.Store.Postgres.PasswordSecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-		if config.Store.Postgres.MaxConnections > 0 {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresMaxConnectionsEnvVar,
-				Value: strconv.Itoa(config.Store.Postgres.MaxConnections),
-			})
-		}
-		if config.Store.Postgres.MaxLifetime != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresMaxLifetimeEnvVar,
-				Value: config.Store.Postgres.MaxLifetime,
-			})
-		}
-		if config.Store.Postgres.Schema != "" {
-			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePostgresSchemaEnvVar,
-				Value: config.Store.Postgres.Schema,
-			})
+		if tracing.OTLP.Insecure {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingOTLPInsecureEnvVar, Value: "true"})
 		}
 	}
+	if tracing.SamplingRate != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingSamplingRateEnvVar, Value: tracing.SamplingRate})
+	}
+	return envVars
+}
 
+// getMetricsConfigEnvVars returns env vars for spec.config.metrics. When metrics is nil, returns default prometheus env vars.
+func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.EnvVar {
+	if metrics == nil {
+		return []corev1.EnvVar{
+			{Name: bindplaneMetricsTypeEnvVar, Value: "prometheus"},
+			{Name: bindplaneMetricsIntervalEnvVar, Value: "60s"},
+			{Name: bindplaneMetricsPrometheusEndpointEnvVar, Value: "/metrics"},
+		}
+	}
+	metricsType := metrics.Type
+	if metricsType == "" {
+		metricsType = "prometheus"
+	}
+	interval := metrics.Interval
+	if interval == "" {
+		interval = "60s"
+	}
+	envVars := []corev1.EnvVar{
+		{Name: bindplaneMetricsTypeEnvVar, Value: metricsType},
+		{Name: bindplaneMetricsIntervalEnvVar, Value: interval},
+	}
+	if metricsType == "prometheus" {
+		endpoint := "/metrics"
+		if metrics.Prometheus != nil && metrics.Prometheus.Endpoint != "" {
+			endpoint = metrics.Prometheus.Endpoint
+		}
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsPrometheusEndpointEnvVar, Value: endpoint})
+		if metrics.Prometheus != nil {
+			if metrics.Prometheus.Username != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsPrometheusUsernameEnvVar, Value: metrics.Prometheus.Username})
+			}
+			if ev := secretOrValue(bindplaneMetricsPrometheusPasswordEnvVar, metrics.Prometheus.Password, metrics.Prometheus.PasswordSecretRef); ev != nil {
+				envVars = append(envVars, *ev)
+			}
+		}
+	}
+	if metricsType == "otlp" && metrics.OTLP != nil {
+		if metrics.OTLP.Endpoint != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPEndpointEnvVar, Value: metrics.OTLP.Endpoint})
+		}
+		if metrics.OTLP.Insecure {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPInsecureEnvVar, Value: "true"})
+		}
+	}
+	return envVars
+}
+
+// getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
+// following the naming convention from override_test.go (BINDPLANE_*)
+func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	config := &bindplane.Spec.Config
+
+	var envVars []corev1.EnvVar
+	if ev := secretOrValue(bindplaneLicenseEnvVar, config.License, config.LicenseSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	envVars = append(envVars, getAuthConfigEnvVars(config.Auth)...)
+	envVars = append(envVars, getNetworkConfigEnvVars(config.Network, bindplane)...)
+	envVars = append(envVars, corev1.EnvVar{Name: bindplaneStoreTypeEnvVar, Value: "postgres"})
+	envVars = append(envVars, getPostgresConfigEnvVars(config.Store.Postgres)...)
+	envVars = append(envVars, getTracingConfigEnvVars(config.Tracing)...)
+	envVars = append(envVars, getMetricsConfigEnvVars(config.Metrics)...)
+	envVars = append(envVars, getMiscConfigEnvVars(config)...)
+	return envVars
+}
+
+// getMiscConfigEnvVars returns env vars for offline (only when set), maxConcurrency (default 10), and auditTrail.retentionDays (default 365).
+func getMiscConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	var envVars []corev1.EnvVar
+	if config.Offline != nil {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOfflineEnvVar, Value: strconv.FormatBool(*config.Offline)})
+	}
+	maxConcurrency := config.MaxConcurrency
+	if maxConcurrency <= 0 {
+		maxConcurrency = 10
+	}
+	envVars = append(envVars, corev1.EnvVar{Name: bindplaneMaxConcurrencyEnvVar, Value: strconv.Itoa(maxConcurrency)})
+	retentionDays := 365
+	if config.AuditTrail != nil && config.AuditTrail.RetentionDays > 0 {
+		retentionDays = config.AuditTrail.RetentionDays
+	}
+	envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuditTrailRetentionDaysEnvVar, Value: strconv.Itoa(retentionDays)})
 	return envVars
 }
 

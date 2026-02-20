@@ -10946,6 +10946,12 @@ spec:
                 type: object
               config:
                 properties:
+                  auditTrail:
+                    properties:
+                      retentionDays:
+                        default: 365
+                        type: integer
+                    type: object
                   auth:
                     properties:
                       ldap:
@@ -11100,15 +11106,66 @@ spec:
                     - key
                     type: object
                     x-kubernetes-map-type: atomic
+                  maxConcurrency:
+                    default: 10
+                    type: integer
+                  metrics:
+                    properties:
+                      interval:
+                        default: 60s
+                        type: string
+                      otlp:
+                        properties:
+                          endpoint:
+                            type: string
+                          insecure:
+                            type: boolean
+                        type: object
+                      prometheus:
+                        properties:
+                          endpoint:
+                            default: /metrics
+                            type: string
+                          password:
+                            type: string
+                          passwordSecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          username:
+                            type: string
+                        type: object
+                      type:
+                        default: prometheus
+                        enum:
+                        - otlp
+                        - prometheus
+                        type: string
+                    type: object
                   network:
                     properties:
+                      corsAllowedOrigins:
+                        type: string
                       host:
                         type: string
                       port:
                         type: string
                       remoteURL:
                         type: string
+                      webURL:
+                        type: string
                     type: object
+                  offline:
+                    type: boolean
                   store:
                     properties:
                       postgres:
@@ -11166,6 +11223,23 @@ spec:
                         type: object
                     required:
                     - postgres
+                    type: object
+                  tracing:
+                    properties:
+                      otlp:
+                        properties:
+                          endpoint:
+                            type: string
+                          insecure:
+                            type: boolean
+                        type: object
+                      samplingRate:
+                        type: string
+                      type:
+                        enum:
+                        - otlp
+                        - google
+                        type: string
                     type: object
                 required:
                 - license

@@ -110,6 +110,116 @@ type BindplaneConfigSpec struct {
 
 	// Store configuration for Bindplane
 	Store StoreConfig `json:"store"`
+
+	// Tracing configuration for Bindplane. When omitted or type empty, tracing is disabled.
+	// +optional
+	Tracing *TracingConfig `json:"tracing,omitempty"`
+
+	// Metrics configuration for Bindplane. When omitted, defaults to prometheus type with interval 60s and endpoint /metrics.
+	// +optional
+	Metrics *MetricsConfig `json:"metrics,omitempty"`
+
+	// Offline enables offline mode for the server. Omit or leave unset to leave offline mode disabled; set only when directed.
+	// +optional
+	Offline *bool `json:"offline,omitempty"`
+
+	// MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support.
+	// +optional
+	// +kubebuilder:default=10
+	MaxConcurrency int `json:"maxConcurrency,omitempty"`
+
+	// AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365.
+	// +optional
+	AuditTrail *AuditTrailConfig `json:"auditTrail,omitempty"`
+}
+
+// AuditTrailConfig defines audit trail configuration
+type AuditTrailConfig struct {
+	// RetentionDays is the number of days to retain audit trail events.
+	// +optional
+	// +kubebuilder:default=365
+	RetentionDays int `json:"retentionDays,omitempty"`
+}
+
+// TracingConfig defines tracing configuration
+type TracingConfig struct {
+	// Type specifies the tracing type. One of: otlp, google. When empty, tracing is disabled.
+	// +optional
+	// +kubebuilder:validation:Enum=otlp;google
+	Type string `json:"type,omitempty"`
+
+	// OTLP configures OTLP tracing when Type is otlp.
+	// +optional
+	OTLP *TracingOTLPConfig `json:"otlp,omitempty"`
+
+	// SamplingRate is the ratio between 0 and 1 of traces to keep. Omit or 0 to disable sampling.
+	// +optional
+	SamplingRate string `json:"samplingRate,omitempty"`
+}
+
+// TracingOTLPConfig defines OTLP tracing configuration
+type TracingOTLPConfig struct {
+	// Endpoint is the OTLP endpoint to send traces to (e.g. http://localhost:4317).
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Insecure disables TLS verification for the OTLP connection.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
+}
+
+// MetricsConfig defines metrics configuration
+type MetricsConfig struct {
+	// Type specifies the metrics type. One of: otlp, prometheus.
+	// +optional
+	// +kubebuilder:validation:Enum=otlp;prometheus
+	// +kubebuilder:default=prometheus
+	Type string `json:"type,omitempty"`
+
+	// Interval is the interval at which to export metrics (e.g. 60s). Used when Type is otlp.
+	// +optional
+	// +kubebuilder:default="60s"
+	Interval string `json:"interval,omitempty"`
+
+	// Prometheus configures Prometheus metrics when Type is prometheus.
+	// +optional
+	Prometheus *MetricsPrometheusConfig `json:"prometheus,omitempty"`
+
+	// OTLP configures OTLP metrics when Type is otlp.
+	// +optional
+	OTLP *MetricsOTLPConfig `json:"otlp,omitempty"`
+}
+
+// MetricsPrometheusConfig defines Prometheus metrics configuration
+type MetricsPrometheusConfig struct {
+	// Endpoint is the HTTP path to serve metrics on (e.g. /metrics).
+	// +optional
+	// +kubebuilder:default="/metrics"
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Username is the basic auth username for the metrics endpoint, if any.
+	// +optional
+	Username string `json:"username,omitempty"`
+
+	// Password is the basic auth password for the metrics endpoint.
+	// +optional
+	Password string `json:"password,omitempty"`
+
+	// PasswordSecretRef references a Kubernetes Secret containing the metrics endpoint password.
+	// Takes precedence over Password if both are set.
+	// +optional
+	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
+}
+
+// MetricsOTLPConfig defines OTLP metrics configuration
+type MetricsOTLPConfig struct {
+	// Endpoint is the gRPC endpoint to send metrics to (e.g. localhost:4317).
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Insecure disables TLS verification for the OTLP connection.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // TransformAgentComponentSpec defines the Transform Agent component pod specification
@@ -337,6 +447,14 @@ type NetworkConfig struct {
 	// Override this when using ingress, e.g. https://bindplane.my-corp.net
 	// +optional
 	RemoteURL string `json:"remoteURL,omitempty"`
+
+	// WebURL is the URL used by the client for the web interface. Defaults to RemoteURL when not set. Only set when explicitly configuring.
+	// +optional
+	WebURL string `json:"webURL,omitempty"`
+
+	// CorsAllowedOrigins is the allowed origin for CORS requests. Only set when explicitly configuring.
+	// +optional
+	CorsAllowedOrigins string `json:"corsAllowedOrigins,omitempty"`
 }
 
 // StoreConfig defines store configuration

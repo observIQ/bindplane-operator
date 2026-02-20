@@ -1012,3 +1012,161 @@ var _ = Describe("mergePodTemplateSpec", func() {
 		})
 	})
 })
+
+// envVarByName returns the value of the env var with the given name from the slice, or empty string if not found.
+func envVarByName(envVars []corev1.EnvVar, name string) string {
+	for _, ev := range envVars {
+		if ev.Name == name {
+			if ev.ValueFrom != nil && ev.ValueFrom.SecretKeyRef != nil {
+				return "(secret)"
+			}
+			return ev.Value
+		}
+	}
+	return ""
+}
+
+var _ = Describe("getBindplaneConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+						},
+					},
+				},
+			},
+		}
+	}
+
+	It("sets default metrics env vars when Metrics config is omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_TYPE")).To(Equal("prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_INTERVAL")).To(Equal("60s"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_ENDPOINT")).To(Equal("/metrics"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(BeEmpty())
+	})
+
+	It("sets explicit metrics type prometheus, interval 60s, endpoint /metrics", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
+			Type:     "prometheus",
+			Interval: "60s",
+			Prometheus: &bindplanev1alpha1.MetricsPrometheusConfig{
+				Endpoint: "/metrics",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_TYPE")).To(Equal("prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_INTERVAL")).To(Equal("60s"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_ENDPOINT")).To(Equal("/metrics"))
+	})
+
+	It("sets tracing type otlp with endpoint, insecure, and sampling rate", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Tracing = &bindplanev1alpha1.TracingConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.TracingOTLPConfig{
+				Endpoint: "http://otel:4317",
+				Insecure: true,
+			},
+			SamplingRate: "0.5",
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(Equal("otlp"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_ENDPOINT")).To(Equal("http://otel:4317"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_INSECURE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_SAMPLING_RATE")).To(Equal("0.5"))
+	})
+
+	It("sets metrics Prometheus auth username and password secret ref", func() {
+		bindplane := baseBindplane()
+		secretName := "metrics-auth"
+		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
+			Type:     "prometheus",
+			Interval: "60s",
+			Prometheus: &bindplanev1alpha1.MetricsPrometheusConfig{
+				Endpoint: "/metrics",
+				Username: "metrics-user",
+				PasswordSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+					Key:                  "password",
+				},
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_USERNAME")).To(Equal("metrics-user"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_PASSWORD")).To(Equal("(secret)"))
+	})
+
+	It("does not set tracing env vars when Tracing is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_ENDPOINT")).To(BeEmpty())
+	})
+
+	It("does not set tracing env vars when Tracing Type is empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Tracing = &bindplanev1alpha1.TracingConfig{}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(BeEmpty())
+	})
+
+	It("sets maxConcurrency and auditTrail retention with defaults when omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_MAX_CONCURRENCY")).To(Equal("10"))
+		Expect(envVarByName(envVars, "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS")).To(Equal("365"))
+		Expect(envVarByName(envVars, "BINDPLANE_OFFLINE")).To(BeEmpty())
+	})
+
+	It("sets offline only when config.Offline is set", func() {
+		bindplane := baseBindplane()
+		offlineTrue := true
+		bindplane.Spec.Config.Offline = &offlineTrue
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_OFFLINE")).To(Equal("true"))
+
+		offlineFalse := false
+		bindplane.Spec.Config.Offline = &offlineFalse
+		envVars = getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_OFFLINE")).To(Equal("false"))
+	})
+
+	It("sets explicit maxConcurrency and auditTrail.retentionDays", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.MaxConcurrency = 20
+		bindplane.Spec.Config.AuditTrail = &bindplanev1alpha1.AuditTrailConfig{RetentionDays: 180}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_MAX_CONCURRENCY")).To(Equal("20"))
+		Expect(envVarByName(envVars, "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS")).To(Equal("180"))
+	})
+
+	It("sets network webURL and corsAllowedOrigins only when configured", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_WEB_URL")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_CORS_ALLOWED_ORIGINS")).To(BeEmpty())
+
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			WebURL:             "https://bindplane.example.com",
+			CorsAllowedOrigins: "https://app.example.com",
+		}
+		envVars = getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_WEB_URL")).To(Equal("https://bindplane.example.com"))
+		Expect(envVarByName(envVars, "BINDPLANE_CORS_ALLOWED_ORIGINS")).To(Equal("https://app.example.com"))
+	})
+})

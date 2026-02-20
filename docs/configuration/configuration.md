@@ -1,6 +1,6 @@
 # Bindplane Configuration
 
-This document describes **Bindplane configuration**—the `spec.config` field and related Bindplane server settings (license, auth, network, store). For the full list of custom resource options (all CRD fields, including component specs and pod templates), see the [API Reference](api.md).
+This document describes **Bindplane configuration**—the `spec.config` field and related Bindplane server settings (license, auth, network, store, tracing, metrics). For the full list of custom resource options (all CRD fields, including component specs and pod templates), see the [API Reference](api.md). The API reference is generated from the CRD; run `make generate-api-docs` to regenerate it.
 
 Configuration is provided via the `spec.config` field of the `Bindplane` custom resource. The operator translates these fields into environment variables on the Node, NATS, Jobs, and Jobs Migrate deployments.
 
@@ -14,6 +14,11 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Network](#network)
 - [Store](#store)
   - [PostgreSQL](#postgresql)
+- [Tracing](#tracing)
+- [Metrics](#metrics)
+- [Offline](#offline)
+- [Max concurrency](#max-concurrency)
+- [Audit trail](#audit-trail)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -249,6 +254,8 @@ spec:
 | `spec.config.network.host` | `BINDPLANE_HOST` | — | No |
 | `spec.config.network.port` | `BINDPLANE_PORT` | — | No |
 | `spec.config.network.remoteURL` | `BINDPLANE_REMOTE_URL` | `http://<name>-node:3001` | No |
+| `spec.config.network.webURL` | `BINDPLANE_WEB_URL` | — | No |
+| `spec.config.network.corsAllowedOrigins` | `BINDPLANE_CORS_ALLOWED_ORIGINS` | — | No |
 
 `BINDPLANE_REMOTE_URL` is always set. When `spec.config.network.remoteURL` is not configured, it defaults to the internal node service URL (`http://<bindplane-name>-node:3001`). Override this when the Bindplane UI is accessed through an ingress or load balancer, e.g. `https://bindplane.my-corp.net`.
 
@@ -303,6 +310,109 @@ spec:
           name: bindplane-secrets
           key: pg-password
 ```
+
+## Tracing
+
+Tracing is optional. When `spec.config.tracing` is omitted or `type` is empty, tracing is disabled and no tracing environment variables are set.
+
+Supported types: `otlp`, `google`. For `otlp`, configure the `otlp` block with endpoint and optional insecure flag. You can set a sampling rate (string, e.g. `"0.5"`) between 0 and 1.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.tracing.type` | `BINDPLANE_TRACING_TYPE` | — | No (omit to disable) |
+| `spec.config.tracing.otlp.endpoint` | `BINDPLANE_TRACING_OTLP_ENDPOINT` | — | Yes when type is `otlp` |
+| `spec.config.tracing.otlp.insecure` | `BINDPLANE_TRACING_OTLP_INSECURE` | `false` | No |
+| `spec.config.tracing.samplingRate` | `BINDPLANE_TRACING_SAMPLING_RATE` | — | No |
+
+Example (OTLP tracing):
+
+```yaml
+spec:
+  config:
+    tracing:
+      type: otlp
+      otlp:
+        endpoint: http://otel-collector.observability.svc:4317
+        insecure: false
+      samplingRate: "0.5"
+```
+
+## Metrics
+
+Metrics configuration is optional. When `spec.config.metrics` is omitted, the operator applies defaults: type `prometheus`, interval `60s`, and endpoint `/metrics`. When present, those fields use CRD defaults when not set.
+
+Supported types: `prometheus`, `otlp`. For `prometheus`, the server exposes metrics on an HTTP path; you can optionally set basic auth via `username` and `password` or `passwordSecretRef`.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.metrics.type` | `BINDPLANE_METRICS_TYPE` | `prometheus` | No |
+| `spec.config.metrics.interval` | `BINDPLANE_METRICS_INTERVAL` | `60s` | No |
+| `spec.config.metrics.prometheus.endpoint` | `BINDPLANE_METRICS_PROMETHEUS_ENDPOINT` | `/metrics` | No |
+| `spec.config.metrics.prometheus.username` | `BINDPLANE_METRICS_PROMETHEUS_USERNAME` | — | No |
+| `spec.config.metrics.prometheus.password` | `BINDPLANE_METRICS_PROMETHEUS_PASSWORD` | — | No |
+| `spec.config.metrics.prometheus.passwordSecretRef` | `BINDPLANE_METRICS_PROMETHEUS_PASSWORD` | — | No |
+| `spec.config.metrics.otlp.endpoint` | `BINDPLANE_METRICS_OTLP_ENDPOINT` | — | Yes when type is `otlp` |
+| `spec.config.metrics.otlp.insecure` | `BINDPLANE_METRICS_OTLP_INSECURE` | `false` | No |
+
+Example (default Prometheus metrics; optional—same as omitting `metrics`):
+
+```yaml
+spec:
+  config:
+    metrics:
+      type: prometheus
+      interval: "60s"
+      prometheus:
+        endpoint: /metrics
+```
+
+Example (Prometheus metrics with basic auth):
+
+```yaml
+spec:
+  config:
+    metrics:
+      type: prometheus
+      prometheus:
+        endpoint: /metrics
+        username: metrics-reader
+        passwordSecretRef:
+          name: bindplane-secrets
+          key: metrics-password
+```
+
+Example (OTLP metrics):
+
+```yaml
+spec:
+  config:
+    metrics:
+      type: otlp
+      interval: "60s"
+      otlp:
+        endpoint: otel-collector.observability.svc:4317
+        insecure: true
+```
+
+## Offline
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.offline` | `BINDPLANE_OFFLINE` | — | No |
+
+## Max concurrency
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.maxConcurrency` | `BINDPLANE_MAX_CONCURRENCY` | `10` | No |
+
+Do not change `maxConcurrency` unless directed by Bindplane support.
+
+## Audit trail
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.auditTrail.retentionDays` | `BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS` | `365` | No |
 
 ## Scope
 
