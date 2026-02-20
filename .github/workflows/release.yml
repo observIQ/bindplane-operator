@@ -32,6 +32,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set image tag
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
       # Generates:
       # - Tags (e.g. ghcr.io/observiq/bindplane-operator:<tag>)
       # - OCI labels that point back to this repo + tag/sha
@@ -41,7 +45,7 @@ jobs:
         with:
           images: ghcr.io/observiq/bindplane-operator
           tags: |
-            type=ref,event=tag
+            type=raw,value=${{ steps.version.outputs.tag }}
             type=raw,value=latest
           labels: |
             org.opencontainers.image.title=bindplane-operator
@@ -81,10 +85,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set image tag
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
       - name: Generate and build install manifest
         run: |
           make manifests generate
-          make build-installer IMG=ghcr.io/observiq/bindplane-operator:${{ github.ref_name }}
+          make build-installer IMG=ghcr.io/observiq/bindplane-operator:${{ steps.version.outputs.tag }}
 
       - name: Create release and upload manifests
         uses: softprops/action-gh-release@v2
