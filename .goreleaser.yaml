@@ -3,6 +3,7 @@ version: 2
 before:
   hooks:
     - make manifests generate
+    - make build-installer-release IMG=ghcr.io/observiq/bindplane-operator:{{ .Version }}
 
 builds:
   - main: ./cmd/main.go
@@ -66,7 +67,3 @@ release:
     ```bash
     kubectl apply --server-side -f https://github.com/observiq/bindplane-operator/releases/download/{{ .Tag }}/install.yaml
     ```
-
-after:
-  hooks:
-    - make build-installer-release IMG=ghcr.io/observiq/bindplane-operator:{{ .Version }}

@@ -52,7 +52,7 @@ var _ = Describe("validateBindplaneName", func() {
 	})
 	It("rejects name that would exceed DNS label length", func() {
 		long := "a" + strings.Repeat("x", maxResourceNamePrefixLen)
-		Expect(len(long)).To(Equal(maxResourceNamePrefixLen + 1))
+		Expect(long).To(HaveLen(maxResourceNamePrefixLen + 1))
 		Expect(validateBindplaneName(long)).NotTo(Succeed())
 	})
 	It("accepts valid DNS-1035 names", func() {

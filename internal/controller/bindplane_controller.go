@@ -362,7 +362,7 @@ func validateBindplaneName(name string) error {
 	}
 	// Must end with a letter or digit [a-z0-9]
 	last := name[len(name)-1]
-	if last == '-' || !(('a' <= last && last <= 'z') || ('0' <= last && last <= '9')) {
+	if last == '-' || ((last < 'a' || last > 'z') && (last < '0' || last > '9')) {
 		return fmt.Errorf("name %q must end with a lowercase letter or digit (a-z, 0-9)", name)
 	}
 	// All characters must be [a-z0-9-]
