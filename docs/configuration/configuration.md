@@ -16,7 +16,6 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [PostgreSQL](#postgresql)
 - [Tracing](#tracing)
 - [Metrics](#metrics)
-- [Offline](#offline)
 - [Max concurrency](#max-concurrency)
 - [Audit trail](#audit-trail)
 - [Scope](#scope)
@@ -487,12 +486,6 @@ spec:
         endpoint: otel-collector.observability.svc:4317
         insecure: true
 ```
-
-## Offline
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.offline` | `BINDPLANE_OFFLINE` | — | No |
 
 ## Max concurrency
 

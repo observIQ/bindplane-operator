@@ -107,7 +107,6 @@ _Appears in:_
 | `store` _[StoreConfig](#storeconfig)_ | Store configuration for Bindplane |  |  |
 | `tracing` _[TracingConfig](#tracingconfig)_ | Tracing configuration for Bindplane. When omitted or type empty, tracing is disabled. |  | Optional: \{\} <br /> |
 | `metrics` _[MetricsConfig](#metricsconfig)_ | Metrics configuration for Bindplane. When omitted, defaults to prometheus type with interval 60s and endpoint /metrics. |  | Optional: \{\} <br /> |
-| `offline` _boolean_ | Offline enables offline mode for the server. Omit or leave unset to leave offline mode disabled; set only when directed. |  | Optional: \{\} <br /> |
 | `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
 | `auditTrail` _[AuditTrailConfig](#audittrailconfig)_ | AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365. |  | Optional: \{\} <br /> |
 

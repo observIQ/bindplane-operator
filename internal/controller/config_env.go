@@ -305,12 +305,9 @@ func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.
 	return envVars
 }
 
-// getMiscConfigEnvVars returns env vars for offline (only when set), maxConcurrency (default 10), and auditTrail.retentionDays (default 365).
+// getMiscConfigEnvVars returns env vars for maxConcurrency (default 10) and auditTrail.retentionDays (default 365).
 func getMiscConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
 	var envVars []corev1.EnvVar
-	if config.Offline != nil {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOfflineEnvVar, Value: strconv.FormatBool(*config.Offline)})
-	}
 	maxConcurrency := config.MaxConcurrency
 	if maxConcurrency <= 0 {
 		maxConcurrency = 10

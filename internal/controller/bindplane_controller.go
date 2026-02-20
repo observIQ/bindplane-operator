@@ -78,7 +78,6 @@ const (
 	bindplaneRemoteURLEnvVar               = "BINDPLANE_REMOTE_URL"
 	bindplaneWebURLEnvVar                  = "BINDPLANE_WEB_URL"
 	bindplaneCorsAllowedOriginsEnvVar      = "BINDPLANE_CORS_ALLOWED_ORIGINS"
-	bindplaneOfflineEnvVar                 = "BINDPLANE_OFFLINE"
 	bindplaneMaxConcurrencyEnvVar          = "BINDPLANE_MAX_CONCURRENCY"
 	bindplaneAuditTrailRetentionDaysEnvVar = "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS"
 

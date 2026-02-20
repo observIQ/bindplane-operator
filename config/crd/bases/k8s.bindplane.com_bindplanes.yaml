@@ -11184,8 +11184,6 @@ spec:
                       webURL:
                         type: string
                     type: object
-                  offline:
-                    type: boolean
                   store:
                     properties:
                       postgres:

@@ -157,11 +157,6 @@ func (in *BindplaneConfigSpec) DeepCopyInto(out *BindplaneConfigSpec) {
 		*out = new(MetricsConfig)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Offline != nil {
-		in, out := &in.Offline, &out.Offline
-		*out = new(bool)
-		**out = **in
-	}
 	if in.AuditTrail != nil {
 		in, out := &in.AuditTrail, &out.AuditTrail
 		*out = new(AuditTrailConfig)

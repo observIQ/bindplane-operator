@@ -1130,20 +1130,6 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		envVars := getBindplaneConfigEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_MAX_CONCURRENCY")).To(Equal("10"))
 		Expect(envVarByName(envVars, "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS")).To(Equal("365"))
-		Expect(envVarByName(envVars, "BINDPLANE_OFFLINE")).To(BeEmpty())
-	})
-
-	It("sets offline only when config.Offline is set", func() {
-		bindplane := baseBindplane()
-		offlineTrue := true
-		bindplane.Spec.Config.Offline = &offlineTrue
-		envVars := getBindplaneConfigEnvVars(bindplane)
-		Expect(envVarByName(envVars, "BINDPLANE_OFFLINE")).To(Equal("true"))
-
-		offlineFalse := false
-		bindplane.Spec.Config.Offline = &offlineFalse
-		envVars = getBindplaneConfigEnvVars(bindplane)
-		Expect(envVarByName(envVars, "BINDPLANE_OFFLINE")).To(Equal("false"))
 	})
 
 	It("sets explicit maxConcurrency and auditTrail.retentionDays", func() {

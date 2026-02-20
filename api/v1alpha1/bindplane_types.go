@@ -119,10 +119,6 @@ type BindplaneConfigSpec struct {
 	// +optional
 	Metrics *MetricsConfig `json:"metrics,omitempty"`
 
-	// Offline enables offline mode for the server. Omit or leave unset to leave offline mode disabled; set only when directed.
-	// +optional
-	Offline *bool `json:"offline,omitempty"`
-
 	// MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support.
 	// +optional
 	// +kubebuilder:default=10
