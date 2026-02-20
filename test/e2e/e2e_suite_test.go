@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bindplane-operator/bindplane-operator/test/utils"
+	"github.com/observiq/bindplane-operator/test/utils"
 )
 
 var (

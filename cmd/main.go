@@ -37,8 +37,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
-	"github.com/bindplane-operator/bindplane-operator/internal/controller"
+	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
+	"github.com/observiq/bindplane-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 

@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
+	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
 // Label key constants for Kubernetes standard labels

@@ -1,4 +1,4 @@
-module github.com/bindplane-operator/bindplane-operator/tools
+module github.com/observiq/bindplane-operator/tools
 
 go 1.25.0
 

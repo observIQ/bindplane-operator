@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
+	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
 var _ = Describe("Bindplane Controller", func() {

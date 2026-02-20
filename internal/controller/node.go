@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
+	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
 const (

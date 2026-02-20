@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	bindplanev1alpha1 "github.com/bindplane-operator/bindplane-operator/api/v1alpha1"
+	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

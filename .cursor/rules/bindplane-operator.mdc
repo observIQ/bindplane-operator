@@ -15,7 +15,7 @@ This project was generated using `operator-sdk` CLI:
 
 ```bash
 # Initial project setup
-operator-sdk init --domain bindplane.com --repo github.com/bindplane-operator/bindplane-operator
+operator-sdk init --domain bindplane.com --repo github.com/observiq/bindplane-operator
 
 # API and CRD generation
 operator-sdk create api --group bindplane --version v1alpha1 --kind Bindplane --resource --controller
