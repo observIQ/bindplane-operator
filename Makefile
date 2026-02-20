@@ -160,6 +160,12 @@ gosec: ## Run gosec security scanner
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
+.PHONY: docker-build
+docker-build: manifests generate ## Build manager Docker image for local/e2e use (e.g. Kind). Production images are built by Goreleaser.
+	CGO_ENABLED=0 GOOS=linux go build -o manager -a cmd/main.go
+	docker build -t $(IMG) .
+	rm -f manager
+
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
