@@ -19,3 +19,4 @@ docs/
 *.log
 out.yaml
 dist/
+tmp/

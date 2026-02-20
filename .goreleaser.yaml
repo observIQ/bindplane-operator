@@ -60,7 +60,7 @@ release:
     owner: observiq
     name: bindplane-operator
   extra_files:
-    - glob: dist/install.yaml
+    - glob: tmp/install.yaml
   header: |
     ## Installation
 

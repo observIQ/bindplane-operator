@@ -170,15 +170,15 @@ run-minikube-destructive: generate fmt vet
 
 .PHONY: build-installer
 build-installer: manifests generate ## Generate a consolidated YAML with CRDs and deployment (imagePullPolicy: Never for local/minikube).
-	mkdir -p dist
+	mkdir -p tmp
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default > dist/install.yaml
+	$(KUSTOMIZE) build config/default > tmp/install.yaml
 
 .PHONY: build-installer-release
 build-installer-release: manifests generate ## Generate install manifest for releases (imagePullPolicy: Always). Use for release workflow.
-	mkdir -p dist
+	mkdir -p tmp
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/overlays/release > dist/install.yaml
+	$(KUSTOMIZE) build config/overlays/release > tmp/install.yaml
 
 ##@ Deployment
 
