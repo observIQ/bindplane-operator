@@ -7,7 +7,7 @@ A Kubernetes operator for managing [Bindplane](https://bindplane.com/) server de
 Install the operator and its CRDs using the latest release manifests:
 
 ```bash
-kubectl apply -f https://github.com/observiq/bindplane-operator/releases/latest/download/install.yaml
+kubectl apply -f https://github.com/observiq/bindplane-operator/releases/latest/download/install.yaml --server-side
 ```
 
 ## About
