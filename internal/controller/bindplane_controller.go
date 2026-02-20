@@ -99,6 +99,17 @@ const (
 	ldapTLSVolumeName = "ldap-tls"
 	ldapTLSMountPath  = "/etc/bindplane/ldap-tls"
 
+	// Network TLS (server or mutual TLS); operator mounts Secret and sets BINDPLANE_TLS_* env vars
+	bindplaneTLSMinVersionEnvVar = "BINDPLANE_TLS_MIN_VERSION"
+	bindplaneTLSCertEnvVar       = "BINDPLANE_TLS_CERT"
+	bindplaneTLSKeyEnvVar        = "BINDPLANE_TLS_KEY"
+	bindplaneTLSCAEnvVar         = "BINDPLANE_TLS_CA"
+	bindplaneTLSSkipVerifyEnvVar = "BINDPLANE_TLS_SKIP_VERIFY"
+
+	// Network TLS volume mount (operator-managed path; user specifies only Secret name and keys)
+	networkTLSVolumeName = "network-tls"
+	networkTLSMountPath  = "/etc/bindplane/network-tls"
+
 	// OIDC configuration
 	bindplaneOIDCClientIDEnvVar     = "BINDPLANE_OIDC_OAUTH2_CLIENT_ID"
 	bindplaneOIDCClientSecretEnvVar = "BINDPLANE_OIDC_OAUTH2_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential
@@ -677,6 +688,46 @@ func getLDAPTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1
 		return nil
 	}
 	return bindplane.Spec.Config.Auth.LDAP.TLS
+}
+
+// getNetworkTLSVolumeAndMount returns a Secret volume and mount for network TLS when config.Network.TLS is set
+// with secretName and both certKey and keyKey (server or mutual TLS). The Secret is mounted at networkTLSMountPath;
+// TLS env vars are set to the computed file paths (mountPath/key). Returns (nil, nil) when network TLS is not configured.
+func getNetworkTLSVolumeAndMount(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	tls := getNetworkTLSConfig(bindplane)
+	if tls == nil || tls.SecretName == "" || tls.CertKey == "" || tls.KeyKey == "" {
+		return nil, nil
+	}
+	vol := corev1.Volume{
+		Name: networkTLSVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: tls.SecretName,
+			},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      networkTLSVolumeName,
+		MountPath: networkTLSMountPath,
+		ReadOnly:  true,
+	}
+	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
+}
+
+// getNetworkTLSConfig returns the network TLS config when present.
+func getNetworkTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.NetworkTLSConfig {
+	if bindplane.Spec.Config.Network == nil {
+		return nil
+	}
+	return bindplane.Spec.Config.Network.TLS
+}
+
+// getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS and network TLS.
+// Used by Node, Jobs, Jobs Migrate, and NATS so they receive both LDAP and network TLS secrets when configured.
+func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
+	netVols, netMounts := getNetworkTLSVolumeAndMount(bindplane)
+	return append(ldapVols, netVols...), append(ldapMounts, netMounts...)
 }
 
 // mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.

@@ -403,6 +403,36 @@ type LDAPTLSConfig struct {
 	CAKey string `json:"caKey,omitempty"`
 }
 
+// NetworkTLSConfig defines TLS for the Bindplane server by referencing a Secret. The Secret is mounted
+// at a fixed path; the operator sets the TLS env vars to the mounted file paths.
+// Users specify only the secret name and key names, not mount paths.
+// Server-side TLS: set secretName, certKey, and keyKey. Mutual TLS: also set caKey.
+type NetworkTLSConfig struct {
+	// MinVersion is the minimum TLS version. One of: 1.2, 1.3. Omit to use server default.
+	// +optional
+	// +kubebuilder:validation:Enum=1.2;1.3
+	MinVersion string `json:"minVersion,omitempty"`
+
+	// SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA.
+	SecretName string `json:"secretName"`
+
+	// CertKey is the key in the Secret for the TLS certificate (server or mutual TLS).
+	// +optional
+	CertKey string `json:"certKey,omitempty"`
+
+	// KeyKey is the key in the Secret for the TLS private key (server or mutual TLS).
+	// +optional
+	KeyKey string `json:"keyKey,omitempty"`
+
+	// CAKey is the key in the Secret for the CA certificate. Set for mutual TLS (client cert verification); generally not used.
+	// +optional
+	CAKey string `json:"caKey,omitempty"`
+
+	// SkipVerify disables TLS certificate verification. Only set for testing.
+	// +optional
+	SkipVerify bool `json:"skipVerify,omitempty"`
+}
+
 // OIDCConfig defines OpenID Connect authentication configuration
 type OIDCConfig struct {
 	// ClientID is the OIDC OAuth2 client ID
@@ -455,6 +485,12 @@ type NetworkConfig struct {
 	// CorsAllowedOrigins is the allowed origin for CORS requests. Only set when explicitly configuring.
 	// +optional
 	CorsAllowedOrigins string `json:"corsAllowedOrigins,omitempty"`
+
+	// TLS configures TLS for the Bindplane server using a Secret. The operator mounts the Secret and sets
+	// BINDPLANE_TLS_CERT, BINDPLANE_TLS_KEY, and optionally BINDPLANE_TLS_CA to the mounted file paths.
+	// Omit or omit secretName/certKey/keyKey to disable server TLS (e.g. when using Ingress to terminate TLS).
+	// +optional
+	TLS *NetworkTLSConfig `json:"tls,omitempty"`
 }
 
 // StoreConfig defines store configuration

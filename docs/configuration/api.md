@@ -305,6 +305,31 @@ _Appears in:_
 | `remoteURL` _string_ | RemoteURL specifies the remote URL for Bindplane.<br />Defaults to http://<bindplane-name>-node:3001 (the internal node service URL).<br />Override this when using ingress, e.g. https://bindplane.my-corp.net |  | Optional: \{\} <br /> |
 | `webURL` _string_ | WebURL is the URL used by the client for the web interface. Defaults to RemoteURL when not set. Only set when explicitly configuring. |  | Optional: \{\} <br /> |
 | `corsAllowedOrigins` _string_ | CorsAllowedOrigins is the allowed origin for CORS requests. Only set when explicitly configuring. |  | Optional: \{\} <br /> |
+| `tls` _[NetworkTLSConfig](#networktlsconfig)_ | TLS configures TLS for the Bindplane server using a Secret. The operator mounts the Secret and sets<br />BINDPLANE_TLS_CERT, BINDPLANE_TLS_KEY, and optionally BINDPLANE_TLS_CA to the mounted file paths.<br />Omit or omit secretName/certKey/keyKey to disable server TLS (e.g. when using Ingress to terminate TLS). |  | Optional: \{\} <br /> |
+
+
+#### NetworkTLSConfig
+
+
+
+NetworkTLSConfig defines TLS for the Bindplane server by referencing a Secret. The Secret is mounted
+at a fixed path; the operator sets the TLS env vars to the mounted file paths.
+Users specify only the secret name and key names, not mount paths.
+Server-side TLS: set secretName, certKey, and keyKey. Mutual TLS: also set caKey.
+
+
+
+_Appears in:_
+- [NetworkConfig](#networkconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `minVersion` _string_ | MinVersion is the minimum TLS version. One of: 1.2, 1.3. Omit to use server default. |  | Enum: [1.2 1.3] <br />Optional: \{\} <br /> |
+| `secretName` _string_ | SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA. |  |  |
+| `certKey` _string_ | CertKey is the key in the Secret for the TLS certificate (server or mutual TLS). |  | Optional: \{\} <br /> |
+| `keyKey` _string_ | KeyKey is the key in the Secret for the TLS private key (server or mutual TLS). |  | Optional: \{\} <br /> |
+| `caKey` _string_ | CAKey is the key in the Secret for the CA certificate. Set for mutual TLS (client cert verification); generally not used. |  | Optional: \{\} <br /> |
+| `skipVerify` _boolean_ | SkipVerify disables TLS certificate verification. Only set for testing. |  | Optional: \{\} <br /> |
 
 
 #### OIDCConfig

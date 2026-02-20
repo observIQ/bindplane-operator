@@ -11161,6 +11161,26 @@ spec:
                         type: string
                       remoteURL:
                         type: string
+                      tls:
+                        properties:
+                          caKey:
+                            type: string
+                          certKey:
+                            type: string
+                          keyKey:
+                            type: string
+                          minVersion:
+                            enum:
+                            - 1.2
+                            - 1.3
+                            type: string
+                          secretName:
+                            type: string
+                          skipVerify:
+                            type: boolean
+                        required:
+                        - secretName
+                        type: object
                       webURL:
                         type: string
                     type: object

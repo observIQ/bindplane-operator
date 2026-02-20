@@ -75,7 +75,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 	replicas := *bindplane.Spec.Bindplane.Replicas
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
-	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
+	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
 
 	maxSurge := intstr.FromInt32(1)
 	maxUnavailable := intstr.FromInt32(1)
@@ -104,7 +104,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PodSpec{
-						Volumes:            ldapVols,
+						Volumes:            configVols,
 						ServiceAccountName: getResourceName(bindplane, nodeComponent),
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    new(defaultRunAsGroup),
@@ -116,7 +116,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 							{
 								Name:         nodeContainerName,
 								Image:        nodeImage,
-								VolumeMounts: ldapMounts,
+								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          nodeHTTPPortName,

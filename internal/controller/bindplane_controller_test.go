@@ -1169,4 +1169,125 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		Expect(envVarByName(envVars, "BINDPLANE_WEB_URL")).To(Equal("https://bindplane.example.com"))
 		Expect(envVarByName(envVars, "BINDPLANE_CORS_ALLOWED_ORIGINS")).To(Equal("https://app.example.com"))
 	})
+
+	It("does not set network TLS env vars when Network or TLS is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_MIN_VERSION")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CA")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_SKIP_VERIFY")).To(BeEmpty())
+
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{}
+		envVars = getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(BeEmpty())
+	})
+
+	It("sets network TLS minVersion and skipVerify only when no secret (no path env vars)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			TLS: &bindplanev1alpha1.NetworkTLSConfig{
+				MinVersion: "1.2",
+				SkipVerify: true,
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_MIN_VERSION")).To(Equal("1.2"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_SKIP_VERIFY")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(BeEmpty())
+	})
+
+	It("sets network TLS cert and key paths when secretName, certKey, keyKey are set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			TLS: &bindplanev1alpha1.NetworkTLSConfig{
+				SecretName: "tls-secret",
+				CertKey:    "tls.crt",
+				KeyKey:     "tls.key",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(Equal("/etc/bindplane/network-tls/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(Equal("/etc/bindplane/network-tls/tls.key"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CA")).To(BeEmpty())
+	})
+
+	It("sets network TLS cert, key, and ca paths when caKey is set (mutual TLS)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			TLS: &bindplanev1alpha1.NetworkTLSConfig{
+				SecretName: "tls-secret",
+				CertKey:    "tls.crt",
+				KeyKey:     "tls.key",
+				CAKey:      "ca.crt",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(Equal("/etc/bindplane/network-tls/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(Equal("/etc/bindplane/network-tls/tls.key"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CA")).To(Equal("/etc/bindplane/network-tls/ca.crt"))
+	})
+})
+
+var _ = Describe("getNetworkTLSVolumeAndMount", func() {
+	It("returns nil when Network or TLS is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+		vols, mounts := getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{}
+		vols, mounts = getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns nil when secretName or certKey or keyKey is missing", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Network: &bindplanev1alpha1.NetworkConfig{
+						TLS: &bindplanev1alpha1.NetworkTLSConfig{SecretName: "tls-secret"},
+					},
+				},
+			},
+		}
+		vols, mounts := getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns one volume and one mount when server TLS is configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Network: &bindplanev1alpha1.NetworkConfig{
+						TLS: &bindplanev1alpha1.NetworkTLSConfig{
+							SecretName: "tls-secret",
+							CertKey:    "tls.crt",
+							KeyKey:     "tls.key",
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal("network-tls"))
+		Expect(vols[0].Secret).ToNot(BeNil())
+		Expect(vols[0].Secret.SecretName).To(Equal("tls-secret"))
+		Expect(mounts).To(HaveLen(1))
+		Expect(mounts[0].Name).To(Equal("network-tls"))
+		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/network-tls"))
+	})
 })

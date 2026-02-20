@@ -162,7 +162,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 	replicas := int32(1)
 	labels := getLabels(bindplane, component)
 	selectorLabels := getSelectorLabels(bindplane, component)
-	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
+	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
 
 	// Get the appropriate PodTemplate and Affinity based on component
 	var podTemplate *bindplanev1alpha1.PodTemplateSpec
@@ -193,7 +193,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PodSpec{
-						Volumes:            ldapVols,
+						Volumes:            configVols,
 						ServiceAccountName: getResourceName(bindplane, component),
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    new(defaultRunAsGroup),
@@ -205,7 +205,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 							{
 								Name:         bindplaneJobsContainerName,
 								Image:        bindplaneJobsImage,
-								VolumeMounts: ldapMounts,
+								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          bindplaneJobsHTTPPortName,
@@ -424,7 +424,7 @@ func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig) []corev1.EnvVar {
 	return envVars
 }
 
-// getNetworkConfigEnvVars returns env vars for spec.config.network (host, port, remoteURL).
+// getNetworkConfigEnvVars returns env vars for spec.config.network (host, port, remoteURL, tls).
 func getNetworkConfigEnvVars(network *bindplanev1alpha1.NetworkConfig, bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	var envVars []corev1.EnvVar
 	if network != nil {
@@ -439,6 +439,23 @@ func getNetworkConfigEnvVars(network *bindplanev1alpha1.NetworkConfig, bindplane
 		}
 		if network.CorsAllowedOrigins != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneCorsAllowedOriginsEnvVar, Value: network.CorsAllowedOrigins})
+		}
+		if network.TLS != nil {
+			tls := network.TLS
+			if tls.MinVersion != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSMinVersionEnvVar, Value: tls.MinVersion})
+			}
+			// Only set path env vars when the volume is created (secretName + certKey + keyKey)
+			if tls.SecretName != "" && tls.CertKey != "" && tls.KeyKey != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSCertEnvVar, Value: networkTLSMountPath + "/" + tls.CertKey})
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSKeyEnvVar, Value: networkTLSMountPath + "/" + tls.KeyKey})
+				if tls.CAKey != "" {
+					envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSCAEnvVar, Value: networkTLSMountPath + "/" + tls.CAKey})
+				}
+			}
+			if tls.SkipVerify {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSSkipVerifyEnvVar, Value: "true"})
+			}
 		}
 	}
 	remoteURL := ""

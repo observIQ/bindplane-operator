@@ -249,6 +249,8 @@ spec:
 
 ## Network
 
+TLS is generally not configured on the Bindplane server when you use Ingress or Gateway API to terminate TLS. In that case, only `remoteURL` (and optionally `webURL`) need to reflect the external URL; the server continues to listen over HTTP inside the cluster.
+
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.network.host` | `BINDPLANE_HOST` | — | No |
@@ -256,8 +258,53 @@ spec:
 | `spec.config.network.remoteURL` | `BINDPLANE_REMOTE_URL` | `http://<name>-node:3001` | No |
 | `spec.config.network.webURL` | `BINDPLANE_WEB_URL` | — | No |
 | `spec.config.network.corsAllowedOrigins` | `BINDPLANE_CORS_ALLOWED_ORIGINS` | — | No |
+| `spec.config.network.tls` | (see below) | — | No |
 
 `BINDPLANE_REMOTE_URL` is always set. When `spec.config.network.remoteURL` is not configured, it defaults to the internal node service URL (`http://<bindplane-name>-node:3001`). Override this when the Bindplane UI is accessed through an ingress or load balancer, e.g. `https://bindplane.my-corp.net`.
+
+**Network TLS:** Configure server-side TLS (certificate and key) or mutual TLS (additionally a CA to verify client certificates). You provide a Secret name and key names; the operator mounts the Secret and sets the Bindplane environment variables to the mounted file paths.
+
+| TLS Field | Environment Variable | Description |
+|---|---|---|
+| `spec.config.network.tls.minVersion` | `BINDPLANE_TLS_MIN_VERSION` | Minimum TLS version: `1.2` or `1.3`. Omit to use server default. |
+| `spec.config.network.tls.secretName` | — | Name of the Secret containing the cert, key, and optionally CA |
+| `spec.config.network.tls.certKey` | `BINDPLANE_TLS_CERT` | Key in the Secret for the TLS certificate (server or mutual TLS) |
+| `spec.config.network.tls.keyKey` | `BINDPLANE_TLS_KEY` | Key in the Secret for the TLS private key (server or mutual TLS) |
+| `spec.config.network.tls.caKey` | `BINDPLANE_TLS_CA` | Key in the Secret for the CA certificate (optional; enables mutual TLS, generally not used) |
+| `spec.config.network.tls.skipVerify` | `BINDPLANE_TLS_SKIP_VERIFY` | Skip TLS verification (testing only). Default: not set. |
+
+Valid combinations:
+
+- **Server-side TLS:** Set `secretName`, `certKey`, and `keyKey` only.
+- **Mutual TLS:** Set `secretName`, `certKey`, `keyKey`, and `caKey`.
+- `minVersion` and `skipVerify` are optional in all cases.
+
+Example (server-side TLS):
+
+```yaml
+spec:
+  config:
+    network:
+      remoteURL: https://bindplane.my-corp.net
+      tls:
+        secretName: bindplane-tls
+        certKey: tls.crt
+        keyKey: tls.key
+```
+
+Example (mutual TLS with CA):
+
+```yaml
+spec:
+  config:
+    network:
+      tls:
+        minVersion: "1.3"
+        secretName: bindplane-tls
+        certKey: tls.crt
+        keyKey: tls.key
+        caKey: ca.crt
+```
 
 ## Store
 
