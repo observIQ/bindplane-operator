@@ -69,6 +69,25 @@ jobs:
       - name: Run gosec security scanner
         run: make gosec
 
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Goreleaser build
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: build --snapshot --clean
+
   api-docs:
     name: API docs up to date
     runs-on: ubuntu-latest

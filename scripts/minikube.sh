@@ -6,19 +6,24 @@ minikube delete
 minikube start
 eval $(minikube docker-env)
 
-# Enable ingress-nginx addon
-minikube addons enable ingress
+goreleaser release --snapshot --clean
+GOARCH=$(go env GOARCH)
+docker tag \
+  ghcr.io/observiq/bindplane-operator:latest-${GOARCH} \
+  bindplane-operator:local
 
-# Wait for ingress-nginx to be ready
+make install
+make deploy
+
+minikube addons enable ingress
+make install-postgres-operator
+
+# Wait for ingress-nginx to be ready after
+# deploying nginx and postgres
 kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
   --timeout=90s
-
-make install-postgres-operator
-make docker-build IMG=bindplane-operator:local
-make install
-make deploy
 
 # Wait for bindplane-sample-node service to be created
 kubectl wait --for=condition=available --timeout=300s deployment/bindplane-sample-node || true

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 NAMESPACE="postgres"
 OPERATOR_NAMESPACE="cnpg-system"
@@ -32,6 +32,9 @@ echo "Waiting for CloudNativePG operator to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment/cnpg-controller-manager -n "${OPERATOR_NAMESPACE}" || {
 	echo "Warning: CloudNativePG operator deployment may not be ready yet"
 }
+
+# Sometimes we need to keep waiting
+sleep 10
 
 # Deploy a simple test postgres cluster
 echo "Deploying test PostgreSQL cluster..."

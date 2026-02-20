@@ -1,0 +1,72 @@
+version: 2
+
+before:
+  hooks:
+    - make manifests generate
+
+builds:
+  - main: ./cmd/main.go
+    binary: manager
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -a
+
+dockers:
+  - image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-amd64"
+      - "ghcr.io/observiq/bindplane-operator:latest-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    goarch: amd64
+    extra_files: []
+  - image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-arm64"
+      - "ghcr.io/observiq/bindplane-operator:latest-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    goarch: arm64
+    extra_files: []
+
+docker_manifests:
+  - name_template: "ghcr.io/observiq/bindplane-operator:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-amd64"
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/observiq/bindplane-operator:latest"
+    image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-amd64"
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/observiq/bindplane-operator:latest"
+    image_templates:
+      - "ghcr.io/observiq/bindplane-operator:latest-amd64"
+      - "ghcr.io/observiq/bindplane-operator:latest-arm64"
+
+archives:
+  - format: binary
+
+release:
+  github:
+    owner: observiq
+    name: bindplane-operator
+  extra_files:
+    - glob: dist/install.yaml
+  header: |
+    ## Installation
+
+    ```bash
+    kubectl apply --server-side -f https://github.com/observiq/bindplane-operator/releases/download/{{ .Tag }}/install.yaml
+    ```
+
+after:
+  hooks:
+    - make build-installer-release IMG=ghcr.io/observiq/bindplane-operator:{{ .Version }}
