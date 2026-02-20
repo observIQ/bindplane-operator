@@ -92,7 +92,7 @@ jobs:
       - name: Generate and build install manifest
         run: |
           make manifests generate
-          make build-installer IMG=ghcr.io/observiq/bindplane-operator:${{ steps.version.outputs.tag }}
+          make build-installer-release IMG=ghcr.io/observiq/bindplane-operator:${{ steps.version.outputs.tag }}
 
       - name: Create release and upload manifests
         uses: softprops/action-gh-release@v2
