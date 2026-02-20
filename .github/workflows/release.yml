@@ -42,8 +42,7 @@ jobs:
           images: ghcr.io/observiq/bindplane-operator
           tags: |
             type=ref,event=tag
-            # Optional: also tag "latest" when the tag looks like semver (v1.2.3 or 1.2.3)
-            type=raw,value=latest,enable=${{ startsWith(github.ref_name, 'v') || contains(github.ref_name, '.') }}
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.title=bindplane-operator
             org.opencontainers.image.description=BindPlane Operator
@@ -66,3 +65,33 @@ jobs:
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    name: Create release and upload manifests
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: write
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Generate and build install manifest
+        run: |
+          make manifests generate
+          make build-installer IMG=ghcr.io/observiq/bindplane-operator:${{ github.ref_name }}
+
+      - name: Create release and upload manifests
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: dist/install.yaml
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -2,6 +2,14 @@
 
 A Kubernetes operator for managing [Bindplane](https://bindplane.com/) server deployments in Kubernetes clusters.
 
+## Getting Started
+
+Install the operator and its CRDs using the latest release manifests:
+
+```bash
+kubectl apply -f https://github.com/observiq/bindplane-operator/releases/latest/download/install.yaml
+```
+
 ## About
 
 Bindplane is a telemetry pipeline built on [OpenTelemetry](https://opentelemetry.io/) that enables teams to collect, refine, and export metrics, logs, and traces from any source to any destination. The Bindplane Operator automates the deployment and management of Bindplane server in Kubernetes, including:
