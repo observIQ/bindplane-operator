@@ -135,17 +135,32 @@ const (
 	bindplaneMetricsOTLPInsecureEnvVar       = "BINDPLANE_METRICS_OTLP_INSECURE"
 
 	// Postgres configuration
-	bindplanePostgresHostEnvVar             = "BINDPLANE_POSTGRES_HOST"
-	bindplanePostgresPortEnvVar             = "BINDPLANE_POSTGRES_PORT"
-	bindplanePostgresConnectTimeoutEnvVar   = "BINDPLANE_POSTGRES_CONNECT_TIMEOUT"
-	bindplanePostgresStatementTimeoutEnvVar = "BINDPLANE_POSTGRES_STATEMENT_TIMEOUT"
-	bindplanePostgresDatabaseEnvVar         = "BINDPLANE_POSTGRES_DATABASE"
-	bindplanePostgresSSLModeEnvVar          = "BINDPLANE_POSTGRES_SSL_MODE"
-	bindplanePostgresUsernameEnvVar         = "BINDPLANE_POSTGRES_USERNAME"
-	bindplanePostgresPasswordEnvVar         = "BINDPLANE_POSTGRES_PASSWORD" // #nosec G101 -- env var name, not a credential
-	bindplanePostgresMaxConnectionsEnvVar   = "BINDPLANE_POSTGRES_MAX_CONNECTIONS"
-	bindplanePostgresMaxLifetimeEnvVar      = "BINDPLANE_POSTGRES_MAX_LIFETIME"
-	bindplanePostgresSchemaEnvVar           = "BINDPLANE_POSTGRES_SCHEMA"
+	bindplanePostgresHostEnvVar               = "BINDPLANE_POSTGRES_HOST"
+	bindplanePostgresPortEnvVar               = "BINDPLANE_POSTGRES_PORT"
+	bindplanePostgresConnectTimeoutEnvVar     = "BINDPLANE_POSTGRES_CONNECT_TIMEOUT"
+	bindplanePostgresStatementTimeoutEnvVar   = "BINDPLANE_POSTGRES_STATEMENT_TIMEOUT"
+	bindplanePostgresDatabaseEnvVar           = "BINDPLANE_POSTGRES_DATABASE"
+	bindplanePostgresSSLModeEnvVar            = "BINDPLANE_POSTGRES_SSL_MODE"
+	bindplanePostgresSSLRootCertEnvVar        = "BINDPLANE_POSTGRES_SSL_ROOT_CERT"
+	bindplanePostgresSSLCertEnvVar            = "BINDPLANE_POSTGRES_SSL_CERT"
+	bindplanePostgresSSLKeyEnvVar             = "BINDPLANE_POSTGRES_SSL_KEY"
+	bindplanePostgresUsernameEnvVar           = "BINDPLANE_POSTGRES_USERNAME"
+	bindplanePostgresPasswordEnvVar           = "BINDPLANE_POSTGRES_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplanePostgresMaxConnectionsEnvVar     = "BINDPLANE_POSTGRES_MAX_CONNECTIONS"
+	bindplanePostgresMaxIdleConnectionsEnvVar = "BINDPLANE_POSTGRES_MAX_IDLE_CONNECTIONS"
+	bindplanePostgresMaxLifetimeEnvVar        = "BINDPLANE_POSTGRES_MAX_LIFETIME"
+	bindplanePostgresMaxIdleTimeEnvVar        = "BINDPLANE_POSTGRES_MAX_IDLE_TIME"
+	bindplanePostgresSchemaEnvVar             = "BINDPLANE_POSTGRES_SCHEMA"
+
+	// Postgres SSL mode values (must match CRD enum: disable|require|verify-ca|verify-full)
+	postgresSSLModeDisable    = "disable"
+	postgresSSLModeRequire    = "require"
+	postgresSSLModeVerifyCA   = "verify-ca"
+	postgresSSLModeVerifyFull = "verify-full"
+
+	// Postgres TLS volume mount (operator-managed path; user specifies only Secret name and keys)
+	postgresTLSVolumeName = "postgres-tls"
+	postgresTLSMountPath  = "/etc/bindplane/postgres-tls"
 
 	// Prometheus configuration
 	bindplanePrometheusEnableRemoteEnvVar = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
@@ -722,12 +737,46 @@ func getNetworkTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alp
 	return bindplane.Spec.Config.Network.TLS
 }
 
-// getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS and network TLS.
-// Used by Node, Jobs, Jobs Migrate, and NATS so they receive both LDAP and network TLS secrets when configured.
+// getPostgresTLSVolumeAndMount returns a Secret volume and mount for Postgres TLS when config.Store.Postgres.TLS is set
+// with secretName and caKey (server-side TLS) or with caKey, certKey, and keyKey (mutual TLS). Returns (nil, nil) when not configured.
+func getPostgresTLSVolumeAndMount(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	tls := getPostgresTLSConfig(bindplane)
+	if tls == nil || tls.SecretName == "" || tls.CAKey == "" {
+		return nil, nil
+	}
+	vol := corev1.Volume{
+		Name: postgresTLSVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: tls.SecretName,
+			},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      postgresTLSVolumeName,
+		MountPath: postgresTLSMountPath,
+		ReadOnly:  true,
+	}
+	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
+}
+
+// getPostgresTLSConfig returns the Postgres TLS config when present.
+func getPostgresTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PostgresTLSConfig {
+	if bindplane.Spec.Config.Store.Postgres == nil {
+		return nil
+	}
+	return bindplane.Spec.Config.Store.Postgres.TLS
+}
+
+// getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, and Postgres TLS.
+// Used by Node, Jobs, Jobs Migrate, and NATS so they receive all config TLS secrets when configured.
 func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
 	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
 	netVols, netMounts := getNetworkTLSVolumeAndMount(bindplane)
-	return append(ldapVols, netVols...), append(ldapMounts, netMounts...)
+	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
+	vols := append(append(ldapVols, netVols...), pgVols...)
+	mounts := append(append(ldapMounts, netMounts...), pgMounts...)
+	return vols, mounts
 }
 
 // mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.

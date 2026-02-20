@@ -1291,3 +1291,134 @@ var _ = Describe("getNetworkTLSVolumeAndMount", func() {
 		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/network-tls"))
 	})
 })
+
+var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+			},
+		}
+	}
+
+	It("defaults sslMode to disable when omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_MODE")).To(Equal(postgresSSLModeDisable))
+	})
+
+	It("does not set postgres TLS path env vars when TLS is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_KEY")).To(BeEmpty())
+	})
+
+	It("sets postgres TLS root cert only when TLS has secretName and caKey (server-side TLS)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.Postgres.TLS = &bindplanev1alpha1.PostgresTLSConfig{
+			SecretName: "pg-tls",
+			CAKey:      "ca.crt",
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(Equal("/etc/bindplane/postgres-tls/ca.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_KEY")).To(BeEmpty())
+	})
+
+	It("sets postgres TLS root cert, cert, and key when mutual TLS (caKey, certKey, keyKey)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.Postgres.TLS = &bindplanev1alpha1.PostgresTLSConfig{
+			SecretName: "pg-tls",
+			CAKey:      "ca.crt",
+			CertKey:    "tls.crt",
+			KeyKey:     "tls.key",
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(Equal("/etc/bindplane/postgres-tls/ca.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_CERT")).To(Equal("/etc/bindplane/postgres-tls/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_KEY")).To(Equal("/etc/bindplane/postgres-tls/tls.key"))
+	})
+
+	It("does not set maxIdleConnections or maxIdleTime when omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_CONNECTIONS")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_TIME")).To(BeEmpty())
+	})
+
+	It("sets maxIdleConnections and maxIdleTime when provided", func() {
+		bindplane := baseBindplane()
+		maxIdle := 5
+		bindplane.Spec.Config.Store.Postgres.MaxIdleConnections = &maxIdle
+		bindplane.Spec.Config.Store.Postgres.MaxIdleTime = "20s"
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_CONNECTIONS")).To(Equal("5"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_TIME")).To(Equal("20s"))
+	})
+})
+
+var _ = Describe("getPostgresTLSVolumeAndMount", func() {
+	It("returns nil when Postgres or TLS is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+		vols, mounts := getPostgresTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns nil when secretName or caKey is missing", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+							TLS:  &bindplanev1alpha1.PostgresTLSConfig{SecretName: "pg-tls"},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getPostgresTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns one volume and one mount when server-side TLS (caKey) is configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+							TLS: &bindplanev1alpha1.PostgresTLSConfig{
+								SecretName: "pg-tls",
+								CAKey:      "ca.crt",
+							},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getPostgresTLSVolumeAndMount(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal("postgres-tls"))
+		Expect(vols[0].Secret).ToNot(BeNil())
+		Expect(vols[0].Secret.SecretName).To(Equal("pg-tls"))
+		Expect(mounts).To(HaveLen(1))
+		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/postgres-tls"))
+	})
+})

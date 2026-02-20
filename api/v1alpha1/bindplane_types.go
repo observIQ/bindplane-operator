@@ -433,6 +433,27 @@ type NetworkTLSConfig struct {
 	SkipVerify bool `json:"skipVerify,omitempty"`
 }
 
+// PostgresTLSConfig defines TLS for PostgreSQL by referencing a Secret. The Secret is mounted
+// at a fixed path; the operator sets the TLS env vars (sslRootCert, sslCert, sslKey) to the mounted file paths.
+// Users specify only the secret name and key names, not mount paths.
+// Server-side TLS: set secretName and caKey. Mutual TLS: set secretName, caKey, certKey, and keyKey.
+type PostgresTLSConfig struct {
+	// SecretName is the name of the Secret containing the CA and optionally client cert and key.
+	SecretName string `json:"secretName"`
+
+	// CAKey is the key in the Secret for the root CA (maps to sslRootCert). Required for TLS; enables server-side TLS.
+	// +optional
+	CAKey string `json:"caKey,omitempty"`
+
+	// CertKey is the key in the Secret for the client certificate (maps to sslCert). Set with KeyKey for mutual TLS.
+	// +optional
+	CertKey string `json:"certKey,omitempty"`
+
+	// KeyKey is the key in the Secret for the client private key (maps to sslKey). Set with CertKey for mutual TLS.
+	// +optional
+	KeyKey string `json:"keyKey,omitempty"`
+}
+
 // OIDCConfig defines OpenID Connect authentication configuration
 type OIDCConfig struct {
 	// ClientID is the OIDC OAuth2 client ID
@@ -520,9 +541,17 @@ type PostgresConfig struct {
 	// +optional
 	Database string `json:"database,omitempty"`
 
-	// SSLMode specifies the SSL mode
+	// SSLMode specifies the PostgreSQL SSL mode. One of: disable, require, verify-ca, verify-full.
 	// +optional
+	// +kubebuilder:default=disable
+	// +kubebuilder:validation:Enum=disable;require;verify-ca;verify-full
 	SSLMode string `json:"sslmode,omitempty"`
+
+	// TLS configures TLS for PostgreSQL using a Secret. The operator mounts the Secret and sets
+	// BINDPLANE_POSTGRES_SSL_ROOT_CERT, BINDPLANE_POSTGRES_SSL_CERT, and BINDPLANE_POSTGRES_SSL_KEY to the
+	// mounted file paths. Server-side TLS: set secretName and caKey. Mutual TLS: also set certKey and keyKey.
+	// +optional
+	TLS *PostgresTLSConfig `json:"tls,omitempty"`
 
 	// Username specifies the PostgreSQL username
 	// +optional
@@ -546,9 +575,17 @@ type PostgresConfig struct {
 	// +optional
 	MaxConnections int `json:"maxConnections,omitempty"`
 
+	// MaxIdleConnections specifies the maximum number of idle connections. Optional; no default.
+	// +optional
+	MaxIdleConnections *int `json:"maxIdleConnections,omitempty"`
+
 	// MaxLifetime specifies the maximum connection lifetime
 	// +optional
 	MaxLifetime string `json:"maxLifetime,omitempty"`
+
+	// MaxIdleTime specifies the maximum time a connection may remain idle (e.g. 20s, 1m). Optional; no default.
+	// +optional
+	MaxIdleTime string `json:"maxIdleTime,omitempty"`
 
 	// Schema specifies the database schema
 	// +optional

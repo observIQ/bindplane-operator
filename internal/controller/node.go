@@ -127,9 +127,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								Env: combineEnvVars(
 									getKubernetesEnvVars(nodeContainerName),
 									getNodeEnvVars(),
-									getBindplaneConfigEnvVars(bindplane),
-									getPrometheusEnvVars(bindplane),
-									getTransformAgentEnvVars(bindplane),
+									getBindplaneCommonEnvVars(bindplane),
 									getNatsClientEnvVars(bindplane, true),
 								),
 								Resources: corev1.ResourceRequirements{

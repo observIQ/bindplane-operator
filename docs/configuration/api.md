@@ -396,14 +396,39 @@ _Appears in:_
 | `connectTimeout` _string_ | ConnectTimeout specifies the connection timeout |  | Optional: \{\} <br /> |
 | `statementTimeout` _string_ | StatementTimeout specifies the statement timeout |  | Optional: \{\} <br /> |
 | `database` _string_ | Database specifies the database name |  | Optional: \{\} <br /> |
-| `sslmode` _string_ | SSLMode specifies the SSL mode |  | Optional: \{\} <br /> |
+| `sslmode` _string_ | SSLMode specifies the PostgreSQL SSL mode. One of: disable, require, verify-ca, verify-full. | disable | Enum: [disable require verify-ca verify-full] <br />Optional: \{\} <br /> |
+| `tls` _[PostgresTLSConfig](#postgrestlsconfig)_ | TLS configures TLS for PostgreSQL using a Secret. The operator mounts the Secret and sets<br />BINDPLANE_POSTGRES_SSL_ROOT_CERT, BINDPLANE_POSTGRES_SSL_CERT, and BINDPLANE_POSTGRES_SSL_KEY to the<br />mounted file paths. Server-side TLS: set secretName and caKey. Mutual TLS: also set certKey and keyKey. |  | Optional: \{\} <br /> |
 | `username` _string_ | Username specifies the PostgreSQL username |  | Optional: \{\} <br /> |
 | `usernameSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | UsernameSecretRef references a Kubernetes Secret containing the PostgreSQL username.<br />Takes precedence over Username if both are set. |  | Optional: \{\} <br /> |
 | `password` _string_ | Password specifies the PostgreSQL password |  | Optional: \{\} <br /> |
 | `passwordSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | PasswordSecretRef references a Kubernetes Secret containing the PostgreSQL password.<br />Takes precedence over Password if both are set. |  | Optional: \{\} <br /> |
 | `maxConnections` _integer_ | MaxConnections specifies the maximum number of connections |  | Optional: \{\} <br /> |
+| `maxIdleConnections` _integer_ | MaxIdleConnections specifies the maximum number of idle connections. Optional; no default. |  | Optional: \{\} <br /> |
 | `maxLifetime` _string_ | MaxLifetime specifies the maximum connection lifetime |  | Optional: \{\} <br /> |
+| `maxIdleTime` _string_ | MaxIdleTime specifies the maximum time a connection may remain idle (e.g. 20s, 1m). Optional; no default. |  | Optional: \{\} <br /> |
 | `schema` _string_ | Schema specifies the database schema |  | Optional: \{\} <br /> |
+
+
+#### PostgresTLSConfig
+
+
+
+PostgresTLSConfig defines TLS for PostgreSQL by referencing a Secret. The Secret is mounted
+at a fixed path; the operator sets the TLS env vars (sslRootCert, sslCert, sslKey) to the mounted file paths.
+Users specify only the secret name and key names, not mount paths.
+Server-side TLS: set secretName and caKey. Mutual TLS: set secretName, caKey, certKey, and keyKey.
+
+
+
+_Appears in:_
+- [PostgresConfig](#postgresconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `secretName` _string_ | SecretName is the name of the Secret containing the CA and optionally client cert and key. |  |  |
+| `caKey` _string_ | CAKey is the key in the Secret for the root CA (maps to sslRootCert). Required for TLS; enables server-side TLS. |  | Optional: \{\} <br /> |
+| `certKey` _string_ | CertKey is the key in the Secret for the client certificate (maps to sslCert). Set with KeyKey for mutual TLS. |  | Optional: \{\} <br /> |
+| `keyKey` _string_ | KeyKey is the key in the Secret for the client private key (maps to sslKey). Set with CertKey for mutual TLS. |  | Optional: \{\} <br /> |
 
 
 #### PrometheusComponentSpec

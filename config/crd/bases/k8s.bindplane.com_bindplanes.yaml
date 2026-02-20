@@ -11198,6 +11198,10 @@ spec:
                             type: string
                           maxConnections:
                             type: integer
+                          maxIdleConnections:
+                            type: integer
+                          maxIdleTime:
+                            type: string
                           maxLifetime:
                             type: string
                           password:
@@ -11220,9 +11224,28 @@ spec:
                           schema:
                             type: string
                           sslmode:
+                            default: disable
+                            enum:
+                            - disable
+                            - require
+                            - verify-ca
+                            - verify-full
                             type: string
                           statementTimeout:
                             type: string
+                          tls:
+                            properties:
+                              caKey:
+                                type: string
+                              certKey:
+                                type: string
+                              keyKey:
+                                type: string
+                              secretName:
+                                type: string
+                            required:
+                            - secretName
+                            type: object
                           username:
                             type: string
                           usernameSecretRef:

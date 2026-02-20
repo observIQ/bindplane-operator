@@ -323,12 +323,29 @@ Username and password can be set as direct values or via Secret references (`use
 | `spec.config.store.postgres.usernameSecretRef` | `BINDPLANE_POSTGRES_USERNAME` | — | No |
 | `spec.config.store.postgres.password` | `BINDPLANE_POSTGRES_PASSWORD` | — | No |
 | `spec.config.store.postgres.passwordSecretRef` | `BINDPLANE_POSTGRES_PASSWORD` | — | No |
-| `spec.config.store.postgres.sslmode` | `BINDPLANE_POSTGRES_SSL_MODE` | — | No |
+| `spec.config.store.postgres.sslmode` | `BINDPLANE_POSTGRES_SSL_MODE` | `disable` | No |
+| `spec.config.store.postgres.tls` | (see below) | — | No |
 | `spec.config.store.postgres.connectTimeout` | `BINDPLANE_POSTGRES_CONNECT_TIMEOUT` | — | No |
 | `spec.config.store.postgres.statementTimeout` | `BINDPLANE_POSTGRES_STATEMENT_TIMEOUT` | — | No |
 | `spec.config.store.postgres.maxConnections` | `BINDPLANE_POSTGRES_MAX_CONNECTIONS` | — | No |
+| `spec.config.store.postgres.maxIdleConnections` | `BINDPLANE_POSTGRES_MAX_IDLE_CONNECTIONS` | — | No |
 | `spec.config.store.postgres.maxLifetime` | `BINDPLANE_POSTGRES_MAX_LIFETIME` | — | No |
+| `spec.config.store.postgres.maxIdleTime` | `BINDPLANE_POSTGRES_MAX_IDLE_TIME` | — | No |
 | `spec.config.store.postgres.schema` | `BINDPLANE_POSTGRES_SCHEMA` | — | No |
+
+**PostgreSQL TLS:** By default TLS is disabled (`sslmode: disable`). To use TLS, set `sslmode` to `require`, `verify-ca`, or `verify-full` and configure `tls` with a Secret. Specify a CA (caKey) for server-side TLS verification; add certKey and keyKey for mutual TLS (client certificate). The operator mounts the Secret and sets the Bindplane environment variables to the mounted file paths.
+
+| TLS Field | Environment Variable | Description |
+|---|---|---|
+| `spec.config.store.postgres.tls.secretName` | — | Name of the Secret containing the CA and optionally client cert and key |
+| `spec.config.store.postgres.tls.caKey` | `BINDPLANE_POSTGRES_SSL_ROOT_CERT` | Key in the Secret for the root CA (server-side TLS) |
+| `spec.config.store.postgres.tls.certKey` | `BINDPLANE_POSTGRES_SSL_CERT` | Key in the Secret for the client certificate (mutual TLS) |
+| `spec.config.store.postgres.tls.keyKey` | `BINDPLANE_POSTGRES_SSL_KEY` | Key in the Secret for the client private key (mutual TLS) |
+
+Valid combinations:
+
+- **Server-side TLS:** Set `sslmode` (e.g. `verify-ca` or `verify-full`) and `tls.secretName` with `tls.caKey`.
+- **Mutual TLS:** In addition, set `tls.certKey` and `tls.keyKey`.
 
 Example (direct values):
 
@@ -356,6 +373,36 @@ spec:
         passwordSecretRef:
           name: bindplane-secrets
           key: pg-password
+```
+
+Example (PostgreSQL server-side TLS with CA):
+
+```yaml
+spec:
+  config:
+    store:
+      postgres:
+        host: postgres.example.com
+        sslmode: verify-ca
+        tls:
+          secretName: postgres-tls
+          caKey: ca.crt
+```
+
+Example (PostgreSQL mutual TLS):
+
+```yaml
+spec:
+  config:
+    store:
+      postgres:
+        host: postgres.example.com
+        sslmode: verify-full
+        tls:
+          secretName: postgres-tls
+          caKey: ca.crt
+          certKey: tls.crt
+          keyKey: tls.key
 ```
 
 ## Tracing
