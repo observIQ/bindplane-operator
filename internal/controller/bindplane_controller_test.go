@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,6 +31,37 @@ import (
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
+
+var _ = Describe("validateBindplaneName", func() {
+	It("rejects empty name", func() {
+		Expect(validateBindplaneName("")).NotTo(Succeed())
+	})
+	It("rejects name starting with a number (DNS-1035)", func() {
+		Expect(validateBindplaneName("7539")).NotTo(Succeed())
+		Expect(validateBindplaneName("123-abc")).NotTo(Succeed())
+	})
+	It("rejects name starting with uppercase", func() {
+		Expect(validateBindplaneName("MyBindplane")).NotTo(Succeed())
+	})
+	It("rejects name ending with hyphen", func() {
+		Expect(validateBindplaneName("my-name-")).NotTo(Succeed())
+	})
+	It("rejects name with invalid characters", func() {
+		Expect(validateBindplaneName("my_name")).NotTo(Succeed())
+		Expect(validateBindplaneName("my.name")).NotTo(Succeed())
+	})
+	It("rejects name that would exceed DNS label length", func() {
+		long := "a" + strings.Repeat("x", maxResourceNamePrefixLen)
+		Expect(len(long)).To(Equal(maxResourceNamePrefixLen + 1))
+		Expect(validateBindplaneName(long)).NotTo(Succeed())
+	})
+	It("accepts valid DNS-1035 names", func() {
+		Expect(validateBindplaneName("a")).To(Succeed())
+		Expect(validateBindplaneName("my-name")).To(Succeed())
+		Expect(validateBindplaneName("abc-123")).To(Succeed())
+		Expect(validateBindplaneName("bindplane")).To(Succeed())
+	})
+})
 
 var _ = Describe("Bindplane Controller", func() {
 	Context("When reconciling a resource", func() {
