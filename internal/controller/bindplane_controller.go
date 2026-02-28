@@ -165,6 +165,8 @@ const (
 	bindplanePrometheusEnableRemoteEnvVar = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
 	bindplanePrometheusHostEnvVar         = "BINDPLANE_PROMETHEUS_HOST"
 	bindplanePrometheusPortEnvVar         = "BINDPLANE_PROMETHEUS_PORT"
+	bindplanePrometheusAuthUsernameEnvVar = "BINDPLANE_PROMETHEUS_AUTH_USERNAME"
+	bindplanePrometheusAuthPasswordEnvVar = "BINDPLANE_PROMETHEUS_AUTH_PASSWORD" // #nosec G101 -- env var name, not a credential
 
 	// Transform Agent configuration
 	bindplaneTransformAgentEnableRemoteEnvVar = "BINDPLANE_TRANSFORM_AGENT_ENABLE_REMOTE"
@@ -271,6 +273,7 @@ type BindplaneReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

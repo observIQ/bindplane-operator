@@ -18,14 +18,22 @@ package controller
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"maps"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"golang.org/x/crypto/bcrypt"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
@@ -47,10 +55,25 @@ const (
 	prometheusLivenessProbePath = "/-/healthy"
 	// prometheusReadinessProbePath is the HTTP path for the readiness probe
 	prometheusReadinessProbePath = "/-/ready"
+
+	// Prometheus basic auth (operator-generated secret)
+	prometheusBasicAuthSecretSuffix  = "prometheus-basic-auth"
+	prometheusBasicAuthUsername      = "prometheus"
+	prometheusBasicAuthSecretKeyUser = "username"
+	prometheusBasicAuthSecretKeyPass = "password"
+	prometheusBasicAuthSecretKeyWeb  = "web-config"
+	prometheusWebConfigVolumeName    = "prometheus-web-config"
+	prometheusWebConfigMountPath     = "/etc/prometheus"
+	prometheusWebConfigFileName      = "web.yml"
 )
 
 // reconcilePrometheus reconciles all Prometheus resources
 func (r *BindplaneReconciler) reconcilePrometheus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	// Reconcile Prometheus basic auth Secret first (create-only) so it exists for StatefulSet and Bindplane pods
+	if err := r.reconcilePrometheusBasicAuthSecret(ctx, bindplane, log); err != nil {
+		return err
+	}
+
 	// Reconcile ServiceAccount
 	sa := r.prometheusServiceAccount(bindplane)
 	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
@@ -70,6 +93,64 @@ func (r *BindplaneReconciler) reconcilePrometheus(ctx context.Context, bindplane
 	}
 
 	return nil
+}
+
+// generatePrometheusBasicAuthSecretData returns secret data (username, password, web-config YAML).
+// Password is 24 random bytes base64-encoded (32 chars); web-config is Prometheus basic_auth_users YAML with bcrypt hash.
+func generatePrometheusBasicAuthSecretData() (map[string][]byte, error) {
+	passwordBytes := make([]byte, 24)
+	if _, err := rand.Read(passwordBytes); err != nil {
+		return nil, fmt.Errorf("generate password: %w", err)
+	}
+	password := base64.URLEncoding.EncodeToString(passwordBytes) // 32 chars
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("bcrypt password: %w", err)
+	}
+	webConfig := fmt.Sprintf("basic_auth_users:\n  %s: %s\n", prometheusBasicAuthUsername, string(hash))
+
+	return map[string][]byte{
+		prometheusBasicAuthSecretKeyUser: []byte(prometheusBasicAuthUsername),
+		prometheusBasicAuthSecretKeyPass: []byte(password),
+		prometheusBasicAuthSecretKeyWeb:  []byte(webConfig),
+	}, nil
+}
+
+// reconcilePrometheusBasicAuthSecret creates the Prometheus basic auth Secret if it does not exist.
+// Existing Secret data is never updated to avoid rotating credentials.
+func (r *BindplaneReconciler) reconcilePrometheusBasicAuthSecret(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: bindplane.Namespace,
+			Labels:    getLabels(bindplane, prometheusBasicAuthSecretSuffix),
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(bindplane, secret, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: bindplane.Namespace}, existing)
+	if err == nil {
+		// Secret exists; do not overwrite data
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	data, err := generatePrometheusBasicAuthSecretData()
+	if err != nil {
+		return err
+	}
+	secret.Data = data
+
+	log.Info("Creating Prometheus basic auth Secret", "name", secretName, "namespace", bindplane.Namespace)
+	return r.Create(ctx, secret)
 }
 
 func (r *BindplaneReconciler) prometheusServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
@@ -102,6 +183,22 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 					},
 					Spec: corev1.PodSpec{
 						ServiceAccountName: serviceName,
+						Volumes: []corev1.Volume{
+							{
+								Name: prometheusWebConfigVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: getResourceName(bindplane, prometheusBasicAuthSecretSuffix),
+										Items: []corev1.KeyToPath{
+											{
+												Key:  prometheusBasicAuthSecretKeyWeb,
+												Path: prometheusWebConfigFileName,
+											},
+										},
+									},
+								},
+							},
+						},
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    new(defaultRunAsGroup),
 							RunAsGroup: new(defaultRunAsGroup),
@@ -112,6 +209,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 							{
 								Name:  prometheusContainerName,
 								Image: prometheusImage,
+								Args:  []string{"--web.config.file=" + prometheusWebConfigMountPath + "/" + prometheusWebConfigFileName},
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          prometheusHTTPPortName,
@@ -133,6 +231,12 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 									{
 										Name:      getResourceName(bindplane, prometheusDataVolumeSuffix),
 										MountPath: "/prometheus",
+									},
+									{
+										Name:      prometheusWebConfigVolumeName,
+										MountPath: "/etc/prometheus/web.yml",
+										SubPath:   prometheusWebConfigFileName,
+										ReadOnly:  true,
 									},
 								},
 								StartupProbe: &corev1.Probe{

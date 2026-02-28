@@ -341,10 +341,12 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 }
 
 // getPrometheusEnvVars returns the Prometheus environment variables
-// Used by Node, Jobs, Jobs Migrate, and NATS deployments
+// Used by Node, Jobs, Jobs Migrate, and NATS deployments.
+// Username and password (for remote write basic auth) are read from the operator-generated Prometheus basic auth Secret.
 func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	prometheusServiceName := getResourceName(bindplane, prometheusComponent)
 	prometheusPort := strconv.Itoa(int(prometheusHTTPPort))
+	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
 
 	return []corev1.EnvVar{
 		{
@@ -358,6 +360,24 @@ func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVa
 		{
 			Name:  bindplanePrometheusPortEnvVar,
 			Value: prometheusPort,
+		},
+		{
+			Name: bindplanePrometheusAuthUsernameEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+					Key:                  prometheusBasicAuthSecretKeyUser,
+				},
+			},
+		},
+		{
+			Name: bindplanePrometheusAuthPasswordEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+					Key:                  prometheusBasicAuthSecretKeyPass,
+				},
+			},
 		},
 	}
 }

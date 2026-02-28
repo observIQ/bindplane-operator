@@ -1408,3 +1408,52 @@ var _ = Describe("getPostgresTLSVolumeAndMount", func() {
 		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/postgres-tls"))
 	})
 })
+
+// envVarSecretKeyRef returns the SecretKeySelector for the env var with the given name, or nil.
+func envVarSecretKeyRef(envVars []corev1.EnvVar, name string) *corev1.SecretKeySelector {
+	for _, ev := range envVars {
+		if ev.Name == name && ev.ValueFrom != nil && ev.ValueFrom.SecretKeyRef != nil {
+			return ev.ValueFrom.SecretKeyRef
+		}
+	}
+	return nil
+}
+
+var _ = Describe("getPrometheusEnvVars", func() {
+	It("returns enable_remote, host, port, and username/password from generated secret", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+		}
+		envVars := getPrometheusEnvVars(bindplane)
+		Expect(envVars).To(HaveLen(5))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal(enableRemoteValue))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(Equal("(secret)"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(Equal("(secret)"))
+		refUser := envVarSecretKeyRef(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")
+		refPass := envVarSecretKeyRef(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")
+		Expect(refUser).ToNot(BeNil())
+		Expect(refPass).ToNot(BeNil())
+		Expect(refUser.Name).To(Equal("my-bp-prometheus-basic-auth"))
+		Expect(refUser.Key).To(Equal(prometheusBasicAuthSecretKeyUser))
+		Expect(refPass.Name).To(Equal("my-bp-prometheus-basic-auth"))
+		Expect(refPass.Key).To(Equal(prometheusBasicAuthSecretKeyPass))
+	})
+})
+
+var _ = Describe("generatePrometheusBasicAuthSecretData", func() {
+	It("returns username, password, and web-config with bcrypt hash", func() {
+		data, err := generatePrometheusBasicAuthSecretData()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(data).To(HaveKey(prometheusBasicAuthSecretKeyUser))
+		Expect(data).To(HaveKey(prometheusBasicAuthSecretKeyPass))
+		Expect(data).To(HaveKey(prometheusBasicAuthSecretKeyWeb))
+		Expect(string(data[prometheusBasicAuthSecretKeyUser])).To(Equal(prometheusBasicAuthUsername))
+		Expect(data[prometheusBasicAuthSecretKeyPass]).To(HaveLen(32))
+		webConfig := string(data[prometheusBasicAuthSecretKeyWeb])
+		Expect(webConfig).To(ContainSubstring("basic_auth_users:"))
+		Expect(webConfig).To(ContainSubstring(prometheusBasicAuthUsername + ":"))
+		Expect(webConfig).To(MatchRegexp(`\$2[aby]\$\d{2}\$`)) // bcrypt hash prefix
+	})
+})
