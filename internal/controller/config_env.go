@@ -404,6 +404,21 @@ func getPrometheusRemoteWriteTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) 
 	return envVars
 }
 
+// getNatsTLSEnvVars returns env vars for NATS TLS when cert-manager is enabled (spec.config.nats.tls.certManager).
+// Cert-manager secret contains tls.crt, tls.key, ca.crt.
+func getNatsTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if !isNatsCertManagerTLSEnabled(bindplane) {
+		return nil
+	}
+	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
+	return []corev1.EnvVar{
+		{Name: bindplaneNatsEnableTLSEnvVar, Value: "true"},
+		{Name: bindplaneNatsTLSCertEnvVar, Value: internalTLSNatsMountPath + "/" + certKey},
+		{Name: bindplaneNatsTLSKeyEnvVar, Value: internalTLSNatsMountPath + "/" + keyKey},
+		{Name: bindplaneNatsTLSCAEnvVar, Value: internalTLSNatsMountPath + "/" + caKey},
+	}
+}
+
 // getTransformAgentEnvVars returns the Transform Agent environment variables
 // Used by Node, Jobs, Jobs Migrate, and NATS deployments
 func getTransformAgentEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
@@ -429,7 +444,7 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 		return nil
 	}
 
-	return []corev1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{
 			Name:  bindplaneEventBusTypeEnvVar,
 			Value: natsEventBusType,
@@ -451,6 +466,8 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 			Value: natsClientSubject,
 		},
 	}
+	envVars = append(envVars, getNatsTLSEnvVars(bindplane)...)
+	return envVars
 }
 
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.

@@ -165,6 +165,10 @@ const (
 	internalTLSPrometheusClientVolumeName = "prometheus-remote-write-tls"
 	internalTLSPrometheusClientMountPath  = "/etc/bindplane/prometheus-remote-write-tls"
 
+	// Internal TLS (cert-manager) volume mount for NATS (client, cluster, HTTP)
+	internalTLSNatsVolumeName = "nats-tls"
+	internalTLSNatsMountPath  = "/etc/bindplane/nats-tls"
+
 	// Prometheus configuration
 	bindplanePrometheusEnableRemoteEnvVar = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
 	bindplanePrometheusHostEnvVar         = "BINDPLANE_PROMETHEUS_HOST"
@@ -202,6 +206,12 @@ const (
 	bindplaneNatsServerClusterHostEnvVar   = "BINDPLANE_NATS_SERVER_CLUSTER_HOST"
 	bindplaneNatsServerClusterPortEnvVar   = "BINDPLANE_NATS_SERVER_CLUSTER_PORT"
 	bindplaneNatsServerClusterRoutesEnvVar = "BINDPLANE_NATS_SERVER_CLUSTER_ROUTES"
+
+	// NATS TLS (cert-manager; no skip-verify exposed)
+	bindplaneNatsEnableTLSEnvVar = "BINDPLANE_NATS_ENABLE_TLS"
+	bindplaneNatsTLSCertEnvVar   = "BINDPLANE_NATS_TLS_CERT"
+	bindplaneNatsTLSKeyEnvVar    = "BINDPLANE_NATS_TLS_KEY"
+	bindplaneNatsTLSCAEnvVar     = "BINDPLANE_NATS_TLS_CA"
 )
 
 // Common security and pod constants
@@ -791,15 +801,16 @@ func getPostgresTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1al
 }
 
 // getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, Postgres TLS,
-// and internal TLS (cert-manager, e.g. Prometheus remote write client cert).
+// and internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS).
 // Used by Node, Jobs, Jobs Migrate, and NATS so they receive all config TLS secrets when configured.
 func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
 	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
 	netVols, netMounts := getNetworkTLSVolumeAndMount(bindplane)
 	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
 	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
-	vols := append(append(append(ldapVols, netVols...), pgVols...), internalVols...)
-	mounts := append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...)
+	natsVols, natsMounts := getNatsTLSVolumesAndMounts(bindplane)
+	vols := append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), natsVols...)
+	mounts := append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), natsMounts...)
 	return vols, mounts
 }
 
@@ -846,6 +857,25 @@ func getInternalTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]c
 	mount := corev1.VolumeMount{
 		Name:      internalTLSPrometheusClientVolumeName,
 		MountPath: internalTLSPrometheusClientMountPath,
+		ReadOnly:  true,
+	}
+	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
+}
+
+// getNatsTLSVolumesAndMounts returns volumes and mounts for NATS TLS when cert-manager is used (spec.config.nats.tls.certManager).
+func getNatsTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	if !isNatsCertManagerTLSEnabled(bindplane) {
+		return nil, nil
+	}
+	vol := corev1.Volume{
+		Name: internalTLSNatsVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: getResourceName(bindplane, natsTLSCertSuffix)},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      internalTLSNatsVolumeName,
+		MountPath: internalTLSNatsMountPath,
 		ReadOnly:  true,
 	}
 	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}

@@ -144,6 +144,121 @@ var _ = Describe("validatePrometheusTLSConfig", func() {
 	})
 })
 
+var _ = Describe("isNatsCertManagerTLSEnabled", func() {
+	It("returns false when config.Nats is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{}
+		Expect(isNatsCertManagerTLSEnabled(bindplane)).To(BeFalse())
+	})
+	It("returns false when TLS or CertManager is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{},
+				},
+			},
+		}
+		Expect(isNatsCertManagerTLSEnabled(bindplane)).To(BeFalse())
+	})
+	It("returns false when CertManager has empty name", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: ""},
+						},
+					},
+				},
+			},
+		}
+		Expect(isNatsCertManagerTLSEnabled(bindplane)).To(BeFalse())
+	})
+	It("returns true when TLS.CertManager is set with name", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+						},
+					},
+				},
+			},
+		}
+		Expect(isNatsCertManagerTLSEnabled(bindplane)).To(BeTrue())
+	})
+})
+
+var _ = Describe("validateNatsTLSConfig", func() {
+	It("returns nil when config.Nats is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{}
+		Expect(validateNatsTLSConfig(bindplane)).To(Succeed())
+	})
+	It("returns nil when TLS is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{},
+				},
+			},
+		}
+		Expect(validateNatsTLSConfig(bindplane)).To(Succeed())
+	})
+	It("returns error when TLS is set but certManager.name is empty", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: ""},
+						},
+					},
+				},
+			},
+		}
+		Expect(validateNatsTLSConfig(bindplane)).NotTo(Succeed())
+		Expect(validateNatsTLSConfig(bindplane).Error()).To(ContainSubstring("spec.config.nats.tls"))
+		Expect(validateNatsTLSConfig(bindplane).Error()).To(ContainSubstring("certManager.name"))
+	})
+	It("returns nil when certManager is set with non-empty name", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer", Kind: "Issuer"},
+						},
+					},
+				},
+			},
+		}
+		Expect(validateNatsTLSConfig(bindplane)).To(Succeed())
+	})
+})
+
+var _ = Describe("getNatsServerCertDNSNames", func() {
+	It("returns client service, headless, pod DNS names and localhost", func() {
+		replicas := int32(2)
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Nats: &bindplanev1alpha1.NatsComponentSpec{
+					Replicas: &replicas,
+				},
+			},
+		}
+		names := getNatsServerCertDNSNames(bindplane)
+		Expect(names).To(ContainElement("my-bp-nats-client.default"))
+		Expect(names).To(ContainElement("my-bp-nats-client.default.svc.cluster.local"))
+		Expect(names).To(ContainElement("my-bp-nats-client.default.svc"))
+		Expect(names).To(ContainElement("my-bp-nats-cluster.default"))
+		Expect(names).To(ContainElement("my-bp-nats-cluster.default.svc.cluster.local"))
+		Expect(names).To(ContainElement("localhost"))
+		Expect(names).To(ContainElement("my-bp-nats-0.my-bp-nats-cluster.default.svc.cluster.local"))
+		Expect(names).To(ContainElement("my-bp-nats-1.my-bp-nats-cluster.default.svc.cluster.local"))
+	})
+})
+
 var _ = Describe("getPrometheusServerCertDNSNames", func() {
 	It("returns service and pod DNS names for the bindplane prometheus component", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{

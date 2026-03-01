@@ -38,6 +38,7 @@ const (
 	prometheusRemoteWriteClientCertSuffix = "prometheus-remote-write-client"
 	// prometheusProbeClientCertSuffix is the client cert for Prometheus pod's promtool (probe); ClientAuth EKU only.
 	prometheusProbeClientCertSuffix = "prometheus-probe-client"
+	natsTLSCertSuffix               = "nats-tls"
 )
 
 // reconcileInternalTLSCertificates reconciles cert-manager Certificate resources for
@@ -62,6 +63,15 @@ func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Conte
 			return err
 		}
 		if err := r.reconcilePrometheusRemoteWriteClientCert(ctx, bindplane, log); err != nil {
+			return err
+		}
+	}
+	// NATS TLS (single cert for client, cluster, and HTTP)
+	if isNatsCertManagerTLSEnabled(bindplane) {
+		if err := validateNatsTLSConfig(bindplane); err != nil {
+			return err
+		}
+		if err := r.reconcileNatsTLSCert(ctx, bindplane, log); err != nil {
 			return err
 		}
 	}
@@ -201,6 +211,104 @@ func getPrometheusServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []s
 		fmt.Sprintf("%s.%s.svc", name, ns),
 		fmt.Sprintf("%s-0.%s.%s.svc.cluster.local", name, name, ns),
 		"localhost",
+	}
+}
+
+// isNatsCertManagerTLSEnabled returns true when NATS TLS is enabled via cert-manager (spec.config.nats.tls.certManager).
+func isNatsCertManagerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	n := bindplane.Spec.Config.Nats
+	return n != nil && n.TLS != nil && n.TLS.CertManager != nil && n.TLS.CertManager.Name != ""
+}
+
+// validateNatsTLSConfig returns an error when spec.config.nats.tls is set but certManager.name is empty.
+func validateNatsTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
+	n := bindplane.Spec.Config.Nats
+	if n == nil || n.TLS == nil {
+		return nil
+	}
+	if n.TLS.CertManager == nil || n.TLS.CertManager.Name == "" {
+		return fmt.Errorf("spec.config.nats.tls: certManager.name is required when TLS is enabled")
+	}
+	return nil
+}
+
+// getNatsServerCertDNSNames returns DNS names for the NATS certificate (client, cluster, and HTTP use the same cert).
+// Includes short form <service>.<namespace> so clients connecting to e.g. bindplane-sample-nats-client.default can verify the cert.
+func getNatsServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string {
+	name := getResourceName(bindplane, natsComponent)
+	clientSvcName := getNatsClientServiceName(bindplane)
+	headlessName := getNatsClusterServiceName(bindplane)
+	ns := bindplane.Namespace
+	replicas := int32(1)
+	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil {
+		replicas = *bindplane.Spec.Nats.Replicas
+	}
+	names := []string{
+		fmt.Sprintf("%s.%s", clientSvcName, ns),
+		fmt.Sprintf("%s.%s.svc.cluster.local", clientSvcName, ns),
+		fmt.Sprintf("%s.%s.svc", clientSvcName, ns),
+		fmt.Sprintf("%s.%s", headlessName, ns),
+		fmt.Sprintf("%s.%s.svc.cluster.local", headlessName, ns),
+		fmt.Sprintf("%s.%s.svc", headlessName, ns),
+		"localhost",
+	}
+	for i := int32(0); i < replicas; i++ {
+		names = append(names, fmt.Sprintf("%s-%d.%s.%s.svc.cluster.local", name, i, headlessName, ns))
+	}
+	return names
+}
+
+// reconcileNatsTLSCert creates or updates the NATS TLS certificate (used for client, cluster, and HTTP ports).
+func (r *BindplaneReconciler) reconcileNatsTLSCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	issuerRef := issuerRefToCM(*bindplane.Spec.Config.Nats.TLS.CertManager)
+	dnsNames := getNatsServerCertDNSNames(bindplane)
+	cert := buildNatsCertificate(
+		bindplane,
+		getResourceName(bindplane, natsTLSCertSuffix),
+		getResourceName(bindplane, natsTLSCertSuffix),
+		issuerRef,
+		dnsNames,
+	)
+	if err := controllerutil.SetControllerReference(bindplane, cert, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.reconcileCertificate(ctx, cert, log); err != nil {
+		return fmt.Errorf("reconcile NATS TLS certificate: %w", err)
+	}
+	return nil
+}
+
+// buildNatsCertificate builds a Certificate with both ServerAuth and ClientAuth for NATS (client, cluster, HTTP).
+// Includes 127.0.0.1 and ::1 in IP SANs so the embedded NATS client (connecting over localhost) can verify the server.
+func buildNatsCertificate(
+	bindplane *bindplanev1alpha1.Bindplane,
+	name, secretName string,
+	issuerRef cmmeta.IssuerReference,
+	dnsNames []string,
+) *cmapi.Certificate {
+	labels := getLabels(bindplane, name)
+	return &cmapi.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: bindplane.Namespace,
+			Labels:    labels,
+		},
+		Spec: cmapi.CertificateSpec{
+			SecretName:  secretName,
+			IssuerRef:   issuerRef,
+			DNSNames:    dnsNames,
+			IPAddresses: []string{"127.0.0.1", "::1"},
+			PrivateKey: &cmapi.CertificatePrivateKey{
+				Algorithm: cmapi.RSAKeyAlgorithm,
+				Size:      2048,
+			},
+			Usages: []cmapi.KeyUsage{
+				cmapi.UsageDigitalSignature,
+				cmapi.UsageKeyEncipherment,
+				cmapi.UsageServerAuth,
+				cmapi.UsageClientAuth,
+			},
+		},
 	}
 }
 

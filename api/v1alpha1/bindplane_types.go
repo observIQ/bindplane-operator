@@ -131,6 +131,10 @@ type BindplaneConfigSpec struct {
 	// Prometheus configures TLS for the Prometheus remote write component.
 	// +optional
 	Prometheus *Prometheus `json:"prometheus,omitempty"`
+
+	// Nats configures TLS for the NATS event bus (client and server). Cert-manager only.
+	// +optional
+	Nats *NatsConfig `json:"nats,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration
@@ -176,6 +180,20 @@ type PrometheusTLSConfig struct {
 	// SkipVerify disables TLS certificate verification for the Prometheus remote write client. Only set for testing.
 	// +optional
 	SkipVerify bool `json:"skipVerify,omitempty"`
+}
+
+// NatsConfig configures the NATS event bus (client and server use the same TLS config).
+type NatsConfig struct {
+	// TLS configures mutual TLS for NATS via cert-manager. When set, a single certificate is used for client, cluster, and HTTP ports.
+	// +optional
+	TLS *NatsTLSConfig `json:"tls,omitempty"`
+}
+
+// NatsTLSConfig defines TLS for NATS. Only cert-manager is supported; no secretName.
+type NatsTLSConfig struct {
+	// CertManager references a cert-manager Issuer or ClusterIssuer to issue the NATS certificate (used for client, cluster, and HTTP).
+	// +optional
+	CertManager *CertManagerTLSIssuerRef `json:"certManager,omitempty"`
 }
 
 // CertManagerTLSIssuerRef references a cert-manager Issuer or ClusterIssuer.

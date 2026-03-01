@@ -1557,6 +1557,65 @@ var _ = Describe("getInternalTLSVolumesAndMounts", func() {
 	})
 })
 
+var _ = Describe("getNatsTLSEnvVars", func() {
+	It("returns nil when NATS TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		envVars := getNatsTLSEnvVars(bindplane)
+		Expect(envVars).To(BeNil())
+	})
+	It("returns NATS TLS env vars when spec.config.nats.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+						},
+					},
+				},
+			},
+		}
+		envVars := getNatsTLSEnvVars(bindplane)
+		Expect(envVars).NotTo(BeNil())
+		Expect(envVarByName(envVars, bindplaneNatsEnableTLSEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneNatsTLSCertEnvVar)).To(Equal(internalTLSNatsMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, bindplaneNatsTLSKeyEnvVar)).To(Equal(internalTLSNatsMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, bindplaneNatsTLSCAEnvVar)).To(Equal(internalTLSNatsMountPath + "/ca.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_NATS_TLS_SKIP_VERIFY")).To(BeEmpty())
+	})
+})
+
+var _ = Describe("getNatsTLSVolumesAndMounts", func() {
+	It("returns nil when NATS TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		vols, mounts := getNatsTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+	It("returns one volume and one mount when spec.config.nats.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getNatsTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(mounts).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal(internalTLSNatsVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("bp-nats-tls"))
+		Expect(mounts[0].Name).To(Equal(internalTLSNatsVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(internalTLSNatsMountPath))
+	})
+})
+
 var _ = Describe("generatePrometheusBasicAuthSecretData", func() {
 	It("returns username, password, and web-config with bcrypt hash", func() {
 		data, err := generatePrometheusBasicAuthSecretData()

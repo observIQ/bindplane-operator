@@ -428,20 +428,19 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 									},
 								},
 								VolumeMounts: volumeMounts,
-								// StartupProbe: promtool check ready so we verify the HTTP/HTTPS endpoint (including TLS/mTLS) before marking ready.
+								// TODO(jsirianni): HTTP/HTTPS probes are not used when TLS is enabled because the server serves TLS and Kubernetes HTTPGet does not support TLS client auth. Use TCPSocket for now; add Bindplane CLI healthchecks (e.g. subcommand or endpoint) that support exec probes for proper TLS healthcheck (e.g. bindplane healthcheck or promtool over TLS) for readiness/liveness when available.
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										Exec: &corev1.ExecAction{
-											Command: getPrometheusProbeCommand(bindplane),
+										TCPSocket: &corev1.TCPSocketAction{
+											Port: intstr.FromString(prometheusHTTPPortName),
 										},
 									},
 									InitialDelaySeconds: probeStartupInitialDelaySeconds,
 									PeriodSeconds:       probeStartupPeriodSeconds,
 									FailureThreshold:    probeStartupFailureThreshold,
 									SuccessThreshold:    probeStartupSuccessThreshold,
-									TimeoutSeconds:      2,
+									TimeoutSeconds:      probeTimeoutSeconds,
 								},
-								// LivenessProbe: tcpSocket only checks that the port is open; HTTP probes don't support TLS/mTLS, and we avoid exec for liveness to reduce load.
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										TCPSocket: &corev1.TCPSocketAction{
@@ -453,17 +452,16 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 									SuccessThreshold: probeSuccessThreshold,
 									TimeoutSeconds:   probeTimeoutSeconds,
 								},
-								// ReadinessProbe: promtool check ready so we only send traffic when Prometheus is actually ready to serve (works with and without TLS/mTLS).
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										Exec: &corev1.ExecAction{
-											Command: getPrometheusProbeCommand(bindplane),
+										TCPSocket: &corev1.TCPSocketAction{
+											Port: intstr.FromString(prometheusHTTPPortName),
 										},
 									},
 									PeriodSeconds:    probePeriodSeconds,
 									FailureThreshold: probeFailureThreshold,
 									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   2,
+									TimeoutSeconds:   probeTimeoutSeconds,
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,

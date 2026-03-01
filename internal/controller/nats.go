@@ -158,10 +158,10 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										corev1.ResourceMemory: resource.MustParse("500Mi"),
 									},
 								},
+								// TODO(jsirianni): When NATS TLS is enabled the HTTP port serves TLS; Kubernetes HTTPGet does not support TLS. Use TCPSocket for now; add Bindplane CLI healthchecks that support exec probes for proper TLS healthcheck when available.
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthzCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
@@ -173,8 +173,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthzCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
@@ -185,8 +184,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthzCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(natsHTTPPortName),
 										},
 									},
@@ -283,7 +281,7 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName 
 	clusterName := fmt.Sprintf("%s-%s", bindplane.Name, natsComponent)
 	clusterRoutes := getNatsClusterRoutes(bindplane, headlessServiceName, replicas)
 
-	return []corev1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{
 			Name:  bindplaneModeEnvVar,
 			Value: natsModeValue,
@@ -353,6 +351,8 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName 
 			Value: natsClientSubject,
 		},
 	}
+	envVars = append(envVars, getNatsTLSEnvVars(bindplane)...)
+	return envVars
 }
 
 // getNatsClusterRoutes generates the cluster routes string for NATS
