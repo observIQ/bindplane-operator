@@ -127,6 +127,10 @@ type BindplaneConfigSpec struct {
 	// AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365.
 	// +optional
 	AuditTrail *AuditTrailConfig `json:"auditTrail,omitempty"`
+
+	// Prometheus configures TLS for the Prometheus remote write component.
+	// +optional
+	Prometheus *Prometheus `json:"prometheus,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration
@@ -135,6 +139,61 @@ type AuditTrailConfig struct {
 	// +optional
 	// +kubebuilder:default=365
 	RetentionDays int `json:"retentionDays,omitempty"`
+}
+
+// Prometheus configures the Prometheus component (Bindplane to Prometheus remote write).
+type Prometheus struct {
+	// TLS configures TLS for Prometheus remote write.
+	// +optional
+	TLS *PrometheusTLSConfig `json:"tls,omitempty"`
+}
+
+// PrometheusTLSConfig defines TLS for Prometheus remote write.
+// Exactly one of secretName (user-defined Secret) or certManager (cert-manager Issuer/ClusterIssuer) should be set.
+type PrometheusTLSConfig struct {
+	// SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS).
+	// Omit when using certManager.
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
+
+	// CertKey is the key in the Secret for the TLS certificate.
+	// +optional
+	CertKey string `json:"certKey,omitempty"`
+
+	// KeyKey is the key in the Secret for the TLS private key.
+	// +optional
+	KeyKey string `json:"keyKey,omitempty"`
+
+	// CAKey is the key in the Secret for the CA certificate.
+	// +optional
+	CAKey string `json:"caKey,omitempty"`
+
+	// CertManager references a cert-manager Issuer or ClusterIssuer to issue server and client certs (mTLS).
+	// Mutually exclusive with secretName.
+	// +optional
+	CertManager *CertManagerTLSIssuerRef `json:"certManager,omitempty"`
+
+	// SkipVerify disables TLS certificate verification for the Prometheus remote write client. Only set for testing.
+	// +optional
+	SkipVerify bool `json:"skipVerify,omitempty"`
+}
+
+// CertManagerTLSIssuerRef references a cert-manager Issuer or ClusterIssuer.
+// See https://cert-manager.io/docs/concepts/issuer/
+type CertManagerTLSIssuerRef struct {
+	// Name is the name of the Issuer or ClusterIssuer resource.
+	Name string `json:"name"`
+
+	// Kind is the type of issuer. Either "Issuer" (namespaced) or "ClusterIssuer" (cluster-scoped).
+	// +optional
+	// +kubebuilder:validation:Enum=Issuer;ClusterIssuer
+	// +kubebuilder:default=Issuer
+	Kind string `json:"kind,omitempty"`
+
+	// Group is the API group of the issuer. Defaults to cert-manager.io.
+	// +optional
+	// +kubebuilder:default=cert-manager.io
+	Group string `json:"group,omitempty"`
 }
 
 // TracingConfig defines tracing configuration
@@ -243,6 +302,11 @@ type PrometheusComponentSpec struct {
 	// Storage defines the persistent storage configuration for Prometheus
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
+
+	// TLS configures TLS for the Prometheus server (StatefulSet). Use either secretName (user-defined Secret)
+	// or certManager (cert-manager Issuer/ClusterIssuer), not both. When set, Prometheus serves remote write over TLS.
+	// +optional
+	TLS *PrometheusTLSConfig `json:"tls,omitempty"`
 }
 
 // NatsComponentSpec defines the NATS component pod specification

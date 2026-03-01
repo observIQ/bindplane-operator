@@ -343,12 +343,13 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 // getPrometheusEnvVars returns the Prometheus environment variables
 // Used by Node, Jobs, Jobs Migrate, and NATS deployments.
 // Username and password (for remote write basic auth) are read from the operator-generated Prometheus basic auth Secret.
+// When internal TLS is enabled for Prometheus remote write, also adds BINDPLANE_PROMETHEUS_ENABLE_TLS and cert paths.
 func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	prometheusServiceName := getResourceName(bindplane, prometheusComponent)
 	prometheusPort := strconv.Itoa(int(prometheusHTTPPort))
 	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
 
-	return []corev1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{
 			Name:  bindplanePrometheusEnableRemoteEnvVar,
 			Value: enableRemoteValue,
@@ -380,6 +381,27 @@ func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVa
 			},
 		},
 	}
+	envVars = append(envVars, getPrometheusRemoteWriteTLSEnvVars(bindplane)...)
+	return envVars
+}
+
+// getPrometheusRemoteWriteTLSEnvVars returns env vars for Prometheus remote write TLS when client TLS is enabled (config.prometheus.tls).
+func getPrometheusRemoteWriteTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if !isPrometheusClientTLSEnabled(bindplane) {
+		return nil
+	}
+	// Cert-manager uses tls.crt, tls.key, ca.crt; user secret is mounted with Items to same names
+	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
+	envVars := []corev1.EnvVar{
+		{Name: bindplanePrometheusEnableTLSEnvVar, Value: "true"},
+		{Name: bindplanePrometheusTLSCertEnvVar, Value: internalTLSPrometheusClientMountPath + "/" + certKey},
+		{Name: bindplanePrometheusTLSKeyEnvVar, Value: internalTLSPrometheusClientMountPath + "/" + keyKey},
+		{Name: bindplanePrometheusTLSCAEnvVar, Value: internalTLSPrometheusClientMountPath + "/" + caKey},
+	}
+	if bindplane.Spec.Config.Prometheus.TLS.SkipVerify {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplanePrometheusTLSSkipVerifyEnvVar, Value: "true"})
+	}
+	return envVars
 }
 
 // getTransformAgentEnvVars returns the Transform Agent environment variables

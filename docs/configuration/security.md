@@ -39,6 +39,38 @@ To retrieve the password for manual access (e.g. to open the Prometheus UI in a 
 kubectl get secret <bindplane-name>-prometheus-basic-auth -n <namespace> -o jsonpath='{.data.password}' | base64 -d
 ```
 
+## Cert Manager and Prometheus mTLS (optional)
+
+You can use [cert-manager](https://cert-manager.io/) to have the operator automatically issue and rotate **mutual TLS** certificates for selected in-cluster interfaces, instead of supplying your own TLS Secrets.
+
+**Scope:** This applies only to TLS you configure under `spec.config.prometheus.tls`. It does **not** change:
+
+- Bindplane’s primary HTTP interface (port 3001)
+- Bindplane’s connection to PostgreSQL
+- Bindplane’s connection to the Transform Agent
+
+**Current support:** The first supported interface is **Prometheus remote write** (Bindplane → Prometheus). Enabling it turns on mTLS for that path: the operator creates cert-manager `Certificate` resources for a Prometheus server cert and a client cert, mounts the issued certs, and configures Prometheus and Bindplane pods accordingly. The same pattern will be used in future releases for NATS and other internal interfaces.
+
+### Prerequisites
+
+1. **Install cert-manager** in the cluster. Use the official installation guide:
+   - [cert-manager installation](https://cert-manager.io/docs/installation/)
+   - Ensure the cert-manager controller and webhook are running (e.g. in the `cert-manager` namespace).
+
+2. **Create an Issuer or ClusterIssuer** that can issue TLS certificates (e.g. a CA Issuer or ClusterIssuer). See [cert-manager Issuers](https://cert-manager.io/docs/configuration/).
+
+### Opt-in and configuration
+
+- For **cert-manager**: set `spec.config.prometheus.tls.certManager` with `name` (required), and optionally `kind` (`Issuer` or `ClusterIssuer`, default `Issuer`) and `group` (default `cert-manager.io`).
+- For **user-defined TLS**: set `spec.config.prometheus.tls.secretName` and optionally `certKey`, `keyKey`, `caKey`.
+- **Mutually exclusive**: do not set both `secretName` and `certManager` for Prometheus TLS.
+
+### Behavior
+
+- The operator creates cert-manager `Certificate` resources (owner-referenced to the Bindplane custom resource). cert-manager issues the certificates and writes them into Kubernetes Secrets.
+- The operator mounts those Secrets into the relevant pods and sets the appropriate environment variables (e.g. `BINDPLANE_PROMETHEUS_ENABLE_TLS`, `BINDPLANE_PROMETHEUS_TLS_CERT`, `BINDPLANE_PROMETHEUS_TLS_KEY`, `BINDPLANE_PROMETHEUS_TLS_CA` for Prometheus remote write).
+- Certificate renewal and rotation are handled by cert-manager; the operator does not modify the Secret data after cert-manager writes it.
+
 ## Summary
 
 | Secret / TLS | User-configurable? | Env vars (where applicable) | Where configured | Documentation |
@@ -50,3 +82,4 @@ kubectl get secret <bindplane-name>-prometheus-basic-auth -n <namespace> -o json
 | Postgres credentials & TLS | Yes | `BINDPLANE_POSTGRES_*`, `BINDPLANE_POSTGRES_SSL_*` | `spec.config.store.postgres` and `tls` | [Configuration – PostgreSQL](configuration.md#postgresql) |
 | Bindplane exposes own metrics (optional basic auth) | Yes | `BINDPLANE_METRICS_PROMETHEUS_USERNAME`, `BINDPLANE_METRICS_PROMETHEUS_PASSWORD` | `spec.config.metrics.prometheus` | [Configuration – Metrics](configuration.md#metrics) |
 | Prometheus remote write auth (operator Prometheus) | No (operator-generated) | `BINDPLANE_PROMETHEUS_AUTH_USERNAME`, `BINDPLANE_PROMETHEUS_AUTH_PASSWORD` | — | This document (above) |
+| Internal mTLS (cert-manager, e.g. Prometheus remote write) | Yes (opt-in) | `BINDPLANE_PROMETHEUS_ENABLE_TLS`, `BINDPLANE_PROMETHEUS_TLS_*` (when enabled) | `spec.config.prometheus.tls` | This document (Cert Manager and Prometheus mTLS); [Configuration – Prometheus TLS](configuration.md#prometheus-tls) |

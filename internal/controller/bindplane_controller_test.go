@@ -1420,7 +1420,7 @@ func envVarSecretKeyRef(envVars []corev1.EnvVar, name string) *corev1.SecretKeyS
 }
 
 var _ = Describe("getPrometheusEnvVars", func() {
-	It("returns enable_remote, host, port, and username/password from generated secret", func() {
+	It("returns enable_remote, host, port, and username/password from generated secret when internal TLS is disabled", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
 		}
@@ -1439,6 +1439,121 @@ var _ = Describe("getPrometheusEnvVars", func() {
 		Expect(refUser.Key).To(Equal(prometheusBasicAuthSecretKeyUser))
 		Expect(refPass.Name).To(Equal("my-bp-prometheus-basic-auth"))
 		Expect(refPass.Key).To(Equal(prometheusBasicAuthSecretKeyPass))
+	})
+	It("adds Prometheus TLS env vars when cert-manager TLS is enabled", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer", Kind: "ClusterIssuer"},
+						},
+					},
+				},
+			},
+		}
+		envVars := getPrometheusEnvVars(bindplane)
+		Expect(envVars).To(HaveLen(9))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CERT")).To(Equal(internalTLSPrometheusClientMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_KEY")).To(Equal(internalTLSPrometheusClientMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CA")).To(Equal(internalTLSPrometheusClientMountPath + "/ca.crt"))
+	})
+	It("adds BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY when prometheus TLS skipVerify is true", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer"},
+							SkipVerify:  true,
+						},
+					},
+				},
+			},
+		}
+		envVars := getPrometheusEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY")).To(Equal("true"))
+		Expect(envVars).To(HaveLen(10))
+	})
+})
+
+var _ = Describe("validatePrometheusTLSConfig (controller_test)", func() {
+	It("returns nil when config.Prometheus is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{Spec: bindplanev1alpha1.BindplaneSpec{Config: bindplanev1alpha1.BindplaneConfigSpec{License: "x", Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}}}}}
+		Expect(validatePrometheusTLSConfig(bindplane)).To(Succeed())
+	})
+	It("returns error when both secretName and certManager are set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+							SecretName:  "x",
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "issuer"},
+						},
+					},
+				},
+			},
+		}
+		Expect(validatePrometheusTLSConfig(bindplane)).NotTo(Succeed())
+		Expect(validatePrometheusTLSConfig(bindplane).Error()).To(ContainSubstring("mutually exclusive"))
+	})
+	It("returns nil when CertManager has a valid name", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer", Kind: "Issuer"},
+						},
+					},
+				},
+			},
+		}
+		Expect(validatePrometheusTLSConfig(bindplane)).To(Succeed())
+	})
+})
+
+var _ = Describe("getInternalTLSVolumesAndMounts", func() {
+	It("returns nil when cert-manager TLS is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		vols, mounts := getInternalTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+	It("returns one volume and one mount when cert-manager TLS is enabled", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca"},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getInternalTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(mounts).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal(internalTLSPrometheusClientVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("bp-prometheus-remote-write-client"))
+		Expect(mounts[0].Name).To(Equal(internalTLSPrometheusClientVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(internalTLSPrometheusClientMountPath))
 	})
 })
 

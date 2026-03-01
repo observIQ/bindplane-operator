@@ -16,6 +16,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [PostgreSQL](#postgresql)
 - [Tracing](#tracing)
 - [Metrics](#metrics)
+- [Prometheus](#prometheus)
 - [Max concurrency](#max-concurrency)
 - [Audit trail](#audit-trail)
 - [Scope](#scope)
@@ -485,6 +486,52 @@ spec:
       otlp:
         endpoint: otel-collector.observability.svc:4317
         insecure: true
+```
+
+## Prometheus
+
+### TLS
+
+TLS for the Prometheus remote write component is configured under `spec.config.prometheus.tls`. Use either a **user-defined Secret** (`secretName` plus key names) or **cert-manager** (`certManager`), not both.
+
+| CRD Field | Description |
+|---|---|
+| `spec.config.prometheus.tls.secretName` | Name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS). Omit when using certManager. |
+| `spec.config.prometheus.tls.certKey` | Key in the Secret for the TLS certificate. |
+| `spec.config.prometheus.tls.keyKey` | Key in the Secret for the TLS private key. |
+| `spec.config.prometheus.tls.caKey` | Key in the Secret for the CA certificate. |
+| `spec.config.prometheus.tls.certManager` | Reference to a cert-manager Issuer or ClusterIssuer to issue server and client certs (mTLS). Mutually exclusive with secretName. |
+| `spec.config.prometheus.tls.certManager.name` | Name of the Issuer or ClusterIssuer. |
+| `spec.config.prometheus.tls.certManager.kind` | `Issuer` or `ClusterIssuer`. Default: `Issuer`. |
+| `spec.config.prometheus.tls.certManager.group` | API group. Default: `cert-manager.io`. |
+| `spec.config.prometheus.tls.skipVerify` | When `true`, set `BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY=true` to disable TLS certificate verification (testing only). |
+
+When using cert-manager, see [Security: TLS and Secrets – Cert Manager and Prometheus mTLS](security.md#cert-manager-and-prometheus-mtls-optional) for prerequisites and behavior.
+
+Example (user-defined Secret):
+
+```yaml
+spec:
+  config:
+    prometheus:
+      tls:
+        secretName: my-prometheus-tls
+        certKey: tls.crt
+        keyKey: tls.key
+        caKey: ca.crt
+```
+
+Example (cert-manager):
+
+```yaml
+spec:
+  config:
+    prometheus:
+      tls:
+        certManager:
+          name: bindplane-ca-issuer
+          kind: ClusterIssuer
+          group: cert-manager.io
 ```
 
 ## Max concurrency

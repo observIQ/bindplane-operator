@@ -109,6 +109,7 @@ _Appears in:_
 | `metrics` _[MetricsConfig](#metricsconfig)_ | Metrics configuration for Bindplane. When omitted, defaults to prometheus type with interval 60s and endpoint /metrics. |  | Optional: \{\} <br /> |
 | `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
 | `auditTrail` _[AuditTrailConfig](#audittrailconfig)_ | AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365. |  | Optional: \{\} <br /> |
+| `prometheus` _[Prometheus](#prometheus)_ | Prometheus configures TLS for the Prometheus remote write component. |  | Optional: \{\} <br /> |
 
 
 #### BindplaneJobsComponentSpec
@@ -165,6 +166,25 @@ _Appears in:_
 | `nats` _[NatsComponentSpec](#natscomponentspec)_ | NATS pod specification | \{  \} | Optional: \{\} <br /> |
 
 
+
+
+#### CertManagerTLSIssuerRef
+
+
+
+CertManagerTLSIssuerRef references a cert-manager Issuer or ClusterIssuer.
+See https://cert-manager.io/docs/concepts/issuer/
+
+
+
+_Appears in:_
+- [PrometheusTLSConfig](#prometheustlsconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name is the name of the Issuer or ClusterIssuer resource. |  |  |
+| `kind` _string_ | Kind is the type of issuer. Either "Issuer" (namespaced) or "ClusterIssuer" (cluster-scoped). | Issuer | Enum: [Issuer ClusterIssuer] <br />Optional: \{\} <br /> |
+| `group` _string_ | Group is the API group of the issuer. Defaults to cert-manager.io. | cert-manager.io | Optional: \{\} <br /> |
 
 
 #### LDAPConfig
@@ -430,6 +450,22 @@ _Appears in:_
 | `keyKey` _string_ | KeyKey is the key in the Secret for the client private key (maps to sslKey). Set with CertKey for mutual TLS. |  | Optional: \{\} <br /> |
 
 
+#### Prometheus
+
+
+
+Prometheus configures the Prometheus component (Bindplane to Prometheus remote write).
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `tls` _[PrometheusTLSConfig](#prometheustlsconfig)_ | TLS configures TLS for Prometheus remote write. |  | Optional: \{\} <br /> |
+
+
 #### PrometheusComponentSpec
 
 
@@ -445,6 +481,28 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Prometheus |  | Type: object <br />Optional: \{\} <br /> |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for Prometheus |  | Optional: \{\} <br /> |
+
+
+#### PrometheusTLSConfig
+
+
+
+PrometheusTLSConfig defines TLS for Prometheus remote write.
+Exactly one of secretName (user-defined Secret) or certManager (cert-manager Issuer/ClusterIssuer) should be set.
+
+
+
+_Appears in:_
+- [Prometheus](#prometheus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `secretName` _string_ | SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS).<br />Omit when using certManager. |  | Optional: \{\} <br /> |
+| `certKey` _string_ | CertKey is the key in the Secret for the TLS certificate. |  | Optional: \{\} <br /> |
+| `keyKey` _string_ | KeyKey is the key in the Secret for the TLS private key. |  | Optional: \{\} <br /> |
+| `caKey` _string_ | CAKey is the key in the Secret for the CA certificate. |  | Optional: \{\} <br /> |
+| `certManager` _[CertManagerTLSIssuerRef](#certmanagertlsissuerref)_ | CertManager references a cert-manager Issuer or ClusterIssuer to issue server and client certs (mTLS).<br />Mutually exclusive with secretName. |  | Optional: \{\} <br /> |
+| `skipVerify` _boolean_ | SkipVerify disables TLS certificate verification for the Prometheus remote write client. Only set for testing. |  | Optional: \{\} <br /> |
 
 
 #### StorageSpec

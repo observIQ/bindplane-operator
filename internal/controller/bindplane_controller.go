@@ -161,12 +161,23 @@ const (
 	postgresTLSVolumeName = "postgres-tls"
 	postgresTLSMountPath  = "/etc/bindplane/postgres-tls"
 
+	// Internal TLS (cert-manager) volume mount for Prometheus remote write client cert
+	internalTLSPrometheusClientVolumeName = "prometheus-remote-write-tls"
+	internalTLSPrometheusClientMountPath  = "/etc/bindplane/prometheus-remote-write-tls"
+
 	// Prometheus configuration
 	bindplanePrometheusEnableRemoteEnvVar = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
 	bindplanePrometheusHostEnvVar         = "BINDPLANE_PROMETHEUS_HOST"
 	bindplanePrometheusPortEnvVar         = "BINDPLANE_PROMETHEUS_PORT"
 	bindplanePrometheusAuthUsernameEnvVar = "BINDPLANE_PROMETHEUS_AUTH_USERNAME"
 	bindplanePrometheusAuthPasswordEnvVar = "BINDPLANE_PROMETHEUS_AUTH_PASSWORD" // #nosec G101 -- env var name, not a credential
+
+	// Prometheus remote write TLS (cert-manager internal mTLS)
+	bindplanePrometheusEnableTLSEnvVar     = "BINDPLANE_PROMETHEUS_ENABLE_TLS"
+	bindplanePrometheusTLSCertEnvVar       = "BINDPLANE_PROMETHEUS_TLS_CERT"
+	bindplanePrometheusTLSKeyEnvVar        = "BINDPLANE_PROMETHEUS_TLS_KEY"
+	bindplanePrometheusTLSCAEnvVar         = "BINDPLANE_PROMETHEUS_TLS_CA"
+	bindplanePrometheusTLSSkipVerifyEnvVar = "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY"
 
 	// Transform Agent configuration
 	bindplaneTransformAgentEnableRemoteEnvVar = "BINDPLANE_TRANSFORM_AGENT_ENABLE_REMOTE"
@@ -274,6 +285,9 @@ type BindplaneReconciler struct {
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=issuers;clusterissuers,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -312,6 +326,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, statusErr
 		}
 		return ctrl.Result{}, nil
+	}
+
+	// Reconcile internal TLS certificates (cert-manager) before workloads that mount them.
+	if err := r.reconcileInternalTLSCertificates(ctx, bindplane, log); err != nil {
+		log.Error(err, "unable to reconcile internal TLS certificates")
+		return ctrl.Result{}, err
 	}
 
 	// Reconcile Transform Agent resources
@@ -770,15 +790,65 @@ func getPostgresTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1al
 	return bindplane.Spec.Config.Store.Postgres.TLS
 }
 
-// getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, and Postgres TLS.
+// getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, Postgres TLS,
+// and internal TLS (cert-manager, e.g. Prometheus remote write client cert).
 // Used by Node, Jobs, Jobs Migrate, and NATS so they receive all config TLS secrets when configured.
 func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
 	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
 	netVols, netMounts := getNetworkTLSVolumeAndMount(bindplane)
 	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
-	vols := append(append(ldapVols, netVols...), pgVols...)
-	mounts := append(append(ldapMounts, netMounts...), pgMounts...)
+	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
+	vols := append(append(append(ldapVols, netVols...), pgVols...), internalVols...)
+	mounts := append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...)
 	return vols, mounts
+}
+
+// getInternalTLSVolumesAndMounts returns volumes and mounts for Prometheus remote write client TLS (config.prometheus.tls).
+// Uses operator-created client cert secret when certManager is set, or user secret when secretName is set.
+func getInternalTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	if !isPrometheusClientTLSEnabled(bindplane) {
+		return nil, nil
+	}
+	tls := bindplane.Spec.Config.Prometheus.TLS
+	var vol corev1.Volume
+	if tls.CertManager != nil && tls.CertManager.Name != "" {
+		vol = corev1.Volume{
+			Name: internalTLSPrometheusClientVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{SecretName: getResourceName(bindplane, prometheusRemoteWriteClientCertSuffix)},
+			},
+		}
+	} else {
+		certKey, keyKey, caKey := tls.CertKey, tls.KeyKey, tls.CAKey
+		if certKey == "" {
+			certKey = "tls.crt"
+		}
+		if keyKey == "" {
+			keyKey = "tls.key"
+		}
+		if caKey == "" {
+			caKey = "ca.crt"
+		}
+		vol = corev1.Volume{
+			Name: internalTLSPrometheusClientVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: tls.SecretName,
+					Items: []corev1.KeyToPath{
+						{Key: certKey, Path: "tls.crt"},
+						{Key: keyKey, Path: "tls.key"},
+						{Key: caKey, Path: "ca.crt"},
+					},
+				},
+			},
+		}
+	}
+	mount := corev1.VolumeMount{
+		Name:      internalTLSPrometheusClientVolumeName,
+		MountPath: internalTLSPrometheusClientMountPath,
+		ReadOnly:  true,
+	}
+	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
 }
 
 // mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.

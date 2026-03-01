@@ -15,6 +15,7 @@ docker tag \
 make install
 make deploy
 
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.4/cert-manager.yaml
 minikube addons enable ingress
 make install-postgres-operator
 
@@ -24,9 +25,6 @@ kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
   --timeout=90s
-
-# Wait for bindplane-sample-node service to be created
-kubectl wait --for=condition=available --timeout=300s deployment/bindplane-sample-node || true
 
 # Create ingress for bindplane node service
 kubectl apply -f - <<EOF
