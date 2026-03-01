@@ -76,6 +76,9 @@ const (
 	prometheusWebServerTLSMountPath    = "/etc/prometheus-web-tls"
 	prometheusProbeClientTLSVolumeName = "prometheus-probe-client-tls"
 	prometheusProbeClientTLSMountPath  = "/etc/prometheus-probe-client"
+	// Probe basic auth: existing basic-auth secret mounted as files for promtool username_file/password_file.
+	prometheusProbeAuthVolumeName = "prometheus-probe-auth"
+	prometheusProbeAuthMountPath  = "/etc/prometheus-probe-auth"
 )
 
 // prometheusWebConfig is the structure of Prometheus web.config.file (basic auth + TLS).
@@ -102,10 +105,10 @@ type promtoolProbeHTTPConfig struct {
 	TLSConfig *promtoolProbeTLSConfig       `json:"tls_config,omitempty"`
 }
 
-// promtoolProbeBasicAuthConfig is the basic_auth section; username/password use env var expansion (e.g. ${BINDPLANE_PROMETHEUS_AUTH_USERNAME}).
+// promtoolProbeBasicAuthConfig is the basic_auth section; use username_file and password_file (plaintext files from mounted secret).
 type promtoolProbeBasicAuthConfig struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	UsernameFile string `json:"username_file"`
+	PasswordFile string `json:"password_file"`
 }
 
 type promtoolProbeTLSConfig struct {
@@ -165,12 +168,12 @@ func isPrometheusServerProbeTLSWithCA(bindplane *bindplanev1alpha1.Bindplane) bo
 // buildPrometheusProbeHTTPConfigYAML returns the probe-http.yml content for promtool exec probes when server TLS is enabled.
 // With cert-manager: use probe CLIENT cert (ClientAuth) and CA from server secret; server_name must match server cert SAN.
 // With user secret: use same paths as web (single secret); may use insecure_skip_verify if no CA.
-// basic_auth uses env vars BINDPLANE_PROMETHEUS_AUTH_USERNAME / BINDPLANE_PROMETHEUS_AUTH_PASSWORD (same as operator-generated basic auth secret).
+// basic_auth uses username_file and password_file (existing basic-auth secret mounted at prometheusProbeAuthMountPath).
 func buildPrometheusProbeHTTPConfigYAML(bindplane *bindplanev1alpha1.Bindplane) ([]byte, error) {
 	cfg := promtoolProbeHTTPConfig{
 		BasicAuth: &promtoolProbeBasicAuthConfig{
-			Username: "${BINDPLANE_PROMETHEUS_AUTH_USERNAME}",
-			Password: "${BINDPLANE_PROMETHEUS_AUTH_PASSWORD}",
+			UsernameFile: prometheusProbeAuthMountPath + "/username",
+			PasswordFile: prometheusProbeAuthMountPath + "/password",
 		},
 		TLSConfig: &promtoolProbeTLSConfig{
 			ServerName: getPrometheusProbeServerName(bindplane),
@@ -414,7 +417,7 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: append(getKubernetesEnvVars(prometheusContainerName), getPrometheusProbeBasicAuthEnvVars(bindplane)...),
+								Env: getKubernetesEnvVars(prometheusContainerName),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
 										corev1.ResourceMemory: resource.MustParse("500Mi"),
@@ -525,6 +528,18 @@ func getPrometheusVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volum
 					},
 				},
 			},
+			{
+				Name: prometheusProbeAuthVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: getResourceName(bindplane, prometheusBasicAuthSecretSuffix),
+						Items: []corev1.KeyToPath{
+							{Key: prometheusBasicAuthSecretKeyUser, Path: "username"},
+							{Key: prometheusBasicAuthSecretKeyPass, Path: "password"},
+						},
+					},
+				},
+			},
 		}
 	} else {
 		// User-defined secret; map keys to tls.crt, tls.key; optionally ca.crt when CAKey set (mTLS).
@@ -549,6 +564,18 @@ func getPrometheusVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volum
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: tls.SecretName,
 						Items:      items,
+					},
+				},
+			},
+			{
+				Name: prometheusProbeAuthVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: getResourceName(bindplane, prometheusBasicAuthSecretSuffix),
+						Items: []corev1.KeyToPath{
+							{Key: prometheusBasicAuthSecretKeyUser, Path: "username"},
+							{Key: prometheusBasicAuthSecretKeyPass, Path: "password"},
+						},
 					},
 				},
 			},
@@ -594,6 +621,7 @@ func getPrometheusVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 		} else {
 			mounts = append(mounts, corev1.VolumeMount{Name: prometheusTLSVolumeName, MountPath: prometheusTLSMountPath, ReadOnly: true})
 		}
+		mounts = append(mounts, corev1.VolumeMount{Name: prometheusProbeAuthVolumeName, MountPath: prometheusProbeAuthMountPath, ReadOnly: true})
 	} else {
 		// Secret with web.yml only (subPath so only that key is mounted)
 		mounts = append(mounts, corev1.VolumeMount{
@@ -604,35 +632,6 @@ func getPrometheusVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 		})
 	}
 	return mounts
-}
-
-// getPrometheusProbeBasicAuthEnvVars returns env vars for the operator-generated basic auth (username/password from secret).
-// Used by the Prometheus container when server TLS is enabled so probe-http.yml basic_auth can reference them.
-func getPrometheusProbeBasicAuthEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
-	if !isPrometheusServerTLSEnabled(bindplane) {
-		return nil
-	}
-	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
-	return []corev1.EnvVar{
-		{
-			Name: bindplanePrometheusAuthUsernameEnvVar,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-					Key:                  prometheusBasicAuthSecretKeyUser,
-				},
-			},
-		},
-		{
-			Name: bindplanePrometheusAuthPasswordEnvVar,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-					Key:                  prometheusBasicAuthSecretKeyPass,
-				},
-			},
-		},
-	}
 }
 
 // getPrometheusProbeCommand returns the exec command for startup/liveness/readiness probes (promtool check ready).
