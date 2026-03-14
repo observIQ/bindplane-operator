@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
@@ -52,10 +51,6 @@ const (
 	prometheusHTTPPort = 9090
 	// prometheusHTTPPortName is the name of the HTTP port for Prometheus
 	prometheusHTTPPortName = "http"
-	// prometheusLivenessProbePath is the HTTP path for the liveness probe
-	prometheusLivenessProbePath = "/-/healthy"
-	// prometheusReadinessProbePath is the HTTP path for the readiness probe
-	prometheusReadinessProbePath = "/-/ready"
 
 	// Prometheus basic auth (operator-generated secret)
 	prometheusBasicAuthSecretSuffix  = "prometheus-basic-auth"
@@ -79,6 +74,20 @@ const (
 	// Probe basic auth: existing basic-auth secret mounted as files for promtool username_file/password_file.
 	prometheusProbeAuthVolumeName = "prometheus-probe-auth"
 	prometheusProbeAuthMountPath  = "/etc/prometheus-probe-auth"
+
+	// Prometheus exec probe timing (matches reference out.yaml: startup/readiness use /-/ready, liveness uses /-/healthy).
+	prometheusProbeStartupFailureThreshold   int32 = 60
+	prometheusProbeStartupPeriodSeconds      int32 = 15
+	prometheusProbeStartupSuccessThreshold   int32 = 1
+	prometheusProbeStartupTimeoutSeconds     int32 = 3
+	prometheusProbeReadinessFailureThreshold int32 = 3
+	prometheusProbeReadinessPeriodSeconds    int32 = 5
+	prometheusProbeReadinessSuccessThreshold int32 = 1
+	prometheusProbeReadinessTimeoutSeconds   int32 = 3
+	prometheusProbeLivenessFailureThreshold  int32 = 6
+	prometheusProbeLivenessPeriodSeconds     int32 = 5
+	prometheusProbeLivenessSuccessThreshold  int32 = 1
+	prometheusProbeLivenessTimeoutSeconds    int32 = 3
 )
 
 // prometheusWebConfig is the structure of Prometheus web.config.file (basic auth + TLS).
@@ -428,40 +437,38 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 									},
 								},
 								VolumeMounts: volumeMounts,
-								// TODO(jsirianni): HTTP/HTTPS probes are not used when TLS is enabled because the server serves TLS and Kubernetes HTTPGet does not support TLS client auth. Use TCPSocket for now; add Bindplane CLI healthchecks (e.g. subcommand or endpoint) that support exec probes for proper TLS healthcheck (e.g. bindplane healthcheck or promtool over TLS) for readiness/liveness when available.
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(prometheusHTTPPortName),
+										Exec: &corev1.ExecAction{
+											Command: getPrometheusProbeCommand(bindplane, "ready"),
 										},
 									},
-									InitialDelaySeconds: probeStartupInitialDelaySeconds,
-									PeriodSeconds:       probeStartupPeriodSeconds,
-									FailureThreshold:    probeStartupFailureThreshold,
-									SuccessThreshold:    probeStartupSuccessThreshold,
-									TimeoutSeconds:      probeTimeoutSeconds,
+									PeriodSeconds:    prometheusProbeStartupPeriodSeconds,
+									FailureThreshold: prometheusProbeStartupFailureThreshold,
+									SuccessThreshold: prometheusProbeStartupSuccessThreshold,
+									TimeoutSeconds:   prometheusProbeStartupTimeoutSeconds,
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(prometheusHTTPPortName),
+										Exec: &corev1.ExecAction{
+											Command: getPrometheusProbeCommand(bindplane, "healthy"),
 										},
 									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
+									PeriodSeconds:    prometheusProbeLivenessPeriodSeconds,
+									FailureThreshold: prometheusProbeLivenessFailureThreshold,
+									SuccessThreshold: prometheusProbeLivenessSuccessThreshold,
+									TimeoutSeconds:   prometheusProbeLivenessTimeoutSeconds,
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(prometheusHTTPPortName),
+										Exec: &corev1.ExecAction{
+											Command: getPrometheusProbeCommand(bindplane, "ready"),
 										},
 									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
+									PeriodSeconds:    prometheusProbeReadinessPeriodSeconds,
+									FailureThreshold: prometheusProbeReadinessFailureThreshold,
+									SuccessThreshold: prometheusProbeReadinessSuccessThreshold,
+									TimeoutSeconds:   prometheusProbeReadinessTimeoutSeconds,
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
@@ -632,16 +639,17 @@ func getPrometheusVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	return mounts
 }
 
-// getPrometheusProbeCommand returns the exec command for startup/liveness/readiness probes (promtool check ready).
-// Uses HTTP when server TLS is disabled, HTTPS with probe-http.yml when TLS or mTLS is enabled.
-func getPrometheusProbeCommand(bindplane *bindplanev1alpha1.Bindplane) []string {
+// getPrometheusProbeCommand returns the exec command for startup/liveness/readiness probes.
+// check is "ready" (for /-/ready) or "healthy" (for /-/healthy). Uses HTTP when server TLS is disabled,
+// HTTPS with probe-http.yml when TLS or mTLS is enabled.
+func getPrometheusProbeCommand(bindplane *bindplanev1alpha1.Bindplane, check string) []string {
 	url := "http://127.0.0.1:" + fmt.Sprintf("%d", prometheusHTTPPort)
 	configFile := ""
 	if isPrometheusServerTLSEnabled(bindplane) {
 		url = "https://127.0.0.1:" + fmt.Sprintf("%d", prometheusHTTPPort)
 		configFile = " --http.config.file=" + prometheusWebConfigMountPath + "/" + prometheusProbeHTTPFileName
 	}
-	script := "promtool check ready --url=" + url + configFile
+	script := "promtool check " + check + " --url=" + url + configFile
 	return []string{"/bin/sh", "-ec", script}
 }
 

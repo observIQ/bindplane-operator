@@ -224,8 +224,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 								Resources: resources,
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
@@ -237,8 +236,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},
@@ -249,8 +247,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(bindplaneJobsHTTPPortName),
 										},
 									},

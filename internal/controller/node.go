@@ -141,8 +141,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								},
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
@@ -154,8 +153,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},
@@ -166,8 +164,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: healthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(nodeHTTPPortName),
 										},
 									},

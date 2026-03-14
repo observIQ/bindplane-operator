@@ -133,8 +133,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								},
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: transformAgentHealthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
@@ -146,8 +145,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: transformAgentHealthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
@@ -158,8 +156,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
-										HTTPGet: &corev1.HTTPGetAction{
-											Path: transformAgentHealthCheckPath,
+										TCPSocket: &corev1.TCPSocketAction{
 											Port: intstr.FromString(transformAgentHTTPPortName),
 										},
 									},
