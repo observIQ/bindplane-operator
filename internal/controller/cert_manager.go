@@ -171,7 +171,7 @@ func (r *BindplaneReconciler) reconcilePrometheusProbeClientCert(ctx context.Con
 		issuerRef,
 		nil,
 		nil,
-		stringPtr("prometheus-probe"),
+		new("prometheus-probe"),
 	)
 	if err := controllerutil.SetControllerReference(bindplane, clientCert, r.Scheme); err != nil {
 		return err
@@ -192,7 +192,7 @@ func (r *BindplaneReconciler) reconcilePrometheusRemoteWriteClientCert(ctx conte
 		issuerRef,
 		nil,
 		nil,
-		stringPtr("bindplane-prometheus-remote-write-client"),
+		new("bindplane-prometheus-remote-write-client"),
 	)
 	if err := controllerutil.SetControllerReference(bindplane, clientCert, r.Scheme); err != nil {
 		return err
@@ -363,7 +363,8 @@ func buildCertificate(
 	}
 }
 
-func stringPtr(s string) *string { return &s }
+//go:fix inline
+func stringPtr(s string) *string { return new(s) }
 
 func (r *BindplaneReconciler) reconcileCertificate(ctx context.Context, desired *cmapi.Certificate, log logr.Logger) error {
 	existing := &cmapi.Certificate{}

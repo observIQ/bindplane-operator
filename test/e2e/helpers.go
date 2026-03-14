@@ -26,9 +26,9 @@ import (
 )
 
 const (
-	certmanagerVersion   = "v1.16.3"
-	certmanagerURLTmpl   = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
-	projectDirE2ESuffix  = "/test/e2e"
+	certmanagerVersion  = "v1.16.3"
+	certmanagerURLTmpl  = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
+	projectDirE2ESuffix = "/test/e2e"
 )
 
 func run(cmd *exec.Cmd) (string, error) {
@@ -67,7 +67,7 @@ func runCmd(cmd *exec.Cmd) (string, error) {
 // getNonEmptyLines converts command output into lines and drops empty elements.
 func getNonEmptyLines(output string) []string {
 	var res []string
-	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSuffix(output, "\n"), "\n") {
 		if line != "" {
 			res = append(res, line)
 		}
