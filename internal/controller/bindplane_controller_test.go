@@ -63,6 +63,41 @@ var _ = Describe("validateBindplaneName", func() {
 	})
 })
 
+var _ = Describe("validateLicenseConfig", func() {
+	It("rejects when neither license nor licenseSecretRef is set", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{}
+		Expect(validateLicenseConfig(cfg)).NotTo(Succeed())
+	})
+
+	It("rejects when both license and licenseSecretRef are set", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			License: "test-license",
+			LicenseSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "bindplane-license"},
+				Key:                  "license",
+			},
+		}
+		Expect(validateLicenseConfig(cfg)).NotTo(Succeed())
+	})
+
+	It("accepts a direct license only", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			License: "test-license",
+		}
+		Expect(validateLicenseConfig(cfg)).To(Succeed())
+	})
+
+	It("accepts a license secret ref only", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			LicenseSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "bindplane-license"},
+				Key:                  "license",
+			},
+		}
+		Expect(validateLicenseConfig(cfg)).To(Succeed())
+	})
+})
+
 var _ = Describe("Bindplane Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -1427,7 +1462,7 @@ var _ = Describe("getPrometheusEnvVars", func() {
 		envVars := getPrometheusEnvVars(bindplane)
 		Expect(envVars).To(HaveLen(5))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal(enableRemoteValue))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-prometheus.default.svc"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(Equal("(secret)"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(Equal("(secret)"))

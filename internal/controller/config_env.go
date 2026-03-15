@@ -346,6 +346,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 // When internal TLS is enabled for Prometheus remote write, also adds BINDPLANE_PROMETHEUS_ENABLE_TLS and cert paths.
 func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	prometheusServiceName := getResourceName(bindplane, prometheusComponent)
+	prometheusHost := fmt.Sprintf("%s.%s.svc", prometheusServiceName, bindplane.Namespace)
 	prometheusPort := strconv.Itoa(int(prometheusHTTPPort))
 	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
 
@@ -356,7 +357,7 @@ func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVa
 		},
 		{
 			Name:  bindplanePrometheusHostEnvVar,
-			Value: prometheusServiceName,
+			Value: prometheusHost,
 		},
 		{
 			Name:  bindplanePrometheusPortEnvVar,

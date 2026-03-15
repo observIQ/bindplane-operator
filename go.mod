@@ -1,6 +1,6 @@
 module github.com/observiq/bindplane-operator
 
-go 1.26.1
+go 1.26.0
 
 require (
 	github.com/cert-manager/cert-manager v1.19.4

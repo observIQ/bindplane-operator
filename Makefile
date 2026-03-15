@@ -171,7 +171,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
 .PHONY: run-minikube-destructive
-run-minikube-destructive: generate fmt vet
+run-minikube-destructive:
 	@scripts/minikube.sh
 
 .PHONY: build-installer

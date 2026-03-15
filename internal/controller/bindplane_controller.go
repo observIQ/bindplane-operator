@@ -329,6 +329,23 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		return ctrl.Result{}, nil
 	}
+	if err := validateLicenseConfig(&bindplane.Spec.Config); err != nil {
+		log.Error(err, "invalid Bindplane config: license must be set via license or licenseSecretRef")
+		condition := metav1.Condition{
+			Type:               "Reconciled",
+			Status:             metav1.ConditionFalse,
+			Reason:             "InvalidConfig",
+			Message:            err.Error(),
+			ObservedGeneration: bindplane.Generation,
+			LastTransitionTime: metav1.Now(),
+		}
+		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
+			log.Error(statusErr, "failed to update Bindplane status")
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, nil
+	}
 
 	// Reconcile internal TLS certificates (cert-manager) before workloads that mount them.
 	if err := r.reconcileInternalTLSCertificates(ctx, bindplane, log); err != nil {
@@ -440,6 +457,19 @@ func validateBindplaneName(name string) error {
 		if c != '-' && !unicode.IsLower(c) && !unicode.IsDigit(c) {
 			return fmt.Errorf("name %q contains invalid character %q at position %d: only lowercase letters (a-z), digits (0-9), and hyphens are allowed", name, string(c), i)
 		}
+	}
+	return nil
+}
+
+// validateLicenseConfig ensures exactly one license source is configured.
+func validateLicenseConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
+	if config == nil {
+		return fmt.Errorf("spec.config is required")
+	}
+	hasLicense := config.License != ""
+	hasLicenseSecretRef := config.LicenseSecretRef != nil
+	if hasLicense == hasLicenseSecretRef {
+		return fmt.Errorf("exactly one of spec.config.license or spec.config.licenseSecretRef must be set")
 	}
 	return nil
 }

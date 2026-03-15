@@ -91,9 +91,12 @@ type BindplaneJobsMigrateComponentSpec struct {
 }
 
 // BindplaneConfigSpec defines Bindplane's configuration
+// +kubebuilder:validation:XValidation:rule="has(self.license) != has(self.licenseSecretRef)",message="exactly one of license or licenseSecretRef must be set"
 type BindplaneConfigSpec struct {
 	// License is the Bindplane license key
-	License string `json:"license"`
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	License string `json:"license,omitempty"`
 
 	// LicenseSecretRef references a Kubernetes Secret containing the Bindplane license key.
 	// Takes precedence over License if both are set.

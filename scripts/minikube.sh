@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-set -ex
+set -e
 
-if [ -z "${BINDPLANE_LICENSE:-}" ]; then
+if [ -z "${BINDPLANE_LICENSE}" ]; then
   echo "BINDPLANE_LICENSE is not set. Set it in your shell and re-run." >&2
   exit 1
 fi
@@ -31,17 +31,15 @@ kubectl wait --namespace ingress-nginx \
   --selector=app.kubernetes.io/component=controller \
   --timeout=90s
 
-# Create secrets for Bindplane license and system auth (script expects BINDPLANE_LICENSE; auth defaults to admin/password)
-BINDPLANE_AUTH_USERNAME="${BINDPLANE_AUTH_USERNAME:-admin}"
-BINDPLANE_AUTH_PASSWORD="${BINDPLANE_AUTH_PASSWORD:-password}"
+# Create secrets for Bindplane license (from env) and system auth (hardcoded test values)
 kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f -
 kubectl create secret generic bindplane-license \
   --from-literal=license="${BINDPLANE_LICENSE}" \
   --namespace=default \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl create secret generic bindplane-system-auth \
-  --from-literal=username="${BINDPLANE_AUTH_USERNAME}" \
-  --from-literal=password="${BINDPLANE_AUTH_PASSWORD}" \
+  --from-literal=username=admin \
+  --from-literal=password=password \
   --namespace=default \
   --dry-run=client -o yaml | kubectl apply -f -
 
