@@ -46,9 +46,9 @@ type BindplaneSpec struct {
 	// +kubebuilder:default={}
 	TransformAgent *TransformAgentComponentSpec `json:"transformAgent,omitempty"`
 
-	// Prometheus pod specification
+	// TSDB pod specification
 	// +optional
-	Prometheus *PrometheusComponentSpec `json:"prometheus,omitempty"`
+	TSDB *TSDBComponentSpec `json:"tsdb,omitempty"`
 
 	// NATS pod specification
 	// +optional
@@ -131,9 +131,9 @@ type BindplaneConfigSpec struct {
 	// +optional
 	AuditTrail *AuditTrailConfig `json:"auditTrail,omitempty"`
 
-	// Prometheus configures TLS for the Prometheus remote write component.
+	// TSDB configures TLS and remote settings for Bindplane's TSDB integration.
 	// +optional
-	Prometheus *Prometheus `json:"prometheus,omitempty"`
+	TSDB *TSDBConfig `json:"tsdb,omitempty"`
 
 	// Nats configures TLS for the NATS event bus (client and server). Cert-manager only.
 	// +optional
@@ -148,34 +148,34 @@ type AuditTrailConfig struct {
 	RetentionDays int `json:"retentionDays,omitempty"`
 }
 
-// Prometheus configures the Prometheus component (Bindplane to Prometheus remote write).
-type Prometheus struct {
-	// Remote configures Bindplane to use an externally managed Prometheus-compatible backend
-	// (for example, Prometheus, Mimir, or VictoriaMetrics) instead of the operator-managed Prometheus StatefulSet.
+// TSDBConfig configures Bindplane's TSDB component (default implementation: Prometheus).
+type TSDBConfig struct {
+	// Remote configures Bindplane to use an externally managed TSDB-compatible backend
+	// (for example, Prometheus, Mimir, or VictoriaMetrics) instead of the operator-managed TSDB StatefulSet.
 	// +optional
-	Remote *PrometheusRemoteConfig `json:"remote,omitempty"`
+	Remote *TSDBRemoteConfig `json:"remote,omitempty"`
 
-	// TLS configures TLS for Prometheus remote write.
+	// TLS configures TLS for TSDB remote write.
 	// +optional
-	TLS *PrometheusTLSConfig `json:"tls,omitempty"`
+	TLS *TSDBTLSConfig `json:"tls,omitempty"`
 }
 
-// PrometheusRemoteConfig defines how Bindplane connects to an externally managed Prometheus-compatible backend.
+// TSDBRemoteConfig defines how Bindplane connects to an externally managed TSDB-compatible backend.
 // +kubebuilder:validation:XValidation:rule="self.enable || (!has(self.host) && !has(self.queryPathPrefix) && !has(self.remoteWrite) && !has(self.port))",message="host, port, queryPathPrefix, and remoteWrite must be unset when enable is false"
 // +kubebuilder:validation:XValidation:rule="!self.enable || has(self.host)",message="host is required when enable is true"
 // +kubebuilder:validation:XValidation:rule="!self.enable || has(self.port)",message="port is required when enable is true"
-type PrometheusRemoteConfig struct {
-	// Enable controls whether Bindplane should connect to an external Prometheus-compatible backend.
+type TSDBRemoteConfig struct {
+	// Enable controls whether Bindplane should connect to an external TSDB-compatible backend.
 	// When false, all other fields in this object must be omitted.
 	// +optional
 	Enable bool `json:"enable,omitempty"`
 
-	// Host is the hostname or IP of the external Prometheus-compatible backend.
+	// Host is the hostname or IP of the external TSDB-compatible backend.
 	// Required when enable is true.
 	// +optional
 	Host string `json:"host,omitempty"`
 
-	// Port is the TCP port of the external Prometheus-compatible backend.
+	// Port is the TCP port of the external TSDB-compatible backend.
 	// Required when enable is true.
 	// +optional
 	// +kubebuilder:default=9090
@@ -185,14 +185,14 @@ type PrometheusRemoteConfig struct {
 	// +optional
 	QueryPathPrefix string `json:"queryPathPrefix,omitempty"`
 
-	// RemoteWrite optionally overrides where Bindplane sends remote write traffic.
+	// RemoteWrite optionally overrides where Bindplane sends TSDB remote write traffic.
 	// +optional
-	RemoteWrite *PrometheusRemoteWriteConfig `json:"remoteWrite,omitempty"`
+	RemoteWrite *TSDBRemoteWriteConfig `json:"remoteWrite,omitempty"`
 }
 
-// PrometheusRemoteWriteConfig defines optional remote write endpoint overrides.
+// TSDBRemoteWriteConfig defines optional remote write endpoint overrides.
 // +kubebuilder:validation:XValidation:rule="(has(self.host) && has(self.port)) || (!has(self.host) && !has(self.port))",message="host and port must be set together"
-type PrometheusRemoteWriteConfig struct {
+type TSDBRemoteWriteConfig struct {
 	// Host is the remote write hostname or IP. Must be set together with port.
 	// +optional
 	Host string `json:"host,omitempty"`
@@ -207,9 +207,9 @@ type PrometheusRemoteWriteConfig struct {
 	Endpoint string `json:"endpoint,omitempty"`
 }
 
-// PrometheusTLSConfig defines TLS for Prometheus remote write.
+// TSDBTLSConfig defines TLS for TSDB remote write.
 // Exactly one of secretName (user-defined Secret) or certManager (cert-manager Issuer/ClusterIssuer) should be set.
-type PrometheusTLSConfig struct {
+type TSDBTLSConfig struct {
 	// SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS).
 	// Omit when using certManager.
 	// +optional
@@ -232,7 +232,7 @@ type PrometheusTLSConfig struct {
 	// +optional
 	CertManager *CertManagerTLSIssuerRef `json:"certManager,omitempty"`
 
-	// SkipVerify disables TLS certificate verification for the Prometheus remote write client. Only set for testing.
+	// SkipVerify disables TLS certificate verification for the TSDB remote write client. Only set for testing.
 	// +optional
 	SkipVerify bool `json:"skipVerify,omitempty"`
 }
@@ -364,22 +364,23 @@ type TransformAgentComponentSpec struct {
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 
-// PrometheusComponentSpec defines the Prometheus component pod specification
-type PrometheusComponentSpec struct {
-	// PodTemplate defines pod template specification for Prometheus
+// TSDBComponentSpec defines the TSDB component pod specification.
+// By default, this deploys a Prometheus StatefulSet managed by the operator.
+type TSDBComponentSpec struct {
+	// PodTemplate defines pod template specification for the TSDB component
 	// +optional
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 
-	// Storage defines the persistent storage configuration for Prometheus
+	// Storage defines the persistent storage configuration for the TSDB component
 	// +optional
 	Storage *StorageSpec `json:"storage,omitempty"`
 
-	// TLS configures TLS for the Prometheus server (StatefulSet). Use either secretName (user-defined Secret)
-	// or certManager (cert-manager Issuer/ClusterIssuer), not both. When set, Prometheus serves remote write over TLS.
+	// TLS configures TLS for the TSDB server (StatefulSet). Use either secretName (user-defined Secret)
+	// or certManager (cert-manager Issuer/ClusterIssuer), not both. When set, the TSDB serves remote write over TLS.
 	// +optional
-	TLS *PrometheusTLSConfig `json:"tls,omitempty"`
+	TLS *TSDBTLSConfig `json:"tls,omitempty"`
 }
 
 // NatsComponentSpec defines the NATS component pod specification

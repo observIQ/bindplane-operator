@@ -39,7 +39,7 @@ The default deployment configuration is suitable for managing 0 to 10,000 collec
 - **Memory Request**: 1024Mi
 - **Memory Limit**: 1024Mi
 
-### Bindplane Prometheus
+### Bindplane TSDB (Prometheus by default)
 - **Replicas**: 1 (scales vertically)
 - **CPU Request**: 250m
 - **Memory Request**: 500Mi
@@ -56,7 +56,7 @@ For smaller deployments managing up to 1,000 collectors, you can reduce resource
 - **Bindplane Jobs Migrate**: 1 replica, 100m CPU, 1024Mi memory
 - **Bindplane NATS**: 1 replica, 100m CPU, 256Mi memory
 - **Bindplane Transform Agent**: 1 replica, 100m CPU, 512Mi memory
-- **Bindplane Prometheus**: 1 replica, 100m CPU, 256Mi memory
+- **Bindplane TSDB (Prometheus default)**: 1 replica, 100m CPU, 256Mi memory
 
 **Note**: 
 - The `bindplane.podTemplate` applies to Bindplane Node, Jobs, and Jobs Migrate (all use container name "server")

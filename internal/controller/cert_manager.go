@@ -34,35 +34,35 @@ import (
 // Internal TLS certificate name suffixes (resource names and secret names).
 // Pattern: one reconcile helper per interface; add suffixes for NATS, etc. later.
 const (
-	prometheusRemoteWriteServerCertSuffix = "prometheus-remote-write-server"
-	prometheusRemoteWriteClientCertSuffix = "prometheus-remote-write-client"
-	// prometheusProbeClientCertSuffix is the client cert for Prometheus pod's promtool (probe); ClientAuth EKU only.
-	prometheusProbeClientCertSuffix = "prometheus-probe-client"
-	natsTLSCertSuffix               = "nats-tls"
+	tsdbRemoteWriteServerCertSuffix = "tsdb-remote-write-server"
+	tsdbRemoteWriteClientCertSuffix = "tsdb-remote-write-client"
+	// tsdbProbeClientCertSuffix is the client cert for Prometheus pod's promtool (probe); ClientAuth EKU only.
+	tsdbProbeClientCertSuffix = "tsdb-probe-client"
+	natsTLSCertSuffix         = "nats-tls"
 )
 
 // reconcileInternalTLSCertificates reconciles cert-manager Certificate resources for
 // internal mTLS (Prometheus remote write). Run before Prometheus and Node/Jobs so issued secrets exist.
-// Server cert: when spec.prometheus.tls.certManager is set. Client cert: when spec.config.prometheus.tls.certManager is set.
+// Server cert: when spec.tsdb.tls.certManager is set. Client cert: when spec.config.tsdb.tls.certManager is set.
 func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	// Server cert (Prometheus StatefulSet)
-	if isPrometheusServerCertManagerTLSEnabled(bindplane) {
-		if err := validatePrometheusComponentTLSConfig(bindplane); err != nil {
+	if isTSDBServerCertManagerTLSEnabled(bindplane) {
+		if err := validateTSDBComponentTLSConfig(bindplane); err != nil {
 			return err
 		}
-		if err := r.reconcilePrometheusRemoteWriteServerCert(ctx, bindplane, log); err != nil {
+		if err := r.reconcileTSDBRemoteWriteServerCert(ctx, bindplane, log); err != nil {
 			return err
 		}
-		if err := r.reconcilePrometheusProbeClientCert(ctx, bindplane, log); err != nil {
+		if err := r.reconcileTSDBProbeClientCert(ctx, bindplane, log); err != nil {
 			return err
 		}
 	}
 	// Client cert (Bindplane Node, Jobs, NATS)
-	if isPrometheusClientCertManagerTLSEnabled(bindplane) {
-		if err := validatePrometheusTLSConfig(bindplane); err != nil {
+	if isTSDBClientCertManagerTLSEnabled(bindplane) {
+		if err := validateTSDBTLSConfig(bindplane); err != nil {
 			return err
 		}
-		if err := r.reconcilePrometheusRemoteWriteClientCert(ctx, bindplane, log); err != nil {
+		if err := r.reconcileTSDBRemoteWriteClientCert(ctx, bindplane, log); err != nil {
 			return err
 		}
 	}
@@ -78,30 +78,30 @@ func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Conte
 	return nil
 }
 
-// isPrometheusClientCertManagerTLSEnabled returns true when cert-manager is used for the Bindplane→Prometheus client cert (spec.config.prometheus.tls.certManager).
-func isPrometheusClientCertManagerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
-	p := bindplane.Spec.Config.Prometheus
+// isTSDBClientCertManagerTLSEnabled returns true when cert-manager is used for the Bindplane→TSDB client cert (spec.config.tsdb.tls.certManager).
+func isTSDBClientCertManagerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.Config.TSDB
 	return p != nil && p.TLS != nil && p.TLS.CertManager != nil && p.TLS.CertManager.Name != ""
 }
 
-// isPrometheusClientTLSEnabled returns true when the Bindplane client should use TLS for Prometheus remote write (config.prometheus.tls with certManager or secretName).
-func isPrometheusClientTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
-	p := bindplane.Spec.Config.Prometheus
+// isTSDBClientTLSEnabled returns true when the Bindplane client should use TLS for TSDB remote write (config.tsdb.tls with certManager or secretName).
+func isTSDBClientTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.Config.TSDB
 	if p == nil || p.TLS == nil {
 		return false
 	}
 	return (p.TLS.CertManager != nil && p.TLS.CertManager.Name != "") || p.TLS.SecretName != ""
 }
 
-// isPrometheusServerCertManagerTLSEnabled returns true when cert-manager is used for the Prometheus server cert (spec.prometheus.tls.certManager).
-func isPrometheusServerCertManagerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
-	p := bindplane.Spec.Prometheus
+// isTSDBServerCertManagerTLSEnabled returns true when cert-manager is used for the TSDB server cert (spec.tsdb.tls.certManager).
+func isTSDBServerCertManagerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.TSDB
 	return p != nil && p.TLS != nil && p.TLS.CertManager != nil && p.TLS.CertManager.Name != ""
 }
 
-// validatePrometheusComponentTLSConfig returns an error when spec.prometheus.tls has both secretName and certManager set.
-func validatePrometheusComponentTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
-	p := bindplane.Spec.Prometheus
+// validateTSDBComponentTLSConfig returns an error when spec.tsdb.tls has both secretName and certManager set.
+func validateTSDBComponentTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
+	p := bindplane.Spec.TSDB
 	if p == nil || p.TLS == nil {
 		return nil
 	}
@@ -109,15 +109,15 @@ func validatePrometheusComponentTLSConfig(bindplane *bindplanev1alpha1.Bindplane
 	hasSecret := tls.SecretName != ""
 	hasCertManager := tls.CertManager != nil && tls.CertManager.Name != ""
 	if hasSecret && hasCertManager {
-		return fmt.Errorf("spec.prometheus.tls: secretName and certManager are mutually exclusive")
+		return fmt.Errorf("spec.tsdb.tls: secretName and certManager are mutually exclusive")
 	}
 	return nil
 }
 
-// validatePrometheusTLSConfig returns an error when tls is set but both or neither of secretName and certManager are set,
+// validateTSDBTLSConfig returns an error when tls is set but both or neither of secretName and certManager are set,
 // or when certManager is set with an empty name.
-func validatePrometheusTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
-	cfg := bindplane.Spec.Config.Prometheus
+func validateTSDBTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
+	cfg := bindplane.Spec.Config.TSDB
 	if cfg == nil || cfg.TLS == nil {
 		return nil
 	}
@@ -125,7 +125,7 @@ func validatePrometheusTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
 	hasSecret := tls.SecretName != ""
 	hasCertManager := tls.CertManager != nil && tls.CertManager.Name != ""
 	if hasSecret && hasCertManager {
-		return fmt.Errorf("spec.config.prometheus.tls: secretName and certManager are mutually exclusive")
+		return fmt.Errorf("spec.config.tsdb.tls: secretName and certManager are mutually exclusive")
 	}
 	if !hasSecret && !hasCertManager {
 		return nil // tls block present but neither set is valid (no-op)
@@ -137,15 +137,15 @@ func validatePrometheusTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
 	return nil
 }
 
-// reconcilePrometheusRemoteWriteServerCert creates or updates the server Certificate for the Prometheus StatefulSet.
+// reconcileTSDBRemoteWriteServerCert creates or updates the server Certificate for the Prometheus StatefulSet.
 // Server cert: ServerAuth EKU only; DNS SANs for service name; optional localhost and 127.0.0.1 for probes.
-func (r *BindplaneReconciler) reconcilePrometheusRemoteWriteServerCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	issuerRef := issuerRefToCM(*bindplane.Spec.Prometheus.TLS.CertManager)
-	serverDNSNames := getPrometheusServerCertDNSNames(bindplane)
+func (r *BindplaneReconciler) reconcileTSDBRemoteWriteServerCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	issuerRef := issuerRefToCM(*bindplane.Spec.TSDB.TLS.CertManager)
+	serverDNSNames := getTSDBServerCertDNSNames(bindplane)
 	serverCert := buildCertificate(
 		bindplane,
-		getResourceName(bindplane, prometheusRemoteWriteServerCertSuffix),
-		getResourceName(bindplane, prometheusRemoteWriteServerCertSuffix),
+		getResourceName(bindplane, tsdbRemoteWriteServerCertSuffix),
+		getResourceName(bindplane, tsdbRemoteWriteServerCertSuffix),
 		issuerRef,
 		serverDNSNames,
 		[]string{"127.0.0.1"},
@@ -160,18 +160,18 @@ func (r *BindplaneReconciler) reconcilePrometheusRemoteWriteServerCert(ctx conte
 	return nil
 }
 
-// reconcilePrometheusProbeClientCert creates or updates the client Certificate for the Prometheus pod's promtool (probe).
+// reconcileTSDBProbeClientCert creates or updates the client Certificate for the Prometheus pod's promtool (probe).
 // Client cert: ClientAuth EKU only; used by probe-http.yml so promtool can authenticate to the Prometheus web server (mTLS).
-func (r *BindplaneReconciler) reconcilePrometheusProbeClientCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	issuerRef := issuerRefToCM(*bindplane.Spec.Prometheus.TLS.CertManager)
+func (r *BindplaneReconciler) reconcileTSDBProbeClientCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	issuerRef := issuerRefToCM(*bindplane.Spec.TSDB.TLS.CertManager)
 	clientCert := buildCertificate(
 		bindplane,
-		getResourceName(bindplane, prometheusProbeClientCertSuffix),
-		getResourceName(bindplane, prometheusProbeClientCertSuffix),
+		getResourceName(bindplane, tsdbProbeClientCertSuffix),
+		getResourceName(bindplane, tsdbProbeClientCertSuffix),
 		issuerRef,
 		nil,
 		nil,
-		new("prometheus-probe"),
+		new("tsdb-probe"),
 	)
 	if err := controllerutil.SetControllerReference(bindplane, clientCert, r.Scheme); err != nil {
 		return err
@@ -182,17 +182,17 @@ func (r *BindplaneReconciler) reconcilePrometheusProbeClientCert(ctx context.Con
 	return nil
 }
 
-// reconcilePrometheusRemoteWriteClientCert creates or updates the client Certificate for Bindplane pods (Node, Jobs, NATS).
-func (r *BindplaneReconciler) reconcilePrometheusRemoteWriteClientCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	issuerRef := issuerRefToCM(*bindplane.Spec.Config.Prometheus.TLS.CertManager)
+// reconcileTSDBRemoteWriteClientCert creates or updates the client Certificate for Bindplane pods (Node, Jobs, NATS).
+func (r *BindplaneReconciler) reconcileTSDBRemoteWriteClientCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	issuerRef := issuerRefToCM(*bindplane.Spec.Config.TSDB.TLS.CertManager)
 	clientCert := buildCertificate(
 		bindplane,
-		getResourceName(bindplane, prometheusRemoteWriteClientCertSuffix),
-		getResourceName(bindplane, prometheusRemoteWriteClientCertSuffix),
+		getResourceName(bindplane, tsdbRemoteWriteClientCertSuffix),
+		getResourceName(bindplane, tsdbRemoteWriteClientCertSuffix),
 		issuerRef,
 		nil,
 		nil,
-		new("bindplane-prometheus-remote-write-client"),
+		new("bindplane-tsdb-remote-write-client"),
 	)
 	if err := controllerutil.SetControllerReference(bindplane, clientCert, r.Scheme); err != nil {
 		return err
@@ -203,8 +203,8 @@ func (r *BindplaneReconciler) reconcilePrometheusRemoteWriteClientCert(ctx conte
 	return nil
 }
 
-func getPrometheusServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string {
-	name := getResourceName(bindplane, prometheusComponent)
+func getTSDBServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string {
+	name := getResourceName(bindplane, tsdbComponent)
 	ns := bindplane.Namespace
 	return []string{
 		fmt.Sprintf("%s.%s.svc.cluster.local", name, ns),

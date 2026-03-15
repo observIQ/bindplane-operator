@@ -161,31 +161,31 @@ const (
 	postgresTLSVolumeName = "postgres-tls"
 	postgresTLSMountPath  = "/etc/bindplane/postgres-tls"
 
-	// Internal TLS (cert-manager) volume mount for Prometheus remote write client cert
-	internalTLSPrometheusClientVolumeName = "prometheus-remote-write-tls"
-	internalTLSPrometheusClientMountPath  = "/etc/bindplane/prometheus-remote-write-tls"
+	// Internal TLS (cert-manager) volume mount for TSDB remote write client cert
+	internalTLSTSDBClientVolumeName = "tsdb-remote-write-tls"
+	internalTLSTSDBClientMountPath  = "/etc/bindplane/tsdb-remote-write-tls"
 
 	// Internal TLS (cert-manager) volume mount for NATS (client, cluster, HTTP)
 	internalTLSNatsVolumeName = "nats-tls"
 	internalTLSNatsMountPath  = "/etc/bindplane/nats-tls"
 
 	// Prometheus configuration
-	bindplanePrometheusEnableRemoteEnvVar        = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
-	bindplanePrometheusHostEnvVar                = "BINDPLANE_PROMETHEUS_HOST"
-	bindplanePrometheusPortEnvVar                = "BINDPLANE_PROMETHEUS_PORT"
-	bindplanePrometheusQueryPathPrefixEnvVar     = "BINDPLANE_PROMETHEUS_QUERY_PATH_PREFIX"
-	bindplanePrometheusRemoteWriteHostEnvVar     = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_HOST"
-	bindplanePrometheusRemoteWritePortEnvVar     = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_PORT"
-	bindplanePrometheusRemoteWriteEndpointEnvVar = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT"
-	bindplanePrometheusAuthUsernameEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_USERNAME"
-	bindplanePrometheusAuthPasswordEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplaneTSDBEnableRemoteEnvVar        = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
+	bindplaneTSDBHostEnvVar                = "BINDPLANE_PROMETHEUS_HOST"
+	bindplaneTSDBPortEnvVar                = "BINDPLANE_PROMETHEUS_PORT"
+	bindplaneTSDBQueryPathPrefixEnvVar     = "BINDPLANE_PROMETHEUS_QUERY_PATH_PREFIX"
+	bindplaneTSDBRemoteWriteHostEnvVar     = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_HOST"
+	bindplaneTSDBRemoteWritePortEnvVar     = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_PORT"
+	bindplaneTSDBRemoteWriteEndpointEnvVar = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT"
+	bindplaneTSDBAuthUsernameEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_USERNAME"
+	bindplaneTSDBAuthPasswordEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_PASSWORD" // #nosec G101 -- env var name, not a credential
 
 	// Prometheus remote write TLS (cert-manager internal mTLS)
-	bindplanePrometheusEnableTLSEnvVar     = "BINDPLANE_PROMETHEUS_ENABLE_TLS"
-	bindplanePrometheusTLSCertEnvVar       = "BINDPLANE_PROMETHEUS_TLS_CERT"
-	bindplanePrometheusTLSKeyEnvVar        = "BINDPLANE_PROMETHEUS_TLS_KEY"
-	bindplanePrometheusTLSCAEnvVar         = "BINDPLANE_PROMETHEUS_TLS_CA"
-	bindplanePrometheusTLSSkipVerifyEnvVar = "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY"
+	bindplaneTSDBEnableTLSEnvVar     = "BINDPLANE_PROMETHEUS_ENABLE_TLS"
+	bindplaneTSDBTLSCertEnvVar       = "BINDPLANE_PROMETHEUS_TLS_CERT"
+	bindplaneTSDBTLSKeyEnvVar        = "BINDPLANE_PROMETHEUS_TLS_KEY"
+	bindplaneTSDBTLSCAEnvVar         = "BINDPLANE_PROMETHEUS_TLS_CA"
+	bindplaneTSDBTLSSkipVerifyEnvVar = "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY"
 
 	// Transform Agent configuration
 	bindplaneTransformAgentEnableRemoteEnvVar = "BINDPLANE_TRANSFORM_AGENT_ENABLE_REMOTE"
@@ -364,7 +364,7 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Reconcile Prometheus resources
-	if err := r.reconcilePrometheus(ctx, bindplane, log); err != nil {
+	if err := r.reconcileTSDB(ctx, bindplane, log); err != nil {
 		log.Error(err, "unable to reconcile Prometheus")
 		return ctrl.Result{}, err
 	}
@@ -843,16 +843,16 @@ func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]cor
 // getInternalTLSVolumesAndMounts returns volumes and mounts for Prometheus remote write client TLS (config.prometheus.tls).
 // Uses operator-created client cert secret when certManager is set, or user secret when secretName is set.
 func getInternalTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
-	if !isPrometheusClientTLSEnabled(bindplane) {
+	if !isTSDBClientTLSEnabled(bindplane) {
 		return nil, nil
 	}
-	tls := bindplane.Spec.Config.Prometheus.TLS
+	tls := bindplane.Spec.Config.TSDB.TLS
 	var vol corev1.Volume
 	if tls.CertManager != nil && tls.CertManager.Name != "" {
 		vol = corev1.Volume{
-			Name: internalTLSPrometheusClientVolumeName,
+			Name: internalTLSTSDBClientVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{SecretName: getResourceName(bindplane, prometheusRemoteWriteClientCertSuffix)},
+				Secret: &corev1.SecretVolumeSource{SecretName: getResourceName(bindplane, tsdbRemoteWriteClientCertSuffix)},
 			},
 		}
 	} else {
@@ -867,7 +867,7 @@ func getInternalTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]c
 			caKey = "ca.crt"
 		}
 		vol = corev1.Volume{
-			Name: internalTLSPrometheusClientVolumeName,
+			Name: internalTLSTSDBClientVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: tls.SecretName,
@@ -881,8 +881,8 @@ func getInternalTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]c
 		}
 	}
 	mount := corev1.VolumeMount{
-		Name:      internalTLSPrometheusClientVolumeName,
-		MountPath: internalTLSPrometheusClientMountPath,
+		Name:      internalTLSTSDBClientVolumeName,
+		MountPath: internalTLSTSDBClientMountPath,
 		ReadOnly:  true,
 	}
 	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}

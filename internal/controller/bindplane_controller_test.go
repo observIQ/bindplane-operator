@@ -1455,15 +1455,15 @@ func envVarSecretKeyRef(envVars []corev1.EnvVar, name string) *corev1.SecretKeyS
 	return nil
 }
 
-var _ = Describe("getPrometheusEnvVars", func() {
+var _ = Describe("getTSDBEnvVars", func() {
 	It("returns enable_remote, host, port, and username/password from generated secret when internal TLS is disabled", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
 		}
-		envVars := getPrometheusEnvVars(bindplane)
+		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVars).To(HaveLen(5))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-prometheus.default.svc"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-tsdb.default.svc"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(Equal("(secret)"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(Equal("(secret)"))
@@ -1471,10 +1471,10 @@ var _ = Describe("getPrometheusEnvVars", func() {
 		refPass := envVarSecretKeyRef(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")
 		Expect(refUser).ToNot(BeNil())
 		Expect(refPass).ToNot(BeNil())
-		Expect(refUser.Name).To(Equal("my-bp-prometheus-basic-auth"))
-		Expect(refUser.Key).To(Equal(prometheusBasicAuthSecretKeyUser))
-		Expect(refPass.Name).To(Equal("my-bp-prometheus-basic-auth"))
-		Expect(refPass.Key).To(Equal(prometheusBasicAuthSecretKeyPass))
+		Expect(refUser.Name).To(Equal("my-bp-tsdb-basic-auth"))
+		Expect(refUser.Key).To(Equal(tsdbBasicAuthSecretKeyUser))
+		Expect(refPass.Name).To(Equal("my-bp-tsdb-basic-auth"))
+		Expect(refPass.Key).To(Equal(tsdbBasicAuthSecretKeyPass))
 	})
 	It("uses remote Prometheus env vars and skips operator-generated basic auth when remote.enable is true", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
@@ -1483,12 +1483,12 @@ var _ = Describe("getPrometheusEnvVars", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						Remote: &bindplanev1alpha1.PrometheusRemoteConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
 							Enable:          true,
 							Host:            "vm.example.internal",
 							QueryPathPrefix: "/select/0/prometheus",
-							RemoteWrite: &bindplanev1alpha1.PrometheusRemoteWriteConfig{
+							RemoteWrite: &bindplanev1alpha1.TSDBRemoteWriteConfig{
 								Host: "vm-write.example.internal",
 								Port: 8480,
 							},
@@ -1497,7 +1497,7 @@ var _ = Describe("getPrometheusEnvVars", func() {
 				},
 			},
 		}
-		envVars := getPrometheusEnvVars(bindplane)
+		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("vm.example.internal"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
@@ -1515,12 +1515,12 @@ var _ = Describe("getPrometheusEnvVars", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						Remote: &bindplanev1alpha1.PrometheusRemoteConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
 							Enable: true,
 							Host:   "vm.example.internal",
 							Port:   8080,
-							RemoteWrite: &bindplanev1alpha1.PrometheusRemoteWriteConfig{
+							RemoteWrite: &bindplanev1alpha1.TSDBRemoteWriteConfig{
 								Host:     "vm-write.example.internal",
 								Port:     18480,
 								Endpoint: "/api/v1/push",
@@ -1530,7 +1530,7 @@ var _ = Describe("getPrometheusEnvVars", func() {
 				},
 			},
 		}
-		envVars := getPrometheusEnvVars(bindplane)
+		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("8080"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT")).To(Equal("/api/v1/push"))
 	})
@@ -1541,20 +1541,20 @@ var _ = Describe("getPrometheusEnvVars", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer", Kind: "ClusterIssuer"},
 						},
 					},
 				},
 			},
 		}
-		envVars := getPrometheusEnvVars(bindplane)
+		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVars).To(HaveLen(9))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CERT")).To(Equal(internalTLSPrometheusClientMountPath + "/tls.crt"))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_KEY")).To(Equal(internalTLSPrometheusClientMountPath + "/tls.key"))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CA")).To(Equal(internalTLSPrometheusClientMountPath + "/ca.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CERT")).To(Equal(internalTLSTSDBClientMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_KEY")).To(Equal(internalTLSTSDBClientMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CA")).To(Equal(internalTLSTSDBClientMountPath + "/ca.crt"))
 	})
 	It("adds BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY when prometheus TLS skipVerify is true", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
@@ -1563,8 +1563,8 @@ var _ = Describe("getPrometheusEnvVars", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer"},
 							SkipVerify:  true,
 						},
@@ -1572,13 +1572,13 @@ var _ = Describe("getPrometheusEnvVars", func() {
 				},
 			},
 		}
-		envVars := getPrometheusEnvVars(bindplane)
+		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY")).To(Equal("true"))
 		Expect(envVars).To(HaveLen(10))
 	})
 })
 
-var _ = Describe("reconcilePrometheus", func() {
+var _ = Describe("reconcileTSDB", func() {
 	It("short-circuits when remote Prometheus mode is enabled", func() {
 		reconciler := &BindplaneReconciler{}
 		bindplane := &bindplanev1alpha1.Bindplane{
@@ -1587,8 +1587,8 @@ var _ = Describe("reconcilePrometheus", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						Remote: &bindplanev1alpha1.PrometheusRemoteConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
 							Enable: true,
 							Host:   "vm.example.internal",
 						},
@@ -1596,14 +1596,14 @@ var _ = Describe("reconcilePrometheus", func() {
 				},
 			},
 		}
-		Expect(reconciler.reconcilePrometheus(context.Background(), bindplane, logf.Log.WithName("test"))).To(Succeed())
+		Expect(reconciler.reconcileTSDB(context.Background(), bindplane, logf.Log.WithName("test"))).To(Succeed())
 	})
 })
 
-var _ = Describe("validatePrometheusTLSConfig (controller_test)", func() {
+var _ = Describe("validateTSDBTLSConfig (controller_test)", func() {
 	It("returns nil when config.Prometheus is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{Spec: bindplanev1alpha1.BindplaneSpec{Config: bindplanev1alpha1.BindplaneConfigSpec{License: "x", Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}}}}}
-		Expect(validatePrometheusTLSConfig(bindplane)).To(Succeed())
+		Expect(validateTSDBTLSConfig(bindplane)).To(Succeed())
 	})
 	It("returns error when both secretName and certManager are set", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
@@ -1611,8 +1611,8 @@ var _ = Describe("validatePrometheusTLSConfig (controller_test)", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							SecretName:  "x",
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "issuer"},
 						},
@@ -1620,8 +1620,8 @@ var _ = Describe("validatePrometheusTLSConfig (controller_test)", func() {
 				},
 			},
 		}
-		Expect(validatePrometheusTLSConfig(bindplane)).NotTo(Succeed())
-		Expect(validatePrometheusTLSConfig(bindplane).Error()).To(ContainSubstring("mutually exclusive"))
+		Expect(validateTSDBTLSConfig(bindplane)).NotTo(Succeed())
+		Expect(validateTSDBTLSConfig(bindplane).Error()).To(ContainSubstring("mutually exclusive"))
 	})
 	It("returns nil when CertManager has a valid name", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
@@ -1629,15 +1629,15 @@ var _ = Describe("validatePrometheusTLSConfig (controller_test)", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer", Kind: "Issuer"},
 						},
 					},
 				},
 			},
 		}
-		Expect(validatePrometheusTLSConfig(bindplane)).To(Succeed())
+		Expect(validateTSDBTLSConfig(bindplane)).To(Succeed())
 	})
 })
 
@@ -1655,8 +1655,8 @@ var _ = Describe("getInternalTLSVolumesAndMounts", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca"},
 						},
 					},
@@ -1666,10 +1666,10 @@ var _ = Describe("getInternalTLSVolumesAndMounts", func() {
 		vols, mounts := getInternalTLSVolumesAndMounts(bindplane)
 		Expect(vols).To(HaveLen(1))
 		Expect(mounts).To(HaveLen(1))
-		Expect(vols[0].Name).To(Equal(internalTLSPrometheusClientVolumeName))
-		Expect(vols[0].Secret.SecretName).To(Equal("bp-prometheus-remote-write-client"))
-		Expect(mounts[0].Name).To(Equal(internalTLSPrometheusClientVolumeName))
-		Expect(mounts[0].MountPath).To(Equal(internalTLSPrometheusClientMountPath))
+		Expect(vols[0].Name).To(Equal(internalTLSTSDBClientVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("bp-tsdb-remote-write-client"))
+		Expect(mounts[0].Name).To(Equal(internalTLSTSDBClientVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(internalTLSTSDBClientMountPath))
 	})
 })
 
@@ -1732,18 +1732,18 @@ var _ = Describe("getNatsTLSVolumesAndMounts", func() {
 	})
 })
 
-var _ = Describe("generatePrometheusBasicAuthSecretData", func() {
+var _ = Describe("generateTSDBBasicAuthSecretData", func() {
 	It("returns username, password, and web-config with bcrypt hash", func() {
-		data, err := generatePrometheusBasicAuthSecretData()
+		data, err := generateTSDBBasicAuthSecretData()
 		Expect(err).NotTo(HaveOccurred())
-		Expect(data).To(HaveKey(prometheusBasicAuthSecretKeyUser))
-		Expect(data).To(HaveKey(prometheusBasicAuthSecretKeyPass))
-		Expect(data).To(HaveKey(prometheusBasicAuthSecretKeyWeb))
-		Expect(string(data[prometheusBasicAuthSecretKeyUser])).To(Equal(prometheusBasicAuthUsername))
-		Expect(data[prometheusBasicAuthSecretKeyPass]).To(HaveLen(32))
-		webConfig := string(data[prometheusBasicAuthSecretKeyWeb])
+		Expect(data).To(HaveKey(tsdbBasicAuthSecretKeyUser))
+		Expect(data).To(HaveKey(tsdbBasicAuthSecretKeyPass))
+		Expect(data).To(HaveKey(tsdbBasicAuthSecretKeyWeb))
+		Expect(string(data[tsdbBasicAuthSecretKeyUser])).To(Equal(tsdbBasicAuthUsername))
+		Expect(data[tsdbBasicAuthSecretKeyPass]).To(HaveLen(32))
+		webConfig := string(data[tsdbBasicAuthSecretKeyWeb])
 		Expect(webConfig).To(ContainSubstring("basic_auth_users:"))
-		Expect(webConfig).To(ContainSubstring(prometheusBasicAuthUsername + ":"))
+		Expect(webConfig).To(ContainSubstring(tsdbBasicAuthUsername + ":"))
 		Expect(webConfig).To(MatchRegexp(`\$2[aby]\$\d{2}\$`)) // bcrypt hash prefix
 	})
 })

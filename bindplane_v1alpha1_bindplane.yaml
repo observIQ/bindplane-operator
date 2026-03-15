@@ -5,7 +5,7 @@ metadata:
 spec:
   selfSigned: {}
 ---
-# CA certificate used by bindplane-internal-issuer to sign internal mTLS certs (e.g. Prometheus).
+# CA certificate used by bindplane-internal-issuer to sign internal mTLS certs (e.g. Bindplane's TSDB, implemented by Prometheus by default).
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -22,7 +22,7 @@ spec:
     kind: Issuer
     group: cert-manager.io
 ---
-# Issuer for internal certificates (Prometheus remote write mTLS, NATS TLS, etc.). Uses the CA above.
+# Issuer for internal certificates (TSDB remote write mTLS, NATS TLS, etc.). Uses the CA above.
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -60,8 +60,8 @@ spec:
         database: testdb
         username: testuser
         password: testpass
-    # Prometheus client mTLS: Bindplane services use a cert-manager-issued client cert when connecting to Prometheus remote write.
-    prometheus:
+    # TSDB client mTLS: Bindplane services use a cert-manager-issued client cert when connecting to Bindplane's TSDB remote write.
+    tsdb:
       tls:
         certManager:
           name: bindplane-internal-issuer
@@ -133,9 +133,9 @@ spec:
               limits:
                 cpu: 500m
                 memory: 256Mi
-  # Prometheus server mTLS: StatefulSet serves remote write over TLS; operator issues server + probe client certs from this issuer.
-  # Together with config.prometheus.tls above, this enables full mTLS (server cert on Prometheus, client cert on Bindplane).
-  prometheus:
+  # TSDB server mTLS: StatefulSet serves remote write over TLS; operator issues server + probe client certs from this issuer.
+  # Together with config.tsdb.tls above, this enables full mTLS (server cert on TSDB, client cert on Bindplane).
+  tsdb:
     tls:
       certManager:
         name: bindplane-internal-issuer
@@ -144,7 +144,7 @@ spec:
     podTemplate:
       spec:
         containers:
-          - name: prometheus
+          - name: tsdb
             resources:
               requests:
                 cpu: 100m

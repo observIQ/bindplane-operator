@@ -340,42 +340,42 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	return envVars
 }
 
-// getPrometheusEnvVars returns the Prometheus environment variables
+// getTSDBEnvVars returns the Prometheus environment variables
 // Used by Node, Jobs, Jobs Migrate, and NATS deployments.
 // Username and password (for remote write basic auth) are read from the operator-generated Prometheus basic auth Secret.
 // When internal TLS is enabled for Prometheus remote write, also adds BINDPLANE_PROMETHEUS_ENABLE_TLS and cert paths.
-func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
-	remoteEnabled := isPrometheusRemoteEnabled(bindplane)
-	prometheusHost := ""
-	prometheusPort := int32(prometheusHTTPPort)
+func getTSDBEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	remoteEnabled := isTSDBRemoteEnabled(bindplane)
+	tsdbHost := ""
+	tsdbPort := int32(tsdbHTTPPort)
 	if remoteEnabled {
-		remote := bindplane.Spec.Config.Prometheus.Remote
-		prometheusHost = remote.Host
+		remote := bindplane.Spec.Config.TSDB.Remote
+		tsdbHost = remote.Host
 		if remote.Port > 0 {
-			prometheusPort = remote.Port
+			tsdbPort = remote.Port
 		}
 	} else {
-		prometheusServiceName := getResourceName(bindplane, prometheusComponent)
-		prometheusHost = strings.Join([]string{prometheusServiceName, bindplane.Namespace, "svc"}, ".")
+		tsdbServiceName := getResourceName(bindplane, tsdbComponent)
+		tsdbHost = strings.Join([]string{tsdbServiceName, bindplane.Namespace, "svc"}, ".")
 	}
 	envVars := []corev1.EnvVar{
-		{Name: bindplanePrometheusEnableRemoteEnvVar, Value: enableRemoteValue},
-		{Name: bindplanePrometheusHostEnvVar, Value: prometheusHost},
-		{Name: bindplanePrometheusPortEnvVar, Value: strconv.Itoa(int(prometheusPort))},
+		{Name: bindplaneTSDBEnableRemoteEnvVar, Value: enableRemoteValue},
+		{Name: bindplaneTSDBHostEnvVar, Value: tsdbHost},
+		{Name: bindplaneTSDBPortEnvVar, Value: strconv.Itoa(int(tsdbPort))},
 	}
 	if remoteEnabled {
-		remote := bindplane.Spec.Config.Prometheus.Remote
+		remote := bindplane.Spec.Config.TSDB.Remote
 		if remote.QueryPathPrefix != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplanePrometheusQueryPathPrefixEnvVar, Value: remote.QueryPathPrefix})
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTSDBQueryPathPrefixEnvVar, Value: remote.QueryPathPrefix})
 		}
 		if remote.RemoteWrite != nil {
 			remoteWrite := remote.RemoteWrite
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePrometheusRemoteWriteHostEnvVar,
+				Name:  bindplaneTSDBRemoteWriteHostEnvVar,
 				Value: remoteWrite.Host,
 			})
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePrometheusRemoteWritePortEnvVar,
+				Name:  bindplaneTSDBRemoteWritePortEnvVar,
 				Value: strconv.Itoa(int(remoteWrite.Port)),
 			})
 			remoteWriteEndpoint := remoteWrite.Endpoint
@@ -383,52 +383,52 @@ func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVa
 				remoteWriteEndpoint = "/api/v1/write"
 			}
 			envVars = append(envVars, corev1.EnvVar{
-				Name:  bindplanePrometheusRemoteWriteEndpointEnvVar,
+				Name:  bindplaneTSDBRemoteWriteEndpointEnvVar,
 				Value: remoteWriteEndpoint,
 			})
 		}
 	} else {
-		secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
+		secretName := getResourceName(bindplane, tsdbBasicAuthSecretSuffix)
 		envVars = append(envVars,
 			corev1.EnvVar{
-				Name: bindplanePrometheusAuthUsernameEnvVar,
+				Name: bindplaneTSDBAuthUsernameEnvVar,
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-						Key:                  prometheusBasicAuthSecretKeyUser,
+						Key:                  tsdbBasicAuthSecretKeyUser,
 					},
 				},
 			},
 			corev1.EnvVar{
-				Name: bindplanePrometheusAuthPasswordEnvVar,
+				Name: bindplaneTSDBAuthPasswordEnvVar,
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-						Key:                  prometheusBasicAuthSecretKeyPass,
+						Key:                  tsdbBasicAuthSecretKeyPass,
 					},
 				},
 			},
 		)
 	}
-	envVars = append(envVars, getPrometheusRemoteWriteTLSEnvVars(bindplane)...)
+	envVars = append(envVars, getTSDBRemoteWriteTLSEnvVars(bindplane)...)
 	return envVars
 }
 
-// getPrometheusRemoteWriteTLSEnvVars returns env vars for Prometheus remote write TLS when client TLS is enabled (config.prometheus.tls).
-func getPrometheusRemoteWriteTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
-	if !isPrometheusClientTLSEnabled(bindplane) {
+// getTSDBRemoteWriteTLSEnvVars returns env vars for Prometheus remote write TLS when client TLS is enabled (config.prometheus.tls).
+func getTSDBRemoteWriteTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if !isTSDBClientTLSEnabled(bindplane) {
 		return nil
 	}
 	// Cert-manager uses tls.crt, tls.key, ca.crt; user secret is mounted with Items to same names
 	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
 	envVars := []corev1.EnvVar{
-		{Name: bindplanePrometheusEnableTLSEnvVar, Value: "true"},
-		{Name: bindplanePrometheusTLSCertEnvVar, Value: internalTLSPrometheusClientMountPath + "/" + certKey},
-		{Name: bindplanePrometheusTLSKeyEnvVar, Value: internalTLSPrometheusClientMountPath + "/" + keyKey},
-		{Name: bindplanePrometheusTLSCAEnvVar, Value: internalTLSPrometheusClientMountPath + "/" + caKey},
+		{Name: bindplaneTSDBEnableTLSEnvVar, Value: "true"},
+		{Name: bindplaneTSDBTLSCertEnvVar, Value: internalTLSTSDBClientMountPath + "/" + certKey},
+		{Name: bindplaneTSDBTLSKeyEnvVar, Value: internalTLSTSDBClientMountPath + "/" + keyKey},
+		{Name: bindplaneTSDBTLSCAEnvVar, Value: internalTLSTSDBClientMountPath + "/" + caKey},
 	}
-	if bindplane.Spec.Config.Prometheus.TLS.SkipVerify {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplanePrometheusTLSSkipVerifyEnvVar, Value: "true"})
+	if bindplane.Spec.Config.TSDB.TLS.SkipVerify {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneTSDBTLSSkipVerifyEnvVar, Value: "true"})
 	}
 	return envVars
 }
@@ -503,7 +503,7 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	return combineEnvVars(
 		getBindplaneConfigEnvVars(bindplane),
-		getPrometheusEnvVars(bindplane),
+		getTSDBEnvVars(bindplane),
 		getTransformAgentEnvVars(bindplane),
 	)
 }

@@ -183,12 +183,12 @@ kubectl get service -l app.kubernetes.io/component=transform-agent
 kubectl get serviceaccount -l app.kubernetes.io/component=transform-agent
 ```
 
-Check for Prometheus resources:
+Check for TSDB resources:
 
 ```bash
-kubectl get statefulset -l app.kubernetes.io/component=prometheus
-kubectl get service -l app.kubernetes.io/component=prometheus
-kubectl get serviceaccount -l app.kubernetes.io/component=prometheus
+kubectl get statefulset -l app.kubernetes.io/component=tsdb
+kubectl get service -l app.kubernetes.io/component=tsdb
+kubectl get serviceaccount -l app.kubernetes.io/component=tsdb
 ```
 
 ## Step 10: Monitor the Operator

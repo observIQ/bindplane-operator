@@ -55,7 +55,7 @@ spec:
     #     nodeSelector:
     #       disktype: ssd
     #     priorityClassName: high-priority
-  prometheus:
+  tsdb:
     # podTemplate: # Optional - arbitrary pod template fields (affinity, tolerations, nodeSelector, etc.)
     #   metadata:
     #     labels:
@@ -71,7 +71,7 @@ spec:
     #                 - key: app.kubernetes.io/component
     #                   operator: In
     #                   values:
-    #                     - prometheus
+    #                     - tsdb
     #             topologyKey: kubernetes.io/hostname
     #     tolerations:
     #       - key: "key1"

@@ -48,11 +48,11 @@ Powers Bindplane's [Live Preview](https://docs.bindplane.com/feature-guides/live
 
 **Scaling**: Scales horizontally, 2 pods generally fine for medium to large environments.
 
-### Bindplane Prometheus
+### Bindplane TSDB
 
 **Type**: StatefulSet
 
-Stores short-term Bindplane metrics for agent health and agent throughput. Rollouts are stored in Postgres. **Note**: This Prometheus instance is NOT for ingesting metrics from managed collectors. It is exclusively for storing metrics pertaining to collector health and other internal workings of Bindplane. It is not intended for user use.
+Stores short-term Bindplane metrics for agent health and agent throughput. Rollouts are stored in Postgres. The default TSDB implementation is Prometheus. **Note**: This TSDB instance is NOT for ingesting metrics from managed collectors. It is exclusively for storing metrics pertaining to collector health and other internal workings of Bindplane. It is not intended for user use. Users can alternatively configure a remote/user-managed TSDB backend (for example, VictoriaMetrics).
 
 **Scaling**: Scales vertically, one pod only.
 
@@ -71,7 +71,7 @@ Stores short-term Bindplane metrics for agent health and agent throughput. Rollo
             │          │          │          │
             │          │          │          │
     ┌───────▼───┐  ┌───▼────┐  ┌─▼────────┐  ┌──────▼────────┐
-    │   NATS    │  │Postgres│  │Prometheus│  │ Transform     │
+    │   NATS    │  │Postgres│  │  TSDB   │  │ Transform     │
     │(Event Bus)│  │        │  │          │  │ Agent         │
     └──────┬────┘  └───┬────┘  └──────────┘  └───────────────┘
            │           │

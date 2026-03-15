@@ -16,7 +16,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [PostgreSQL](#postgresql)
 - [Tracing](#tracing)
 - [Metrics](#metrics)
-- [Prometheus](#prometheus)
+- [TSDB](#tsdb)
 - [Max concurrency](#max-concurrency)
 - [Audit trail](#audit-trail)
 - [Scope](#scope)
@@ -488,34 +488,39 @@ spec:
         insecure: true
 ```
 
-## Prometheus
+## TSDB
+
+Bindplane requires a TSDB for agent health and throughput metrics.
+
+- **Default deployment:** the operator deploys Bindplane's TSDB using a Prometheus StatefulSet.
+- **Remote deployment:** you can use a user-managed TSDB backend (for example, VictoriaMetrics) via `spec.config.tsdb.remote`.
 
 ### TLS
 
-TLS for the Prometheus remote write component is configured under `spec.config.prometheus.tls`. Use either a **user-defined Secret** (`secretName` plus key names) or **cert-manager** (`certManager`), not both.
+TLS for TSDB remote write is configured under `spec.config.tsdb.tls`. Use either a **user-defined Secret** (`secretName` plus key names) or **cert-manager** (`certManager`), not both.
 
 | CRD Field | Description |
 |---|---|
-| `spec.config.prometheus.tls.secretName` | Name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS). Omit when using certManager. |
-| `spec.config.prometheus.tls.certKey` | Key in the Secret for the TLS certificate. |
-| `spec.config.prometheus.tls.keyKey` | Key in the Secret for the TLS private key. |
-| `spec.config.prometheus.tls.caKey` | Key in the Secret for the CA certificate. |
-| `spec.config.prometheus.tls.certManager` | Reference to a cert-manager Issuer or ClusterIssuer to issue server and client certs (mTLS). Mutually exclusive with secretName. |
-| `spec.config.prometheus.tls.certManager.name` | Name of the Issuer or ClusterIssuer. |
-| `spec.config.prometheus.tls.certManager.kind` | `Issuer` or `ClusterIssuer`. Default: `Issuer`. |
-| `spec.config.prometheus.tls.certManager.group` | API group. Default: `cert-manager.io`. |
-| `spec.config.prometheus.tls.skipVerify` | When `true`, set `BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY=true` to disable TLS certificate verification (testing only). |
+| `spec.config.tsdb.tls.secretName` | Name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS). Omit when using certManager. |
+| `spec.config.tsdb.tls.certKey` | Key in the Secret for the TLS certificate. |
+| `spec.config.tsdb.tls.keyKey` | Key in the Secret for the TLS private key. |
+| `spec.config.tsdb.tls.caKey` | Key in the Secret for the CA certificate. |
+| `spec.config.tsdb.tls.certManager` | Reference to a cert-manager Issuer or ClusterIssuer to issue server and client certs (mTLS). Mutually exclusive with secretName. |
+| `spec.config.tsdb.tls.certManager.name` | Name of the Issuer or ClusterIssuer. |
+| `spec.config.tsdb.tls.certManager.kind` | `Issuer` or `ClusterIssuer`. Default: `Issuer`. |
+| `spec.config.tsdb.tls.certManager.group` | API group. Default: `cert-manager.io`. |
+| `spec.config.tsdb.tls.skipVerify` | When `true`, set `BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY=true` to disable TLS certificate verification (testing only). |
 
-When using cert-manager, see [Security: TLS and Secrets – Cert Manager and Prometheus mTLS](security.md#cert-manager-and-prometheus-mtls-optional) for prerequisites and behavior.
+When using cert-manager, see [Security: TLS and Secrets – Cert Manager and TSDB mTLS](security.md#cert-manager-and-tsdb-mtls-optional) for prerequisites and behavior.
 
 Example (user-defined Secret):
 
 ```yaml
 spec:
   config:
-    prometheus:
+    tsdb:
       tls:
-        secretName: my-prometheus-tls
+        secretName: my-tsdb-tls
         certKey: tls.crt
         keyKey: tls.key
         caKey: ca.crt
@@ -526,12 +531,43 @@ Example (cert-manager):
 ```yaml
 spec:
   config:
-    prometheus:
+    tsdb:
       tls:
         certManager:
           name: bindplane-ca-issuer
           kind: ClusterIssuer
           group: cert-manager.io
+```
+
+### Remote TSDB
+
+Use `spec.config.tsdb.remote` when you want Bindplane to connect to a user-managed TSDB instead of the operator-managed default Prometheus StatefulSet.
+
+| CRD Field | Description |
+|---|---|
+| `spec.config.tsdb.remote.enable` | Enables remote TSDB mode. |
+| `spec.config.tsdb.remote.host` | Required when `enable=true`. Hostname or IP of the remote TSDB endpoint used for query operations. |
+| `spec.config.tsdb.remote.port` | Port for the remote TSDB endpoint. Defaults to `9090`. |
+| `spec.config.tsdb.remote.queryPathPrefix` | Optional PromQL path prefix (useful for systems like VictoriaMetrics or Mimir). |
+| `spec.config.tsdb.remote.remoteWrite.host` | Optional remote-write host override. Must be set together with `remoteWrite.port`. |
+| `spec.config.tsdb.remote.remoteWrite.port` | Optional remote-write port override. Must be set together with `remoteWrite.host`. |
+| `spec.config.tsdb.remote.remoteWrite.endpoint` | Optional remote-write path. Defaults to `/api/v1/write`. |
+
+Example (user-managed TSDB, e.g. VictoriaMetrics):
+
+```yaml
+spec:
+  config:
+    tsdb:
+      remote:
+        enable: true
+        host: vmselect.monitoring.svc
+        port: 8481
+        queryPathPrefix: /select/0/prometheus
+        remoteWrite:
+          host: vminsert.monitoring.svc
+          port: 8480
+          endpoint: /insert/0/prometheus/api/v1/write
 ```
 
 ## Max concurrency

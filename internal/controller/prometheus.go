@@ -39,68 +39,70 @@ import (
 )
 
 const (
-	// prometheusComponent is the component name for Prometheus
-	prometheusComponent = "prometheus"
-	// prometheusContainerName is the container name for Prometheus
-	prometheusContainerName = "prometheus"
-	// prometheusImage is the default container image for Prometheus
-	prometheusImage = "ghcr.io/observiq/bindplane-prometheus:1.96.3"
-	// prometheusDataVolumeSuffix is the suffix for Prometheus data volume names
-	prometheusDataVolumeSuffix = "prometheus-data"
-	// prometheusHTTPPort is the HTTP port for Prometheus
-	prometheusHTTPPort = 9090
-	// prometheusHTTPPortName is the name of the HTTP port for Prometheus
-	prometheusHTTPPortName = "http"
+	// tsdbComponent is the component name for Bindplane's TSDB (Prometheus by default)
+	tsdbComponent = "tsdb"
+	// tsdbContainerName is the container name for the TSDB StatefulSet
+	tsdbContainerName = "tsdb"
+	// tsdbImage is the default container image for Prometheus
+	tsdbImage = "ghcr.io/observiq/bindplane-prometheus:1.96.3"
+	// tsdbDataVolumeSuffix is the suffix for TSDB data volume names
+	tsdbDataVolumeSuffix = "tsdb-data"
+	// tsdbHTTPPort is the HTTP port for Prometheus
+	tsdbHTTPPort = 9090
+	// tsdbHTTPPortName is the name of the HTTP port for Prometheus
+	tsdbHTTPPortName = "http"
 
-	// Prometheus basic auth (operator-generated secret)
-	prometheusBasicAuthSecretSuffix  = "prometheus-basic-auth"
-	prometheusBasicAuthUsername      = "prometheus"
-	prometheusBasicAuthSecretKeyUser = "username"
-	prometheusBasicAuthSecretKeyPass = "password"
-	prometheusBasicAuthSecretKeyWeb  = "web-config"
-	prometheusWebConfigVolumeName    = "prometheus-web-config"
-	prometheusWebConfigMountPath     = "/etc/prometheus"
-	prometheusWebConfigFileName      = "web.yml"
-	prometheusProbeHTTPFileName      = "probe-http.yml"
+	// TSDB basic auth (operator-generated secret)
+	tsdbBasicAuthSecretSuffix  = "tsdb-basic-auth"
+	tsdbBasicAuthUsername      = "tsdb"
+	tsdbBasicAuthSecretKeyUser = "username"
+	tsdbBasicAuthSecretKeyPass = "password"
+	tsdbBasicAuthSecretKeyWeb  = "web-config"
+	tsdbWebConfigVolumeName    = "tsdb-web-config"
+	// Prometheus entrypoint reads --web.config.file from /etc/prometheus/web.yml.
+	// Keep this path even after TSDB renaming so TLS/basic-auth settings are applied.
+	tsdbWebConfigMountPath = "/etc/prometheus"
+	tsdbWebConfigFileName  = "web.yml"
+	tsdbProbeHTTPFileName  = "probe-http.yml"
 	// Server cert mount when internal TLS is enabled for remote write
-	prometheusTLSVolumeName            = "prometheus-tls"
-	prometheusTLSMountPath             = "/etc/prometheus-tls"
-	prometheusWebConfigConfigMapSuffix = "prometheus-web-config"
+	tsdbTLSVolumeName            = "tsdb-tls"
+	tsdbTLSMountPath             = "/etc/tsdb-tls"
+	tsdbWebConfigConfigMapSuffix = "tsdb-web-config"
 	// Cert-manager: separate server cert (web) and probe client cert (promtool) so EKU matches (ServerAuth vs ClientAuth).
-	prometheusWebServerTLSVolumeName   = "prometheus-web-server-tls"
-	prometheusWebServerTLSMountPath    = "/etc/prometheus-web-tls"
-	prometheusProbeClientTLSVolumeName = "prometheus-probe-client-tls"
-	prometheusProbeClientTLSMountPath  = "/etc/prometheus-probe-client"
+	tsdbWebServerTLSVolumeName   = "tsdb-web-server-tls"
+	tsdbWebServerTLSMountPath    = "/etc/tsdb-web-tls"
+	tsdbProbeClientTLSVolumeName = "tsdb-probe-client-tls"
+	tsdbProbeClientTLSMountPath  = "/etc/tsdb-probe-client"
 	// Probe basic auth: existing basic-auth secret mounted as files for promtool username_file/password_file.
-	prometheusProbeAuthVolumeName = "prometheus-probe-auth"
-	prometheusProbeAuthMountPath  = "/etc/prometheus-probe-auth"
+	tsdbProbeAuthVolumeName = "tsdb-probe-auth"
+	tsdbProbeAuthMountPath  = "/etc/tsdb-probe-auth"
 
 	// Prometheus exec probe timing (matches reference out.yaml: startup/readiness use /-/ready, liveness uses /-/healthy).
-	prometheusProbeStartupFailureThreshold   int32 = 60
-	prometheusProbeStartupPeriodSeconds      int32 = 15
-	prometheusProbeStartupSuccessThreshold   int32 = 1
-	prometheusProbeStartupTimeoutSeconds     int32 = 3
-	prometheusProbeReadinessFailureThreshold int32 = 3
-	prometheusProbeReadinessPeriodSeconds    int32 = 5
-	prometheusProbeReadinessSuccessThreshold int32 = 1
-	prometheusProbeReadinessTimeoutSeconds   int32 = 3
-	prometheusProbeLivenessFailureThreshold  int32 = 6
-	prometheusProbeLivenessPeriodSeconds     int32 = 5
-	prometheusProbeLivenessSuccessThreshold  int32 = 1
-	prometheusProbeLivenessTimeoutSeconds    int32 = 3
+	tsdbProbeStartupFailureThreshold   int32 = 60
+	tsdbProbeStartupPeriodSeconds      int32 = 15
+	tsdbProbeStartupSuccessThreshold   int32 = 1
+	tsdbProbeStartupTimeoutSeconds     int32 = 3
+	tsdbProbeReadinessFailureThreshold int32 = 3
+	tsdbProbeReadinessPeriodSeconds    int32 = 5
+	tsdbProbeReadinessSuccessThreshold int32 = 1
+	tsdbProbeReadinessTimeoutSeconds   int32 = 3
+	tsdbProbeLivenessFailureThreshold  int32 = 6
+	tsdbProbeLivenessPeriodSeconds     int32 = 5
+	tsdbProbeLivenessSuccessThreshold  int32 = 1
+	tsdbProbeLivenessTimeoutSeconds    int32 = 3
 )
 
-// prometheusWebConfig is the structure of Prometheus web.config.file (basic auth + TLS).
+// tsdbWebConfig is the structure of Prometheus web.config.file (basic auth + TLS).
 // See https://prometheus.io/docs/prometheus/latest/configuration/https/
 // We use json tags because sigs.k8s.io/yaml uses JSON for marshaling; keys must be basic_auth_users, tls_server_config.
-type prometheusWebConfig struct {
-	BasicAuthUsers  map[string]string          `json:"basic_auth_users,omitempty"`
-	TLSServerConfig *prometheusTLSServerConfig `json:"tls_server_config,omitempty"`
+type tsdbWebConfig struct {
+	BasicAuthUsers  map[string]string    `json:"basic_auth_users,omitempty"`
+	TLSServerConfig *tsdbTLSServerConfig `json:"tls_server_config,omitempty"`
 }
 
-// prometheusTLSServerConfig is the tls_server_config section of Prometheus web config.
+// tsdbTLSServerConfig is the tls_server_config section of Prometheus web config.
 // ClientCAFile and ClientAuthType are only set for mTLS (client cert verification); omit for TLS-only.
-type prometheusTLSServerConfig struct {
+type tsdbTLSServerConfig struct {
 	CertFile       string `json:"cert_file"`
 	KeyFile        string `json:"key_file"`
 	ClientCAFile   string `json:"client_ca_file,omitempty"`
@@ -128,49 +130,49 @@ type promtoolProbeTLSConfig struct {
 	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty"`
 }
 
-// isPrometheusRemoteEnabled returns true when Bindplane should use a user-managed remote Prometheus backend.
-func isPrometheusRemoteEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
-	p := bindplane.Spec.Config.Prometheus
+// isTSDBRemoteEnabled returns true when Bindplane should use a user-managed remote Prometheus backend.
+func isTSDBRemoteEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.Config.TSDB
 	return p != nil && p.Remote != nil && p.Remote.Enable
 }
 
-// isPrometheusServerTLSEnabled returns true when the Prometheus server (StatefulSet) should serve TLS (spec.prometheus.tls with certManager or secretName).
-func isPrometheusServerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
-	p := bindplane.Spec.Prometheus
+// isTSDBServerTLSEnabled returns true when the Prometheus server (StatefulSet) should serve TLS (spec.prometheus.tls with certManager or secretName).
+func isTSDBServerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.TSDB
 	if p == nil || p.TLS == nil {
 		return false
 	}
 	return (p.TLS.CertManager != nil && p.TLS.CertManager.Name != "") || p.TLS.SecretName != ""
 }
 
-// isPrometheusServerMTLSEnabled returns true when the Prometheus server should require and verify client certs (mTLS).
+// isTSDBServerMTLSEnabled returns true when the Prometheus server should require and verify client certs (mTLS).
 // True when: (cert-manager server and cert-manager client both enabled) or (user secret with CAKey set).
-func isPrometheusServerMTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
-	p := bindplane.Spec.Prometheus
+func isTSDBServerMTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.TSDB
 	if p == nil || p.TLS == nil {
 		return false
 	}
 	tls := p.TLS
 	if tls.CertManager != nil && tls.CertManager.Name != "" {
-		return isPrometheusClientCertManagerTLSEnabled(bindplane)
+		return isTSDBClientCertManagerTLSEnabled(bindplane)
 	}
 	// User-defined secret: mTLS only when user provides a CA for client verification
 	return tls.CAKey != ""
 }
 
-// getPrometheusProbeServerName returns the server_name for promtool probe (must match a SAN/CN of the Prometheus server cert).
+// getTSDBProbeServerName returns the server_name for promtool probe (must match a SAN/CN of the Prometheus server cert).
 // Prefer the service FQDN so verification works when connecting to 127.0.0.1; fallback to localhost.
-func getPrometheusProbeServerName(bindplane *bindplanev1alpha1.Bindplane) string {
-	names := getPrometheusServerCertDNSNames(bindplane)
+func getTSDBProbeServerName(bindplane *bindplanev1alpha1.Bindplane) string {
+	names := getTSDBServerCertDNSNames(bindplane)
 	if len(names) > 0 {
 		return names[0] // e.g. my-bp-prometheus.default.svc.cluster.local
 	}
 	return "localhost"
 }
 
-// isPrometheusServerProbeTLSWithCA returns true when the server TLS secret has a CA file (for probe to verify server cert).
-func isPrometheusServerProbeTLSWithCA(bindplane *bindplanev1alpha1.Bindplane) bool {
-	p := bindplane.Spec.Prometheus
+// isTSDBServerProbeTLSWithCA returns true when the server TLS secret has a CA file (for probe to verify server cert).
+func isTSDBServerProbeTLSWithCA(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.TSDB
 	if p == nil || p.TLS == nil {
 		return false
 	}
@@ -180,66 +182,66 @@ func isPrometheusServerProbeTLSWithCA(bindplane *bindplanev1alpha1.Bindplane) bo
 	return p.TLS.CAKey != "" // user secret with CA
 }
 
-// buildPrometheusProbeHTTPConfigYAML returns the probe-http.yml content for promtool exec probes when server TLS is enabled.
+// buildTSDBProbeHTTPConfigYAML returns the probe-http.yml content for promtool exec probes when server TLS is enabled.
 // With cert-manager: use probe CLIENT cert (ClientAuth) and CA from server secret; server_name must match server cert SAN.
 // With user secret: use same paths as web (single secret); may use insecure_skip_verify if no CA.
-// basic_auth uses username_file and password_file (existing basic-auth secret mounted at prometheusProbeAuthMountPath).
-func buildPrometheusProbeHTTPConfigYAML(bindplane *bindplanev1alpha1.Bindplane) ([]byte, error) {
+// basic_auth uses username_file and password_file (existing basic-auth secret mounted at tsdbProbeAuthMountPath).
+func buildTSDBProbeHTTPConfigYAML(bindplane *bindplanev1alpha1.Bindplane) ([]byte, error) {
 	cfg := promtoolProbeHTTPConfig{
 		BasicAuth: &promtoolProbeBasicAuthConfig{
-			UsernameFile: prometheusProbeAuthMountPath + "/username",
-			PasswordFile: prometheusProbeAuthMountPath + "/password",
+			UsernameFile: tsdbProbeAuthMountPath + "/username",
+			PasswordFile: tsdbProbeAuthMountPath + "/password",
 		},
 		TLSConfig: &promtoolProbeTLSConfig{
-			ServerName: getPrometheusProbeServerName(bindplane),
+			ServerName: getTSDBProbeServerName(bindplane),
 		},
 	}
 	tlsCfg := cfg.TLSConfig
-	if isPrometheusServerCertManagerTLSEnabled(bindplane) {
-		tlsCfg.CAFile = prometheusWebServerTLSMountPath + "/ca.crt"
-		tlsCfg.CertFile = prometheusProbeClientTLSMountPath + "/tls.crt"
-		tlsCfg.KeyFile = prometheusProbeClientTLSMountPath + "/tls.key"
-	} else if isPrometheusServerProbeTLSWithCA(bindplane) {
-		tlsCfg.CAFile = prometheusTLSMountPath + "/ca.crt"
-		tlsCfg.CertFile = prometheusTLSMountPath + "/tls.crt"
-		tlsCfg.KeyFile = prometheusTLSMountPath + "/tls.key"
+	if isTSDBServerCertManagerTLSEnabled(bindplane) {
+		tlsCfg.CAFile = tsdbWebServerTLSMountPath + "/ca.crt"
+		tlsCfg.CertFile = tsdbProbeClientTLSMountPath + "/tls.crt"
+		tlsCfg.KeyFile = tsdbProbeClientTLSMountPath + "/tls.key"
+	} else if isTSDBServerProbeTLSWithCA(bindplane) {
+		tlsCfg.CAFile = tsdbTLSMountPath + "/ca.crt"
+		tlsCfg.CertFile = tsdbTLSMountPath + "/tls.crt"
+		tlsCfg.KeyFile = tsdbTLSMountPath + "/tls.key"
 	} else {
 		tlsCfg.InsecureSkipVerify = true
 	}
 	return yaml.Marshal(&cfg)
 }
 
-// reconcilePrometheus reconciles all Prometheus resources
-func (r *BindplaneReconciler) reconcilePrometheus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	if isPrometheusRemoteEnabled(bindplane) {
-		log.Info("Skipping operator-managed Prometheus resources because spec.config.prometheus.remote.enable is true")
+// reconcileTSDB reconciles all Prometheus resources
+func (r *BindplaneReconciler) reconcileTSDB(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	if isTSDBRemoteEnabled(bindplane) {
+		log.Info("Skipping operator-managed TSDB resources because spec.config.tsdb.remote.enable is true")
 		return nil
 	}
 	// Reconcile Prometheus basic auth Secret first (create-only) so it exists for StatefulSet and Bindplane pods
-	if err := r.reconcilePrometheusBasicAuthSecret(ctx, bindplane, log); err != nil {
+	if err := r.reconcileTSDBBasicAuthSecret(ctx, bindplane, log); err != nil {
 		return err
 	}
 	// When Prometheus server TLS is enabled (spec.prometheus.tls), reconcile web-config ConfigMap (basic auth + tls_server_config)
-	if isPrometheusServerTLSEnabled(bindplane) {
-		if err := r.reconcilePrometheusWebConfigConfigMap(ctx, bindplane, log); err != nil {
+	if isTSDBServerTLSEnabled(bindplane) {
+		if err := r.reconcileTSDBWebConfigConfigMap(ctx, bindplane, log); err != nil {
 			return err
 		}
 	}
 
 	// Reconcile ServiceAccount
-	sa := r.prometheusServiceAccount(bindplane)
+	sa := r.tsdbServiceAccount(bindplane)
 	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
 		return err
 	}
 
 	// Reconcile StatefulSet
-	statefulSet := r.prometheusStatefulSet(bindplane)
+	statefulSet := r.tsdbStatefulSet(bindplane)
 	if err := r.reconcileStatefulSet(ctx, bindplane, statefulSet, log); err != nil {
 		return err
 	}
 
 	// Reconcile Service
-	service := r.prometheusService(bindplane)
+	service := r.tsdbService(bindplane)
 	if err := r.reconcileService(ctx, bindplane, service, log); err != nil {
 		return err
 	}
@@ -247,9 +249,9 @@ func (r *BindplaneReconciler) reconcilePrometheus(ctx context.Context, bindplane
 	return nil
 }
 
-// generatePrometheusBasicAuthSecretData returns secret data (username, password, web-config YAML).
+// generateTSDBBasicAuthSecretData returns secret data (username, password, web-config YAML).
 // Password is 24 random bytes base64-encoded (32 chars); web-config is Prometheus basic_auth_users YAML with bcrypt hash.
-func generatePrometheusBasicAuthSecretData() (map[string][]byte, error) {
+func generateTSDBBasicAuthSecretData() (map[string][]byte, error) {
 	passwordBytes := make([]byte, 24)
 	if _, err := rand.Read(passwordBytes); err != nil {
 		return nil, fmt.Errorf("generate password: %w", err)
@@ -260,8 +262,8 @@ func generatePrometheusBasicAuthSecretData() (map[string][]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bcrypt password: %w", err)
 	}
-	cfg := prometheusWebConfig{
-		BasicAuthUsers: map[string]string{prometheusBasicAuthUsername: string(hash)},
+	cfg := tsdbWebConfig{
+		BasicAuthUsers: map[string]string{tsdbBasicAuthUsername: string(hash)},
 	}
 	webConfigBytes, err := yaml.Marshal(&cfg)
 	if err != nil {
@@ -269,21 +271,21 @@ func generatePrometheusBasicAuthSecretData() (map[string][]byte, error) {
 	}
 
 	return map[string][]byte{
-		prometheusBasicAuthSecretKeyUser: []byte(prometheusBasicAuthUsername),
-		prometheusBasicAuthSecretKeyPass: []byte(password),
-		prometheusBasicAuthSecretKeyWeb:  webConfigBytes,
+		tsdbBasicAuthSecretKeyUser: []byte(tsdbBasicAuthUsername),
+		tsdbBasicAuthSecretKeyPass: []byte(password),
+		tsdbBasicAuthSecretKeyWeb:  webConfigBytes,
 	}, nil
 }
 
-// reconcilePrometheusBasicAuthSecret creates the Prometheus basic auth Secret if it does not exist.
+// reconcileTSDBBasicAuthSecret creates the Prometheus basic auth Secret if it does not exist.
 // Existing Secret data is never updated to avoid rotating credentials.
-func (r *BindplaneReconciler) reconcilePrometheusBasicAuthSecret(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
+func (r *BindplaneReconciler) reconcileTSDBBasicAuthSecret(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	secretName := getResourceName(bindplane, tsdbBasicAuthSecretSuffix)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
 			Namespace: bindplane.Namespace,
-			Labels:    getLabels(bindplane, prometheusBasicAuthSecretSuffix),
+			Labels:    getLabels(bindplane, tsdbBasicAuthSecretSuffix),
 		},
 	}
 
@@ -301,7 +303,7 @@ func (r *BindplaneReconciler) reconcilePrometheusBasicAuthSecret(ctx context.Con
 		return err
 	}
 
-	data, err := generatePrometheusBasicAuthSecretData()
+	data, err := generateTSDBBasicAuthSecretData()
 	if err != nil {
 		return err
 	}
@@ -311,38 +313,38 @@ func (r *BindplaneReconciler) reconcilePrometheusBasicAuthSecret(ctx context.Con
 	return r.Create(ctx, secret)
 }
 
-// reconcilePrometheusWebConfigConfigMap creates or updates a ConfigMap with web config (basic auth + tls_server_config)
+// reconcileTSDBWebConfigConfigMap creates or updates a ConfigMap with web config (basic auth + tls_server_config)
 // when internal TLS is enabled for Prometheus remote write. Reads the basic auth Secret to get basic_auth_users.
-func (r *BindplaneReconciler) reconcilePrometheusWebConfigConfigMap(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
+func (r *BindplaneReconciler) reconcileTSDBWebConfigConfigMap(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	secretName := getResourceName(bindplane, tsdbBasicAuthSecretSuffix)
 	existingSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: bindplane.Namespace}, existingSecret); err != nil {
 		return fmt.Errorf("get basic auth secret for web config: %w", err)
 	}
-	webConfigBytes, ok := existingSecret.Data[prometheusBasicAuthSecretKeyWeb]
+	webConfigBytes, ok := existingSecret.Data[tsdbBasicAuthSecretKeyWeb]
 	if !ok {
-		return fmt.Errorf("basic auth secret missing key %q", prometheusBasicAuthSecretKeyWeb)
+		return fmt.Errorf("basic auth secret missing key %q", tsdbBasicAuthSecretKeyWeb)
 	}
-	var cfg prometheusWebConfig
+	var cfg tsdbWebConfig
 	if err := yaml.Unmarshal(webConfigBytes, &cfg); err != nil {
 		return fmt.Errorf("unmarshal web config from secret: %w", err)
 	}
 	// TLS server config: cert and key always; client CA and client_auth_type only for mTLS.
 	// With cert-manager: server secret at /etc/prometheus-web-tls (server cert + ca.crt for client verification).
 	// With user secret: single secret at /etc/prometheus-tls.
-	tlsCfg := &prometheusTLSServerConfig{}
-	if isPrometheusServerCertManagerTLSEnabled(bindplane) {
-		tlsCfg.CertFile = prometheusWebServerTLSMountPath + "/tls.crt"
-		tlsCfg.KeyFile = prometheusWebServerTLSMountPath + "/tls.key"
-		if isPrometheusServerMTLSEnabled(bindplane) {
-			tlsCfg.ClientCAFile = prometheusWebServerTLSMountPath + "/ca.crt"
+	tlsCfg := &tsdbTLSServerConfig{}
+	if isTSDBServerCertManagerTLSEnabled(bindplane) {
+		tlsCfg.CertFile = tsdbWebServerTLSMountPath + "/tls.crt"
+		tlsCfg.KeyFile = tsdbWebServerTLSMountPath + "/tls.key"
+		if isTSDBServerMTLSEnabled(bindplane) {
+			tlsCfg.ClientCAFile = tsdbWebServerTLSMountPath + "/ca.crt"
 			tlsCfg.ClientAuthType = "RequireAndVerifyClientCert"
 		}
 	} else {
-		tlsCfg.CertFile = prometheusTLSMountPath + "/tls.crt"
-		tlsCfg.KeyFile = prometheusTLSMountPath + "/tls.key"
-		if isPrometheusServerMTLSEnabled(bindplane) {
-			tlsCfg.ClientCAFile = prometheusTLSMountPath + "/ca.crt"
+		tlsCfg.CertFile = tsdbTLSMountPath + "/tls.crt"
+		tlsCfg.KeyFile = tsdbTLSMountPath + "/tls.key"
+		if isTSDBServerMTLSEnabled(bindplane) {
+			tlsCfg.ClientCAFile = tsdbTLSMountPath + "/ca.crt"
 			tlsCfg.ClientAuthType = "RequireAndVerifyClientCert"
 		}
 	}
@@ -351,21 +353,21 @@ func (r *BindplaneReconciler) reconcilePrometheusWebConfigConfigMap(ctx context.
 	if err != nil {
 		return fmt.Errorf("marshal web config: %w", err)
 	}
-	probeHTTPYAML, err := buildPrometheusProbeHTTPConfigYAML(bindplane)
+	probeHTTPYAML, err := buildTSDBProbeHTTPConfigYAML(bindplane)
 	if err != nil {
 		return fmt.Errorf("build probe-http config: %w", err)
 	}
 
-	cmName := getResourceName(bindplane, prometheusWebConfigConfigMapSuffix)
+	cmName := getResourceName(bindplane, tsdbWebConfigConfigMapSuffix)
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cmName,
 			Namespace: bindplane.Namespace,
-			Labels:    getLabels(bindplane, prometheusWebConfigConfigMapSuffix),
+			Labels:    getLabels(bindplane, tsdbWebConfigConfigMapSuffix),
 		},
 		Data: map[string]string{
-			prometheusWebConfigFileName: string(mergedWebConfig),
-			prometheusProbeHTTPFileName: string(probeHTTPYAML),
+			tsdbWebConfigFileName: string(mergedWebConfig),
+			tsdbProbeHTTPFileName: string(probeHTTPYAML),
 		},
 	}
 	if err := controllerutil.SetControllerReference(bindplane, cm, r.Scheme); err != nil {
@@ -385,17 +387,17 @@ func (r *BindplaneReconciler) reconcilePrometheusWebConfigConfigMap(ctx context.
 	return r.Update(ctx, existingCM)
 }
 
-func (r *BindplaneReconciler) prometheusServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, prometheusComponent)
+func (r *BindplaneReconciler) tsdbServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
+	return newServiceAccount(bindplane, tsdbComponent)
 }
 
-func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1.Bindplane) *appsv1.StatefulSet {
+func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindplane) *appsv1.StatefulSet {
 	replicas := int32(1)
-	labels := getLabels(bindplane, prometheusComponent)
-	selectorLabels := getSelectorLabels(bindplane, prometheusComponent)
-	serviceName := getResourceName(bindplane, prometheusComponent)
-	volumes := getPrometheusVolumes(bindplane)
-	volumeMounts := getPrometheusVolumeMounts(bindplane)
+	labels := getLabels(bindplane, tsdbComponent)
+	selectorLabels := getSelectorLabels(bindplane, tsdbComponent)
+	serviceName := getResourceName(bindplane, tsdbComponent)
+	volumes := getTSDBVolumes(bindplane)
+	volumeMounts := getTSDBVolumeMounts(bindplane)
 
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -423,20 +425,20 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 							RunAsGroup: new(defaultRunAsGroup),
 							RunAsUser:  new(defaultRunAsUser),
 						},
-						Affinity: getPrometheusAffinity(bindplane),
+						Affinity: getTSDBAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
-								Name:  prometheusContainerName,
-								Image: prometheusImage,
-								Args:  []string{"--web.config.file=" + prometheusWebConfigMountPath + "/" + prometheusWebConfigFileName},
+								Name:  tsdbContainerName,
+								Image: tsdbImage,
+								Args:  []string{"--web.config.file=" + tsdbWebConfigMountPath + "/" + tsdbWebConfigFileName},
 								Ports: []corev1.ContainerPort{
 									{
-										Name:          prometheusHTTPPortName,
-										ContainerPort: prometheusHTTPPort,
+										Name:          tsdbHTTPPortName,
+										ContainerPort: tsdbHTTPPort,
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: getKubernetesEnvVars(prometheusContainerName),
+								Env: getKubernetesEnvVars(tsdbContainerName),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
 										corev1.ResourceMemory: resource.MustParse("500Mi"),
@@ -450,35 +452,35 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										Exec: &corev1.ExecAction{
-											Command: getPrometheusProbeCommand(bindplane, "ready"),
+											Command: getTSDBProbeCommand(bindplane, "ready"),
 										},
 									},
-									PeriodSeconds:    prometheusProbeStartupPeriodSeconds,
-									FailureThreshold: prometheusProbeStartupFailureThreshold,
-									SuccessThreshold: prometheusProbeStartupSuccessThreshold,
-									TimeoutSeconds:   prometheusProbeStartupTimeoutSeconds,
+									PeriodSeconds:    tsdbProbeStartupPeriodSeconds,
+									FailureThreshold: tsdbProbeStartupFailureThreshold,
+									SuccessThreshold: tsdbProbeStartupSuccessThreshold,
+									TimeoutSeconds:   tsdbProbeStartupTimeoutSeconds,
 								},
 								LivenessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										Exec: &corev1.ExecAction{
-											Command: getPrometheusProbeCommand(bindplane, "healthy"),
+											Command: getTSDBProbeCommand(bindplane, "healthy"),
 										},
 									},
-									PeriodSeconds:    prometheusProbeLivenessPeriodSeconds,
-									FailureThreshold: prometheusProbeLivenessFailureThreshold,
-									SuccessThreshold: prometheusProbeLivenessSuccessThreshold,
-									TimeoutSeconds:   prometheusProbeLivenessTimeoutSeconds,
+									PeriodSeconds:    tsdbProbeLivenessPeriodSeconds,
+									FailureThreshold: tsdbProbeLivenessFailureThreshold,
+									SuccessThreshold: tsdbProbeLivenessSuccessThreshold,
+									TimeoutSeconds:   tsdbProbeLivenessTimeoutSeconds,
 								},
 								ReadinessProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										Exec: &corev1.ExecAction{
-											Command: getPrometheusProbeCommand(bindplane, "ready"),
+											Command: getTSDBProbeCommand(bindplane, "ready"),
 										},
 									},
-									PeriodSeconds:    prometheusProbeReadinessPeriodSeconds,
-									FailureThreshold: prometheusProbeReadinessFailureThreshold,
-									SuccessThreshold: prometheusProbeReadinessSuccessThreshold,
-									TimeoutSeconds:   prometheusProbeReadinessTimeoutSeconds,
+									PeriodSeconds:    tsdbProbeReadinessPeriodSeconds,
+									FailureThreshold: tsdbProbeReadinessFailureThreshold,
+									SuccessThreshold: tsdbProbeReadinessSuccessThreshold,
+									TimeoutSeconds:   tsdbProbeReadinessTimeoutSeconds,
 								},
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
@@ -487,10 +489,10 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),
 					},
 				},
-				getPrometheusPodTemplateSpec(bindplane),
+				getTSDBPodTemplateSpec(bindplane),
 			),
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				getPrometheusVolumeClaimTemplate(bindplane, labels),
+				getTSDBVolumeClaimTemplate(bindplane, labels),
 			},
 			PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
 				WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
@@ -500,57 +502,57 @@ func (r *BindplaneReconciler) prometheusStatefulSet(bindplane *bindplanev1alpha1
 	}
 }
 
-func (r *BindplaneReconciler) prometheusService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
-	return newService(bindplane, prometheusComponent, WithPort(prometheusHTTPPortName, prometheusHTTPPort))
+func (r *BindplaneReconciler) tsdbService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
+	return newService(bindplane, tsdbComponent, WithPort(tsdbHTTPPortName, tsdbHTTPPort))
 }
 
-// getPrometheusVolumes returns volumes for the Prometheus container. When server TLS is enabled (spec.prometheus.tls),
+// getTSDBVolumes returns volumes for the Prometheus container. When server TLS is enabled (spec.prometheus.tls),
 // uses ConfigMap for web config and adds server cert Secret volume (operator-created or user-defined).
-func getPrometheusVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
-	if !isPrometheusServerTLSEnabled(bindplane) {
+func getTSDBVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	if !isTSDBServerTLSEnabled(bindplane) {
 		return []corev1.Volume{
 			{
-				Name: prometheusWebConfigVolumeName,
+				Name: tsdbWebConfigVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: getResourceName(bindplane, prometheusBasicAuthSecretSuffix),
+						SecretName: getResourceName(bindplane, tsdbBasicAuthSecretSuffix),
 						Items: []corev1.KeyToPath{
-							{Key: prometheusBasicAuthSecretKeyWeb, Path: prometheusWebConfigFileName},
+							{Key: tsdbBasicAuthSecretKeyWeb, Path: tsdbWebConfigFileName},
 						},
 					},
 				},
 			},
 		}
 	}
-	tls := bindplane.Spec.Prometheus.TLS
+	tls := bindplane.Spec.TSDB.TLS
 	// Server cert volume: cert-manager (server + probe client) or user secret
 	var secretVols []corev1.Volume
 	if tls.CertManager != nil && tls.CertManager.Name != "" {
 		secretVols = []corev1.Volume{
 			{
-				Name: prometheusWebServerTLSVolumeName,
+				Name: tsdbWebServerTLSVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: getResourceName(bindplane, prometheusRemoteWriteServerCertSuffix),
+						SecretName: getResourceName(bindplane, tsdbRemoteWriteServerCertSuffix),
 					},
 				},
 			},
 			{
-				Name: prometheusProbeClientTLSVolumeName,
+				Name: tsdbProbeClientTLSVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: getResourceName(bindplane, prometheusProbeClientCertSuffix),
+						SecretName: getResourceName(bindplane, tsdbProbeClientCertSuffix),
 					},
 				},
 			},
 			{
-				Name: prometheusProbeAuthVolumeName,
+				Name: tsdbProbeAuthVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: getResourceName(bindplane, prometheusBasicAuthSecretSuffix),
+						SecretName: getResourceName(bindplane, tsdbBasicAuthSecretSuffix),
 						Items: []corev1.KeyToPath{
-							{Key: prometheusBasicAuthSecretKeyUser, Path: "username"},
-							{Key: prometheusBasicAuthSecretKeyPass, Path: "password"},
+							{Key: tsdbBasicAuthSecretKeyUser, Path: "username"},
+							{Key: tsdbBasicAuthSecretKeyPass, Path: "password"},
 						},
 					},
 				},
@@ -574,7 +576,7 @@ func getPrometheusVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volum
 		}
 		secretVols = []corev1.Volume{
 			{
-				Name: prometheusTLSVolumeName,
+				Name: tsdbTLSVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: tls.SecretName,
@@ -583,13 +585,13 @@ func getPrometheusVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volum
 				},
 			},
 			{
-				Name: prometheusProbeAuthVolumeName,
+				Name: tsdbProbeAuthVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
-						SecretName: getResourceName(bindplane, prometheusBasicAuthSecretSuffix),
+						SecretName: getResourceName(bindplane, tsdbBasicAuthSecretSuffix),
 						Items: []corev1.KeyToPath{
-							{Key: prometheusBasicAuthSecretKeyUser, Path: "username"},
-							{Key: prometheusBasicAuthSecretKeyPass, Path: "password"},
+							{Key: tsdbBasicAuthSecretKeyUser, Path: "username"},
+							{Key: tsdbBasicAuthSecretKeyPass, Path: "password"},
 						},
 					},
 				},
@@ -598,11 +600,11 @@ func getPrometheusVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volum
 	}
 	return append([]corev1.Volume{
 		{
-			Name: prometheusWebConfigVolumeName,
+			Name: tsdbWebConfigVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: getResourceName(bindplane, prometheusWebConfigConfigMapSuffix),
+						Name: getResourceName(bindplane, tsdbWebConfigConfigMapSuffix),
 					},
 				},
 			},
@@ -610,79 +612,79 @@ func getPrometheusVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volum
 	}, secretVols...)
 }
 
-// getPrometheusVolumeMounts returns volume mounts for the Prometheus container.
-// When server TLS is enabled, the web ConfigMap is mounted at /etc/prometheus so both web.yml and probe-http.yml are available.
-func getPrometheusVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+// getTSDBVolumeMounts returns volume mounts for the Prometheus container.
+// Use subPath for /etc/prometheus files so we don't shadow the bundled prometheus.yml file.
+func getTSDBVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		{Name: getResourceName(bindplane, prometheusDataVolumeSuffix), MountPath: "/prometheus"},
+		{Name: getResourceName(bindplane, tsdbDataVolumeSuffix), MountPath: "/prometheus"},
 	}
-	if isPrometheusServerTLSEnabled(bindplane) {
+	if isTSDBServerTLSEnabled(bindplane) {
 		// ConfigMap keys mounted with subPath so only web.yml and probe-http.yml are present at /etc/prometheus.
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      prometheusWebConfigVolumeName,
-			MountPath: prometheusWebConfigMountPath + "/" + prometheusWebConfigFileName,
-			SubPath:   prometheusWebConfigFileName,
+			Name:      tsdbWebConfigVolumeName,
+			MountPath: tsdbWebConfigMountPath + "/" + tsdbWebConfigFileName,
+			SubPath:   tsdbWebConfigFileName,
 			ReadOnly:  true,
 		})
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      prometheusWebConfigVolumeName,
-			MountPath: prometheusWebConfigMountPath + "/" + prometheusProbeHTTPFileName,
-			SubPath:   prometheusProbeHTTPFileName,
+			Name:      tsdbWebConfigVolumeName,
+			MountPath: tsdbWebConfigMountPath + "/" + tsdbProbeHTTPFileName,
+			SubPath:   tsdbProbeHTTPFileName,
 			ReadOnly:  true,
 		})
-		if isPrometheusServerCertManagerTLSEnabled(bindplane) {
-			mounts = append(mounts, corev1.VolumeMount{Name: prometheusWebServerTLSVolumeName, MountPath: prometheusWebServerTLSMountPath, ReadOnly: true})
-			mounts = append(mounts, corev1.VolumeMount{Name: prometheusProbeClientTLSVolumeName, MountPath: prometheusProbeClientTLSMountPath, ReadOnly: true})
+		if isTSDBServerCertManagerTLSEnabled(bindplane) {
+			mounts = append(mounts, corev1.VolumeMount{Name: tsdbWebServerTLSVolumeName, MountPath: tsdbWebServerTLSMountPath, ReadOnly: true})
+			mounts = append(mounts, corev1.VolumeMount{Name: tsdbProbeClientTLSVolumeName, MountPath: tsdbProbeClientTLSMountPath, ReadOnly: true})
 		} else {
-			mounts = append(mounts, corev1.VolumeMount{Name: prometheusTLSVolumeName, MountPath: prometheusTLSMountPath, ReadOnly: true})
+			mounts = append(mounts, corev1.VolumeMount{Name: tsdbTLSVolumeName, MountPath: tsdbTLSMountPath, ReadOnly: true})
 		}
-		mounts = append(mounts, corev1.VolumeMount{Name: prometheusProbeAuthVolumeName, MountPath: prometheusProbeAuthMountPath, ReadOnly: true})
+		mounts = append(mounts, corev1.VolumeMount{Name: tsdbProbeAuthVolumeName, MountPath: tsdbProbeAuthMountPath, ReadOnly: true})
 	} else {
-		// Secret with web.yml only (subPath so only that key is mounted)
+		// Secret with web.yml only (subPath so only that key is mounted).
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      prometheusWebConfigVolumeName,
-			MountPath: prometheusWebConfigMountPath + "/" + prometheusWebConfigFileName,
-			SubPath:   prometheusWebConfigFileName,
+			Name:      tsdbWebConfigVolumeName,
+			MountPath: tsdbWebConfigMountPath + "/" + tsdbWebConfigFileName,
+			SubPath:   tsdbWebConfigFileName,
 			ReadOnly:  true,
 		})
 	}
 	return mounts
 }
 
-// getPrometheusProbeCommand returns the exec command for startup/liveness/readiness probes.
+// getTSDBProbeCommand returns the exec command for startup/liveness/readiness probes.
 // check is "ready" (for /-/ready) or "healthy" (for /-/healthy). Uses HTTP when server TLS is disabled,
 // HTTPS with probe-http.yml when TLS or mTLS is enabled.
-func getPrometheusProbeCommand(bindplane *bindplanev1alpha1.Bindplane, check string) []string {
-	url := "http://127.0.0.1:" + fmt.Sprintf("%d", prometheusHTTPPort)
+func getTSDBProbeCommand(bindplane *bindplanev1alpha1.Bindplane, check string) []string {
+	url := "http://127.0.0.1:" + fmt.Sprintf("%d", tsdbHTTPPort)
 	configFile := ""
-	if isPrometheusServerTLSEnabled(bindplane) {
-		url = "https://127.0.0.1:" + fmt.Sprintf("%d", prometheusHTTPPort)
-		configFile = " --http.config.file=" + prometheusWebConfigMountPath + "/" + prometheusProbeHTTPFileName
+	if isTSDBServerTLSEnabled(bindplane) {
+		url = "https://127.0.0.1:" + fmt.Sprintf("%d", tsdbHTTPPort)
+		configFile = " --http.config.file=" + tsdbWebConfigMountPath + "/" + tsdbProbeHTTPFileName
 	}
 	script := "promtool check " + check + " --url=" + url + configFile
 	return []string{"/bin/sh", "-ec", script}
 }
 
-// getPrometheusAffinity returns the affinity configuration for Prometheus pods
+// getTSDBAffinity returns the affinity configuration for Prometheus pods
 // This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
-func getPrometheusAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
-	if bindplane.Spec.Prometheus != nil && bindplane.Spec.Prometheus.PodTemplate != nil {
-		return bindplane.Spec.Prometheus.PodTemplate.Spec.Affinity
+func getTSDBAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
+	if bindplane.Spec.TSDB != nil && bindplane.Spec.TSDB.PodTemplate != nil {
+		return bindplane.Spec.TSDB.PodTemplate.Spec.Affinity
 	}
 	return nil
 }
 
-// getPrometheusPodTemplateSpec returns the user-provided pod template spec for Prometheus
-func getPrometheusPodTemplateSpec(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
-	if bindplane.Spec.Prometheus != nil {
-		return bindplane.Spec.Prometheus.PodTemplate
+// getTSDBPodTemplateSpec returns the user-provided pod template spec for Prometheus
+func getTSDBPodTemplateSpec(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
+	if bindplane.Spec.TSDB != nil {
+		return bindplane.Spec.TSDB.PodTemplate
 	}
 	return nil
 }
 
-// getPrometheusVolumeClaimTemplate returns the PersistentVolumeClaim template for Prometheus
-func getPrometheusVolumeClaimTemplate(bindplane *bindplanev1alpha1.Bindplane, labels map[string]string) corev1.PersistentVolumeClaim {
-	volumeName := getResourceName(bindplane, prometheusDataVolumeSuffix)
+// getTSDBVolumeClaimTemplate returns the PersistentVolumeClaim template for Prometheus
+func getTSDBVolumeClaimTemplate(bindplane *bindplanev1alpha1.Bindplane, labels map[string]string) corev1.PersistentVolumeClaim {
+	volumeName := getResourceName(bindplane, tsdbDataVolumeSuffix)
 
 	// Default PVC spec
 	defaultSpec := corev1.PersistentVolumeClaimSpec{
@@ -695,8 +697,8 @@ func getPrometheusVolumeClaimTemplate(bindplane *bindplanev1alpha1.Bindplane, la
 	}
 
 	// Use user-provided storage configuration if available
-	if bindplane.Spec.Prometheus != nil && bindplane.Spec.Prometheus.Storage != nil && bindplane.Spec.Prometheus.Storage.VolumeClaimTemplate != nil {
-		userTemplate := bindplane.Spec.Prometheus.Storage.VolumeClaimTemplate
+	if bindplane.Spec.TSDB != nil && bindplane.Spec.TSDB.Storage != nil && bindplane.Spec.TSDB.Storage.VolumeClaimTemplate != nil {
+		userTemplate := bindplane.Spec.TSDB.Storage.VolumeClaimTemplate
 
 		// Start with user-provided spec
 		pvcSpec := userTemplate.Spec.DeepCopy()

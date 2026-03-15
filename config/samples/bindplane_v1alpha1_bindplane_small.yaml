@@ -89,12 +89,12 @@ spec:
               limits:
                 cpu: 500m
                 memory: 256Mi
-  prometheus:
-    # Configure Prometheus for small deployments
+  tsdb:
+    # Configure Bindplane's TSDB (Prometheus by default) for small deployments
     podTemplate:
       spec:
         containers:
-          - name: prometheus
+          - name: tsdb
             resources:
               requests:
                 cpu: 100m

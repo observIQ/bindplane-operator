@@ -26,98 +26,98 @@ import (
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
-var _ = Describe("isPrometheusClientCertManagerTLSEnabled", func() {
-	It("returns false when config.Prometheus is nil", func() {
+var _ = Describe("isTSDBClientCertManagerTLSEnabled", func() {
+	It("returns false when config.TSDB is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{}
-		Expect(isPrometheusClientCertManagerTLSEnabled(bindplane)).To(BeFalse())
+		Expect(isTSDBClientCertManagerTLSEnabled(bindplane)).To(BeFalse())
 	})
 	It("returns false when TLS or CertManager is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					Prometheus: &bindplanev1alpha1.Prometheus{},
+					TSDB: &bindplanev1alpha1.TSDBConfig{},
 				},
 			},
 		}
-		Expect(isPrometheusClientCertManagerTLSEnabled(bindplane)).To(BeFalse())
+		Expect(isTSDBClientCertManagerTLSEnabled(bindplane)).To(BeFalse())
 	})
 	It("returns false when CertManager has empty name", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: ""},
 						},
 					},
 				},
 			},
 		}
-		Expect(isPrometheusClientCertManagerTLSEnabled(bindplane)).To(BeFalse())
+		Expect(isTSDBClientCertManagerTLSEnabled(bindplane)).To(BeFalse())
 	})
 	It("returns true when TLS.CertManager is set with name", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer"},
 						},
 					},
 				},
 			},
 		}
-		Expect(isPrometheusClientCertManagerTLSEnabled(bindplane)).To(BeTrue())
+		Expect(isTSDBClientCertManagerTLSEnabled(bindplane)).To(BeTrue())
 	})
 })
 
-var _ = Describe("isPrometheusServerCertManagerTLSEnabled", func() {
-	It("returns false when spec.Prometheus is nil", func() {
+var _ = Describe("isTSDBServerCertManagerTLSEnabled", func() {
+	It("returns false when spec.TSDB is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{}
-		Expect(isPrometheusServerCertManagerTLSEnabled(bindplane)).To(BeFalse())
+		Expect(isTSDBServerCertManagerTLSEnabled(bindplane)).To(BeFalse())
 	})
-	It("returns true when spec.prometheus.tls.certManager is set with name", func() {
+	It("returns true when spec.tsdb.tls.certManager is set with name", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
-				Prometheus: &bindplanev1alpha1.PrometheusComponentSpec{
-					TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+				TSDB: &bindplanev1alpha1.TSDBComponentSpec{
+					TLS: &bindplanev1alpha1.TSDBTLSConfig{
 						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer"},
 					},
 				},
 			},
 		}
-		Expect(isPrometheusServerCertManagerTLSEnabled(bindplane)).To(BeTrue())
+		Expect(isTSDBServerCertManagerTLSEnabled(bindplane)).To(BeTrue())
 	})
 })
 
-var _ = Describe("validatePrometheusComponentTLSConfig", func() {
+var _ = Describe("validateTSDBComponentTLSConfig", func() {
 	It("returns error when both secretName and certManager are set", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
-				Prometheus: &bindplanev1alpha1.PrometheusComponentSpec{
-					TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+				TSDB: &bindplanev1alpha1.TSDBComponentSpec{
+					TLS: &bindplanev1alpha1.TSDBTLSConfig{
 						SecretName:  "x",
 						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "issuer"},
 					},
 				},
 			},
 		}
-		Expect(validatePrometheusComponentTLSConfig(bindplane)).NotTo(Succeed())
-		Expect(validatePrometheusComponentTLSConfig(bindplane).Error()).To(ContainSubstring("spec.prometheus.tls"))
+		Expect(validateTSDBComponentTLSConfig(bindplane)).NotTo(Succeed())
+		Expect(validateTSDBComponentTLSConfig(bindplane).Error()).To(ContainSubstring("spec.tsdb.tls"))
 	})
 })
 
-var _ = Describe("validatePrometheusTLSConfig", func() {
-	It("returns nil when config.Prometheus is nil", func() {
+var _ = Describe("validateTSDBTLSConfig", func() {
+	It("returns nil when config.TSDB is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{}
-		Expect(validatePrometheusTLSConfig(bindplane)).To(Succeed())
+		Expect(validateTSDBTLSConfig(bindplane)).To(Succeed())
 	})
 	It("returns error when both secretName and certManager are set", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							SecretName:  "my-secret",
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca"},
 						},
@@ -125,22 +125,22 @@ var _ = Describe("validatePrometheusTLSConfig", func() {
 				},
 			},
 		}
-		Expect(validatePrometheusTLSConfig(bindplane)).NotTo(Succeed())
-		Expect(validatePrometheusTLSConfig(bindplane).Error()).To(ContainSubstring("mutually exclusive"))
+		Expect(validateTSDBTLSConfig(bindplane)).NotTo(Succeed())
+		Expect(validateTSDBTLSConfig(bindplane).Error()).To(ContainSubstring("mutually exclusive"))
 	})
 	It("returns nil when only CertManager is set with valid name", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					Prometheus: &bindplanev1alpha1.Prometheus{
-						TLS: &bindplanev1alpha1.PrometheusTLSConfig{
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
 							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer", Kind: "Issuer"},
 						},
 					},
 				},
 			},
 		}
-		Expect(validatePrometheusTLSConfig(bindplane)).To(Succeed())
+		Expect(validateTSDBTLSConfig(bindplane)).To(Succeed())
 	})
 })
 
@@ -259,15 +259,15 @@ var _ = Describe("getNatsServerCertDNSNames", func() {
 	})
 })
 
-var _ = Describe("getPrometheusServerCertDNSNames", func() {
-	It("returns service and pod DNS names for the bindplane prometheus component", func() {
+var _ = Describe("getTSDBServerCertDNSNames", func() {
+	It("returns service and pod DNS names for the bindplane tsdb component", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
 		}
-		names := getPrometheusServerCertDNSNames(bindplane)
-		Expect(names).To(ContainElement("my-bp-prometheus.default.svc.cluster.local"))
-		Expect(names).To(ContainElement("my-bp-prometheus.default.svc"))
-		Expect(names).To(ContainElement("my-bp-prometheus-0.my-bp-prometheus.default.svc.cluster.local"))
+		names := getTSDBServerCertDNSNames(bindplane)
+		Expect(names).To(ContainElement("my-bp-tsdb.default.svc.cluster.local"))
+		Expect(names).To(ContainElement("my-bp-tsdb.default.svc"))
+		Expect(names).To(ContainElement("my-bp-tsdb-0.my-bp-tsdb.default.svc.cluster.local"))
 		Expect(names).To(ContainElement("localhost"))
 		Expect(names).To(HaveLen(4))
 	})
@@ -320,7 +320,7 @@ var _ = Describe("buildCertificate", func() {
 
 	It("builds client certificate with commonName and client auth usage", func() {
 		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: "ClusterIssuer", Group: "cert-manager.io"}
-		cn := "bindplane-prometheus-remote-write-client"
+		cn := "bindplane-tsdb-remote-write-client"
 		cert := buildCertificate(bindplane, "bp-prom-client", "bp-prom-client", issuerRef, nil, nil, &cn)
 		Expect(cert.Spec.CommonName).To(Equal(cn))
 		Expect(cert.Spec.DNSNames).To(BeNil())

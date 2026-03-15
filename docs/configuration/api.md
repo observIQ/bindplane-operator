@@ -100,7 +100,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `license` _string_ | License is the Bindplane license key |  |  |
+| `license` _string_ | License is the Bindplane license key |  | MinLength: 1 <br />Optional: \{\} <br /> |
 | `licenseSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | LicenseSecretRef references a Kubernetes Secret containing the Bindplane license key.<br />Takes precedence over License if both are set. |  | Optional: \{\} <br /> |
 | `auth` _[AuthConfig](#authconfig)_ | Auth configuration for Bindplane |  | Optional: \{\} <br /> |
 | `network` _[NetworkConfig](#networkconfig)_ | Network configuration for Bindplane |  | Optional: \{\} <br /> |
@@ -109,7 +109,8 @@ _Appears in:_
 | `metrics` _[MetricsConfig](#metricsconfig)_ | Metrics configuration for Bindplane. When omitted, defaults to prometheus type with interval 60s and endpoint /metrics. |  | Optional: \{\} <br /> |
 | `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
 | `auditTrail` _[AuditTrailConfig](#audittrailconfig)_ | AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365. |  | Optional: \{\} <br /> |
-| `prometheus` _[Prometheus](#prometheus)_ | Prometheus configures TLS for the Prometheus remote write component. |  | Optional: \{\} <br /> |
+| `tsdb` _[TSDBConfig](#tsdbconfig)_ | TSDB configures TLS and remote settings for Bindplane's TSDB integration. |  | Optional: \{\} <br /> |
+| `nats` _[NatsConfig](#natsconfig)_ | Nats configures TLS for the NATS event bus (client and server). Cert-manager only. |  | Optional: \{\} <br /> |
 
 
 #### BindplaneJobsComponentSpec
@@ -162,7 +163,7 @@ _Appears in:_
 | `bindplaneJobs` _[BindplaneJobsComponentSpec](#bindplanejobscomponentspec)_ | Bindplane Jobs pod specification |  | Optional: \{\} <br /> |
 | `bindplaneJobsMigrate` _[BindplaneJobsMigrateComponentSpec](#bindplanejobsmigratecomponentspec)_ | Bindplane Jobs Migrate pod specification |  | Optional: \{\} <br /> |
 | `transformAgent` _[TransformAgentComponentSpec](#transformagentcomponentspec)_ | Transform Agent pod specification | \{  \} | Optional: \{\} <br /> |
-| `prometheus` _[PrometheusComponentSpec](#prometheuscomponentspec)_ | Prometheus pod specification |  | Optional: \{\} <br /> |
+| `tsdb` _[TSDBComponentSpec](#tsdbcomponentspec)_ | TSDB pod specification |  | Optional: \{\} <br /> |
 | `nats` _[NatsComponentSpec](#natscomponentspec)_ | NATS pod specification | \{  \} | Optional: \{\} <br /> |
 
 
@@ -178,7 +179,8 @@ See https://cert-manager.io/docs/concepts/issuer/
 
 
 _Appears in:_
-- [PrometheusTLSConfig](#prometheustlsconfig)
+- [NatsTLSConfig](#natstlsconfig)
+- [TSDBTLSConfig](#tsdbtlsconfig)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -306,6 +308,38 @@ _Appears in:_
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for NATS |  | Type: object <br />Optional: \{\} <br /> |
 
 
+#### NatsConfig
+
+
+
+NatsConfig configures the NATS event bus (client and server use the same TLS config).
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `tls` _[NatsTLSConfig](#natstlsconfig)_ | TLS configures mutual TLS for NATS via cert-manager. When set, a single certificate is used for client, cluster, and HTTP ports. |  | Optional: \{\} <br /> |
+
+
+#### NatsTLSConfig
+
+
+
+NatsTLSConfig defines TLS for NATS. Only cert-manager is supported; no secretName.
+
+
+
+_Appears in:_
+- [NatsConfig](#natsconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `certManager` _[CertManagerTLSIssuerRef](#certmanagertlsissuerref)_ | CertManager references a cert-manager Issuer or ClusterIssuer to issue the NATS certificate (used for client, cluster, and HTTP). |  | Optional: \{\} <br /> |
+
+
 #### NetworkConfig
 
 
@@ -388,7 +422,7 @@ _Appears in:_
 - [BindplaneJobsComponentSpec](#bindplanejobscomponentspec)
 - [BindplaneJobsMigrateComponentSpec](#bindplanejobsmigratecomponentspec)
 - [NatsComponentSpec](#natscomponentspec)
-- [PrometheusComponentSpec](#prometheuscomponentspec)
+- [TSDBComponentSpec](#tsdbcomponentspec)
 - [TransformAgentComponentSpec](#transformagentcomponentspec)
 
 | Field | Description | Default | Validation |
@@ -450,61 +484,6 @@ _Appears in:_
 | `keyKey` _string_ | KeyKey is the key in the Secret for the client private key (maps to sslKey). Set with CertKey for mutual TLS. |  | Optional: \{\} <br /> |
 
 
-#### Prometheus
-
-
-
-Prometheus configures the Prometheus component (Bindplane to Prometheus remote write).
-
-
-
-_Appears in:_
-- [BindplaneConfigSpec](#bindplaneconfigspec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `tls` _[PrometheusTLSConfig](#prometheustlsconfig)_ | TLS configures TLS for Prometheus remote write. |  | Optional: \{\} <br /> |
-
-
-#### PrometheusComponentSpec
-
-
-
-PrometheusComponentSpec defines the Prometheus component pod specification
-
-
-
-_Appears in:_
-- [BindplaneSpec](#bindplanespec)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Prometheus |  | Type: object <br />Optional: \{\} <br /> |
-| `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for Prometheus |  | Optional: \{\} <br /> |
-
-
-#### PrometheusTLSConfig
-
-
-
-PrometheusTLSConfig defines TLS for Prometheus remote write.
-Exactly one of secretName (user-defined Secret) or certManager (cert-manager Issuer/ClusterIssuer) should be set.
-
-
-
-_Appears in:_
-- [Prometheus](#prometheus)
-
-| Field | Description | Default | Validation |
-| --- | --- | --- | --- |
-| `secretName` _string_ | SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS).<br />Omit when using certManager. |  | Optional: \{\} <br /> |
-| `certKey` _string_ | CertKey is the key in the Secret for the TLS certificate. |  | Optional: \{\} <br /> |
-| `keyKey` _string_ | KeyKey is the key in the Secret for the TLS private key. |  | Optional: \{\} <br /> |
-| `caKey` _string_ | CAKey is the key in the Secret for the CA certificate. |  | Optional: \{\} <br /> |
-| `certManager` _[CertManagerTLSIssuerRef](#certmanagertlsissuerref)_ | CertManager references a cert-manager Issuer or ClusterIssuer to issue server and client certs (mTLS).<br />Mutually exclusive with secretName. |  | Optional: \{\} <br /> |
-| `skipVerify` _boolean_ | SkipVerify disables TLS certificate verification for the Prometheus remote write client. Only set for testing. |  | Optional: \{\} <br /> |
-
-
 #### StorageSpec
 
 
@@ -514,7 +493,7 @@ StorageSpec defines persistent storage configuration
 
 
 _Appears in:_
-- [PrometheusComponentSpec](#prometheuscomponentspec)
+- [TSDBComponentSpec](#tsdbcomponentspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -535,6 +514,103 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `postgres` _[PostgresConfig](#postgresconfig)_ | Postgres configuration |  |  |
+
+
+#### TSDBComponentSpec
+
+
+
+TSDBComponentSpec defines the TSDB component pod specification.
+By default, this deploys a Prometheus StatefulSet managed by the operator.
+
+
+
+_Appears in:_
+- [BindplaneSpec](#bindplanespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for the TSDB component |  | Type: object <br />Optional: \{\} <br /> |
+| `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the TSDB component |  | Optional: \{\} <br /> |
+| `tls` _[TSDBTLSConfig](#tsdbtlsconfig)_ | TLS configures TLS for the TSDB server (StatefulSet). Use either secretName (user-defined Secret)<br />or certManager (cert-manager Issuer/ClusterIssuer), not both. When set, the TSDB serves remote write over TLS. |  | Optional: \{\} <br /> |
+
+
+#### TSDBConfig
+
+
+
+TSDBConfig configures Bindplane's TSDB component (default implementation: Prometheus).
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `remote` _[TSDBRemoteConfig](#tsdbremoteconfig)_ | Remote configures Bindplane to use an externally managed TSDB-compatible backend<br />(for example, Prometheus, Mimir, or VictoriaMetrics) instead of the operator-managed TSDB StatefulSet. |  | Optional: \{\} <br /> |
+| `tls` _[TSDBTLSConfig](#tsdbtlsconfig)_ | TLS configures TLS for TSDB remote write. |  | Optional: \{\} <br /> |
+
+
+#### TSDBRemoteConfig
+
+
+
+TSDBRemoteConfig defines how Bindplane connects to an externally managed TSDB-compatible backend.
+
+
+
+_Appears in:_
+- [TSDBConfig](#tsdbconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enable` _boolean_ | Enable controls whether Bindplane should connect to an external TSDB-compatible backend.<br />When false, all other fields in this object must be omitted. |  | Optional: \{\} <br /> |
+| `host` _string_ | Host is the hostname or IP of the external TSDB-compatible backend.<br />Required when enable is true. |  | Optional: \{\} <br /> |
+| `port` _integer_ | Port is the TCP port of the external TSDB-compatible backend.<br />Required when enable is true. | 9090 | Optional: \{\} <br /> |
+| `queryPathPrefix` _string_ | QueryPathPrefix is an optional prefix path for PromQL APIs (for example, /prometheus). |  | Optional: \{\} <br /> |
+| `remoteWrite` _[TSDBRemoteWriteConfig](#tsdbremotewriteconfig)_ | RemoteWrite optionally overrides where Bindplane sends TSDB remote write traffic. |  | Optional: \{\} <br /> |
+
+
+#### TSDBRemoteWriteConfig
+
+
+
+TSDBRemoteWriteConfig defines optional remote write endpoint overrides.
+
+
+
+_Appears in:_
+- [TSDBRemoteConfig](#tsdbremoteconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `host` _string_ | Host is the remote write hostname or IP. Must be set together with port. |  | Optional: \{\} <br /> |
+| `port` _integer_ | Port is the remote write TCP port. Must be set together with host. |  | Optional: \{\} <br /> |
+| `endpoint` _string_ | Endpoint is the remote write HTTP path. | /api/v1/write | Optional: \{\} <br /> |
+
+
+#### TSDBTLSConfig
+
+
+
+TSDBTLSConfig defines TLS for TSDB remote write.
+Exactly one of secretName (user-defined Secret) or certManager (cert-manager Issuer/ClusterIssuer) should be set.
+
+
+
+_Appears in:_
+- [TSDBComponentSpec](#tsdbcomponentspec)
+- [TSDBConfig](#tsdbconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `secretName` _string_ | SecretName is the name of the Secret containing the TLS certificate, key, and optionally CA (user-defined TLS).<br />Omit when using certManager. |  | Optional: \{\} <br /> |
+| `certKey` _string_ | CertKey is the key in the Secret for the TLS certificate. |  | Optional: \{\} <br /> |
+| `keyKey` _string_ | KeyKey is the key in the Secret for the TLS private key. |  | Optional: \{\} <br /> |
+| `caKey` _string_ | CAKey is the key in the Secret for the CA certificate. |  | Optional: \{\} <br /> |
+| `certManager` _[CertManagerTLSIssuerRef](#certmanagertlsissuerref)_ | CertManager references a cert-manager Issuer or ClusterIssuer to issue server and client certs (mTLS).<br />Mutually exclusive with secretName. |  | Optional: \{\} <br /> |
+| `skipVerify` _boolean_ | SkipVerify disables TLS certificate verification for the TSDB remote write client. Only set for testing. |  | Optional: \{\} <br /> |
 
 
 #### TracingConfig
