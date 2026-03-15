@@ -40,8 +40,6 @@ const (
 	transformAgentHTTPPort = 4568
 	// transformAgentHTTPPortName is the name of the HTTP port for Transform Agent
 	transformAgentHTTPPortName = "http"
-	// transformAgentHealthCheckPath is the HTTP path for health checks (startup, readiness, liveness)
-	transformAgentHealthCheckPath = "/collector-version"
 )
 
 // reconcileTransformAgent reconciles all Transform Agent resources

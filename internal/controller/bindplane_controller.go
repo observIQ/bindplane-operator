@@ -232,14 +232,6 @@ const (
 	preStopSleep = "sleep 5"
 )
 
-// Health check path constants
-const (
-	// healthCheckPath is the HTTP path for health checks (used by jobs)
-	healthCheckPath = "/health"
-	// healthzCheckPath is the HTTP path for healthz checks (used by NATS and node)
-	healthzCheckPath = "/healthz"
-)
-
 // Probe timing constants
 const (
 	// Startup probe: allow up to 100s (20 × 5s) for the container to become ready.

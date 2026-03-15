@@ -363,9 +363,6 @@ func buildCertificate(
 	}
 }
 
-//go:fix inline
-func stringPtr(s string) *string { return new(s) }
-
 func (r *BindplaneReconciler) reconcileCertificate(ctx context.Context, desired *cmapi.Certificate, log logr.Logger) error {
 	existing := &cmapi.Certificate{}
 	err := r.Get(ctx, client.ObjectKeyFromObject(desired), existing)
