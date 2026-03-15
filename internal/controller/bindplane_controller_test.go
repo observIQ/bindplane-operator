@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
@@ -1461,7 +1462,7 @@ var _ = Describe("getPrometheusEnvVars", func() {
 		}
 		envVars := getPrometheusEnvVars(bindplane)
 		Expect(envVars).To(HaveLen(5))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal(enableRemoteValue))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-prometheus.default.svc"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(Equal("(secret)"))
@@ -1474,6 +1475,64 @@ var _ = Describe("getPrometheusEnvVars", func() {
 		Expect(refUser.Key).To(Equal(prometheusBasicAuthSecretKeyUser))
 		Expect(refPass.Name).To(Equal("my-bp-prometheus-basic-auth"))
 		Expect(refPass.Key).To(Equal(prometheusBasicAuthSecretKeyPass))
+	})
+	It("uses remote Prometheus env vars and skips operator-generated basic auth when remote.enable is true", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						Remote: &bindplanev1alpha1.PrometheusRemoteConfig{
+							Enable:          true,
+							Host:            "vm.example.internal",
+							QueryPathPrefix: "/select/0/prometheus",
+							RemoteWrite: &bindplanev1alpha1.PrometheusRemoteWriteConfig{
+								Host: "vm-write.example.internal",
+								Port: 8480,
+							},
+						},
+					},
+				},
+			},
+		}
+		envVars := getPrometheusEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("vm.example.internal"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_QUERY_PATH_PREFIX")).To(Equal("/select/0/prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_HOST")).To(Equal("vm-write.example.internal"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_PORT")).To(Equal("8480"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT")).To(Equal("/api/v1/write"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(BeEmpty())
+	})
+	It("uses remote write endpoint override when provided", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						Remote: &bindplanev1alpha1.PrometheusRemoteConfig{
+							Enable: true,
+							Host:   "vm.example.internal",
+							Port:   8080,
+							RemoteWrite: &bindplanev1alpha1.PrometheusRemoteWriteConfig{
+								Host:     "vm-write.example.internal",
+								Port:     18480,
+								Endpoint: "/api/v1/push",
+							},
+						},
+					},
+				},
+			},
+		}
+		envVars := getPrometheusEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("8080"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT")).To(Equal("/api/v1/push"))
 	})
 	It("adds Prometheus TLS env vars when cert-manager TLS is enabled", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
@@ -1516,6 +1575,28 @@ var _ = Describe("getPrometheusEnvVars", func() {
 		envVars := getPrometheusEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY")).To(Equal("true"))
 		Expect(envVars).To(HaveLen(10))
+	})
+})
+
+var _ = Describe("reconcilePrometheus", func() {
+	It("short-circuits when remote Prometheus mode is enabled", func() {
+		reconciler := &BindplaneReconciler{}
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Prometheus: &bindplanev1alpha1.Prometheus{
+						Remote: &bindplanev1alpha1.PrometheusRemoteConfig{
+							Enable: true,
+							Host:   "vm.example.internal",
+						},
+					},
+				},
+			},
+		}
+		Expect(reconciler.reconcilePrometheus(context.Background(), bindplane, logf.Log.WithName("test"))).To(Succeed())
 	})
 })
 

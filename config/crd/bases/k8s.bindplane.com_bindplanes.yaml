@@ -11632,6 +11632,43 @@ spec:
                     type: object
                   prometheus:
                     properties:
+                      remote:
+                        properties:
+                          enable:
+                            type: boolean
+                          host:
+                            type: string
+                          port:
+                            default: 9090
+                            format: int32
+                            type: integer
+                          queryPathPrefix:
+                            type: string
+                          remoteWrite:
+                            properties:
+                              endpoint:
+                                default: /api/v1/write
+                                type: string
+                              host:
+                                type: string
+                              port:
+                                format: int32
+                                type: integer
+                            type: object
+                            x-kubernetes-validations:
+                            - message: host and port must be set together
+                              rule: (has(self.host) && has(self.port)) || (!has(self.host)
+                                && !has(self.port))
+                        type: object
+                        x-kubernetes-validations:
+                        - message: host, port, queryPathPrefix, and remoteWrite must
+                            be unset when enable is false
+                          rule: self.enable || (!has(self.host) && !has(self.queryPathPrefix)
+                            && !has(self.remoteWrite) && !has(self.port))
+                        - message: host is required when enable is true
+                          rule: '!self.enable || has(self.host)'
+                        - message: port is required when enable is true
+                          rule: '!self.enable || has(self.port)'
                       tls:
                         properties:
                           caKey:

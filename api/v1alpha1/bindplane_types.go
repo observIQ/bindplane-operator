@@ -150,9 +150,61 @@ type AuditTrailConfig struct {
 
 // Prometheus configures the Prometheus component (Bindplane to Prometheus remote write).
 type Prometheus struct {
+	// Remote configures Bindplane to use an externally managed Prometheus-compatible backend
+	// (for example, Prometheus, Mimir, or VictoriaMetrics) instead of the operator-managed Prometheus StatefulSet.
+	// +optional
+	Remote *PrometheusRemoteConfig `json:"remote,omitempty"`
+
 	// TLS configures TLS for Prometheus remote write.
 	// +optional
 	TLS *PrometheusTLSConfig `json:"tls,omitempty"`
+}
+
+// PrometheusRemoteConfig defines how Bindplane connects to an externally managed Prometheus-compatible backend.
+// +kubebuilder:validation:XValidation:rule="self.enable || (!has(self.host) && !has(self.queryPathPrefix) && !has(self.remoteWrite) && !has(self.port))",message="host, port, queryPathPrefix, and remoteWrite must be unset when enable is false"
+// +kubebuilder:validation:XValidation:rule="!self.enable || has(self.host)",message="host is required when enable is true"
+// +kubebuilder:validation:XValidation:rule="!self.enable || has(self.port)",message="port is required when enable is true"
+type PrometheusRemoteConfig struct {
+	// Enable controls whether Bindplane should connect to an external Prometheus-compatible backend.
+	// When false, all other fields in this object must be omitted.
+	// +optional
+	Enable bool `json:"enable,omitempty"`
+
+	// Host is the hostname or IP of the external Prometheus-compatible backend.
+	// Required when enable is true.
+	// +optional
+	Host string `json:"host,omitempty"`
+
+	// Port is the TCP port of the external Prometheus-compatible backend.
+	// Required when enable is true.
+	// +optional
+	// +kubebuilder:default=9090
+	Port int32 `json:"port,omitempty"`
+
+	// QueryPathPrefix is an optional prefix path for PromQL APIs (for example, /prometheus).
+	// +optional
+	QueryPathPrefix string `json:"queryPathPrefix,omitempty"`
+
+	// RemoteWrite optionally overrides where Bindplane sends remote write traffic.
+	// +optional
+	RemoteWrite *PrometheusRemoteWriteConfig `json:"remoteWrite,omitempty"`
+}
+
+// PrometheusRemoteWriteConfig defines optional remote write endpoint overrides.
+// +kubebuilder:validation:XValidation:rule="(has(self.host) && has(self.port)) || (!has(self.host) && !has(self.port))",message="host and port must be set together"
+type PrometheusRemoteWriteConfig struct {
+	// Host is the remote write hostname or IP. Must be set together with port.
+	// +optional
+	Host string `json:"host,omitempty"`
+
+	// Port is the remote write TCP port. Must be set together with host.
+	// +optional
+	Port int32 `json:"port,omitempty"`
+
+	// Endpoint is the remote write HTTP path.
+	// +optional
+	// +kubebuilder:default="/api/v1/write"
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // PrometheusTLSConfig defines TLS for Prometheus remote write.

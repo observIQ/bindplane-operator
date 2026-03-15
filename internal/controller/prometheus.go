@@ -128,6 +128,12 @@ type promtoolProbeTLSConfig struct {
 	InsecureSkipVerify bool   `json:"insecure_skip_verify,omitempty"`
 }
 
+// isPrometheusRemoteEnabled returns true when Bindplane should use a user-managed remote Prometheus backend.
+func isPrometheusRemoteEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	p := bindplane.Spec.Config.Prometheus
+	return p != nil && p.Remote != nil && p.Remote.Enable
+}
+
 // isPrometheusServerTLSEnabled returns true when the Prometheus server (StatefulSet) should serve TLS (spec.prometheus.tls with certManager or secretName).
 func isPrometheusServerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
 	p := bindplane.Spec.Prometheus
@@ -205,6 +211,10 @@ func buildPrometheusProbeHTTPConfigYAML(bindplane *bindplanev1alpha1.Bindplane) 
 
 // reconcilePrometheus reconciles all Prometheus resources
 func (r *BindplaneReconciler) reconcilePrometheus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	if isPrometheusRemoteEnabled(bindplane) {
+		log.Info("Skipping operator-managed Prometheus resources because spec.config.prometheus.remote.enable is true")
+		return nil
+	}
 	// Reconcile Prometheus basic auth Secret first (create-only) so it exists for StatefulSet and Bindplane pods
 	if err := r.reconcilePrometheusBasicAuthSecret(ctx, bindplane, log); err != nil {
 		return err

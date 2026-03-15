@@ -170,11 +170,15 @@ const (
 	internalTLSNatsMountPath  = "/etc/bindplane/nats-tls"
 
 	// Prometheus configuration
-	bindplanePrometheusEnableRemoteEnvVar = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
-	bindplanePrometheusHostEnvVar         = "BINDPLANE_PROMETHEUS_HOST"
-	bindplanePrometheusPortEnvVar         = "BINDPLANE_PROMETHEUS_PORT"
-	bindplanePrometheusAuthUsernameEnvVar = "BINDPLANE_PROMETHEUS_AUTH_USERNAME"
-	bindplanePrometheusAuthPasswordEnvVar = "BINDPLANE_PROMETHEUS_AUTH_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplanePrometheusEnableRemoteEnvVar        = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
+	bindplanePrometheusHostEnvVar                = "BINDPLANE_PROMETHEUS_HOST"
+	bindplanePrometheusPortEnvVar                = "BINDPLANE_PROMETHEUS_PORT"
+	bindplanePrometheusQueryPathPrefixEnvVar     = "BINDPLANE_PROMETHEUS_QUERY_PATH_PREFIX"
+	bindplanePrometheusRemoteWriteHostEnvVar     = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_HOST"
+	bindplanePrometheusRemoteWritePortEnvVar     = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_PORT"
+	bindplanePrometheusRemoteWriteEndpointEnvVar = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT"
+	bindplanePrometheusAuthUsernameEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_USERNAME"
+	bindplanePrometheusAuthPasswordEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_PASSWORD" // #nosec G101 -- env var name, not a credential
 
 	// Prometheus remote write TLS (cert-manager internal mTLS)
 	bindplanePrometheusEnableTLSEnvVar     = "BINDPLANE_PROMETHEUS_ENABLE_TLS"

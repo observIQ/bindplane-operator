@@ -345,42 +345,70 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 // Username and password (for remote write basic auth) are read from the operator-generated Prometheus basic auth Secret.
 // When internal TLS is enabled for Prometheus remote write, also adds BINDPLANE_PROMETHEUS_ENABLE_TLS and cert paths.
 func getPrometheusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
-	prometheusServiceName := getResourceName(bindplane, prometheusComponent)
-	prometheusHost := fmt.Sprintf("%s.%s.svc", prometheusServiceName, bindplane.Namespace)
-	prometheusPort := strconv.Itoa(int(prometheusHTTPPort))
-	secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
-
+	remoteEnabled := isPrometheusRemoteEnabled(bindplane)
+	prometheusHost := ""
+	prometheusPort := int32(prometheusHTTPPort)
+	if remoteEnabled {
+		remote := bindplane.Spec.Config.Prometheus.Remote
+		prometheusHost = remote.Host
+		if remote.Port > 0 {
+			prometheusPort = remote.Port
+		}
+	} else {
+		prometheusServiceName := getResourceName(bindplane, prometheusComponent)
+		prometheusHost = strings.Join([]string{prometheusServiceName, bindplane.Namespace, "svc"}, ".")
+	}
 	envVars := []corev1.EnvVar{
-		{
-			Name:  bindplanePrometheusEnableRemoteEnvVar,
-			Value: enableRemoteValue,
-		},
-		{
-			Name:  bindplanePrometheusHostEnvVar,
-			Value: prometheusHost,
-		},
-		{
-			Name:  bindplanePrometheusPortEnvVar,
-			Value: prometheusPort,
-		},
-		{
-			Name: bindplanePrometheusAuthUsernameEnvVar,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-					Key:                  prometheusBasicAuthSecretKeyUser,
+		{Name: bindplanePrometheusEnableRemoteEnvVar, Value: enableRemoteValue},
+		{Name: bindplanePrometheusHostEnvVar, Value: prometheusHost},
+		{Name: bindplanePrometheusPortEnvVar, Value: strconv.Itoa(int(prometheusPort))},
+	}
+	if remoteEnabled {
+		remote := bindplane.Spec.Config.Prometheus.Remote
+		if remote.QueryPathPrefix != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplanePrometheusQueryPathPrefixEnvVar, Value: remote.QueryPathPrefix})
+		}
+		if remote.RemoteWrite != nil {
+			remoteWrite := remote.RemoteWrite
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  bindplanePrometheusRemoteWriteHostEnvVar,
+				Value: remoteWrite.Host,
+			})
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  bindplanePrometheusRemoteWritePortEnvVar,
+				Value: strconv.Itoa(int(remoteWrite.Port)),
+			})
+			remoteWriteEndpoint := remoteWrite.Endpoint
+			if remoteWriteEndpoint == "" {
+				remoteWriteEndpoint = "/api/v1/write"
+			}
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  bindplanePrometheusRemoteWriteEndpointEnvVar,
+				Value: remoteWriteEndpoint,
+			})
+		}
+	} else {
+		secretName := getResourceName(bindplane, prometheusBasicAuthSecretSuffix)
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: bindplanePrometheusAuthUsernameEnvVar,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+						Key:                  prometheusBasicAuthSecretKeyUser,
+					},
 				},
 			},
-		},
-		{
-			Name: bindplanePrometheusAuthPasswordEnvVar,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-					Key:                  prometheusBasicAuthSecretKeyPass,
+			corev1.EnvVar{
+				Name: bindplanePrometheusAuthPasswordEnvVar,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+						Key:                  prometheusBasicAuthSecretKeyPass,
+					},
 				},
 			},
-		},
+		)
 	}
 	envVars = append(envVars, getPrometheusRemoteWriteTLSEnvVars(bindplane)...)
 	return envVars
