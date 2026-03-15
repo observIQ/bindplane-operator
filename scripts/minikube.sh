@@ -2,6 +2,11 @@
 
 set -ex
 
+if [ -z "${BINDPLANE_LICENSE:-}" ]; then
+  echo "BINDPLANE_LICENSE is not set. Set it in your shell and re-run." >&2
+  exit 1
+fi
+
 minikube delete
 minikube start
 eval $(minikube docker-env)
@@ -25,6 +30,24 @@ kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
   --timeout=90s
+
+# Create secrets for Bindplane license and system auth (script expects BINDPLANE_LICENSE; auth defaults to admin/password)
+BINDPLANE_AUTH_USERNAME="${BINDPLANE_AUTH_USERNAME:-admin}"
+BINDPLANE_AUTH_PASSWORD="${BINDPLANE_AUTH_PASSWORD:-password}"
+kubectl create namespace default --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic bindplane-license \
+  --from-literal=license="${BINDPLANE_LICENSE}" \
+  --namespace=default \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic bindplane-system-auth \
+  --from-literal=username="${BINDPLANE_AUTH_USERNAME}" \
+  --from-literal=password="${BINDPLANE_AUTH_PASSWORD}" \
+  --namespace=default \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Apply Bindplane CR and cert-manager resources (CR references the secrets above)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+kubectl apply -f "${SCRIPT_DIR}/../bindplane_v1alpha1_bindplane.yaml"
 
 # Create ingress for bindplane node service
 kubectl apply -f - <<EOF
