@@ -467,6 +467,70 @@ func getTransformAgentEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.E
 	}
 }
 
+// getProfilingServiceNameDefault returns the default profiling service name for a component when spec does not set it.
+func getProfilingServiceNameDefault(component string) string {
+	switch component {
+	case nodeComponent:
+		return "bindplane-node"
+	case bindplaneJobsComponent:
+		return "bindplane-jobs"
+	case bindplaneJobsMigrateComponent:
+		return "bindplane-jobs-migrate"
+	case natsComponent:
+		return "bindplane-nats"
+	default:
+		return "bindplane-" + component
+	}
+}
+
+// getProfilingEnvVars returns env vars for spec.config.profiling (Google Cloud Profiler). Only adds vars when profiling is enabled.
+func getProfilingEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec, component string) []corev1.EnvVar {
+	if config == nil || config.Profiling == nil || !config.Profiling.Enabled {
+		return nil
+	}
+	p := config.Profiling
+	serviceName := p.ServiceName
+	if serviceName == "" {
+		serviceName = getProfilingServiceNameDefault(component)
+	}
+	envVars := []corev1.EnvVar{
+		{Name: bindplaneProfilingEnabledEnvVar, Value: "true"},
+		{Name: bindplaneProfilingProjectIDEnvVar, Value: p.ProjectID},
+		{Name: bindplaneProfilingServiceNameEnvVar, Value: serviceName},
+	}
+	if p.NoCPU {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoCPUEnvVar, Value: "true"})
+	}
+	if p.NoAlloc {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoAllocEnvVar, Value: "true"})
+	}
+	if p.NoHeap {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoHeapEnvVar, Value: "true"})
+	}
+	if p.NoGoroutine {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoGoroutineEnvVar, Value: "true"})
+	}
+	if p.Mutex {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingMutexEnvVar, Value: "true"})
+	}
+	return envVars
+}
+
+// getPprofEnvVars returns env vars for spec.config.pprof. Only adds vars when pprof is enabled.
+func getPprofEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	if config == nil || config.Pprof == nil || !config.Pprof.Enabled {
+		return nil
+	}
+	endpoint := config.Pprof.Endpoint
+	if endpoint == "" {
+		endpoint = defaultPprofEndpoint
+	}
+	return []corev1.EnvVar{
+		{Name: bindplanePprofEnabledEnvVar, Value: "true"},
+		{Name: bindplanePprofEndpointEnvVar, Value: endpoint},
+	}
+}
+
 // getNatsClientEnvVars returns the NATS client environment variables for Node and Jobs deployments
 func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsClient bool) []corev1.EnvVar {
 	if !includeNatsClient {
@@ -500,10 +564,14 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 }
 
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
-func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+// component is used to set the default profiling service name (e.g. bindplane-node, bindplane-jobs).
+func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component string) []corev1.EnvVar {
+	config := &bindplane.Spec.Config
 	return combineEnvVars(
 		getBindplaneConfigEnvVars(bindplane),
 		getTSDBEnvVars(bindplane),
 		getTransformAgentEnvVars(bindplane),
+		getProfilingEnvVars(config, component),
+		getPprofEnvVars(config),
 	)
 }

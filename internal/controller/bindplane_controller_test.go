@@ -99,6 +99,63 @@ var _ = Describe("validateLicenseConfig", func() {
 	})
 })
 
+var _ = Describe("validateProfilingConfig", func() {
+	It("accepts when profiling is nil or disabled", func() {
+		Expect(validateProfilingConfig(nil)).To(Succeed())
+		Expect(validateProfilingConfig(&bindplanev1alpha1.BindplaneConfigSpec{})).To(Succeed())
+		Expect(validateProfilingConfig(&bindplanev1alpha1.BindplaneConfigSpec{
+			Profiling: &bindplanev1alpha1.ProfilingConfig{Enabled: false},
+		})).To(Succeed())
+	})
+
+	It("rejects when profiling is enabled but projectID is empty", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Profiling: &bindplanev1alpha1.ProfilingConfig{Enabled: true},
+		}
+		Expect(validateProfilingConfig(cfg)).NotTo(Succeed())
+	})
+
+	It("accepts when profiling is enabled and projectID is set", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Profiling: &bindplanev1alpha1.ProfilingConfig{
+				Enabled:   true,
+				ProjectID: "my-project",
+			},
+		}
+		Expect(validateProfilingConfig(cfg)).To(Succeed())
+	})
+})
+
+var _ = Describe("validatePprofConfig", func() {
+	It("accepts when pprof is nil, disabled, or endpoint unset", func() {
+		Expect(validatePprofConfig(nil)).To(Succeed())
+		Expect(validatePprofConfig(&bindplanev1alpha1.BindplaneConfigSpec{})).To(Succeed())
+		Expect(validatePprofConfig(&bindplanev1alpha1.BindplaneConfigSpec{
+			Pprof: &bindplanev1alpha1.PprofConfig{Enabled: true},
+		})).To(Succeed())
+	})
+
+	It("rejects when pprof is enabled and endpoint is invalid", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Pprof: &bindplanev1alpha1.PprofConfig{
+				Enabled:  true,
+				Endpoint: "not-host-port",
+			},
+		}
+		Expect(validatePprofConfig(cfg)).NotTo(Succeed())
+	})
+
+	It("accepts when pprof is enabled and endpoint is valid host:port", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Pprof: &bindplanev1alpha1.PprofConfig{
+				Enabled:  true,
+				Endpoint: "127.0.0.1:6060",
+			},
+		}
+		Expect(validatePprofConfig(cfg)).To(Succeed())
+	})
+})
+
 var _ = Describe("Bindplane Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -1384,6 +1441,104 @@ var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
 		envVars := getBindplaneConfigEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_CONNECTIONS")).To(Equal("5"))
 		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_TIME")).To(Equal("20s"))
+	})
+})
+
+var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+						},
+					},
+				},
+			},
+		}
+	}
+
+	It("does not set profiling or pprof env vars when disabled or omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneProfilingEnabledEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplanePprofEnabledEnvVar)).To(BeEmpty())
+	})
+
+	It("sets profiling env vars with default serviceName per component", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
+			Enabled:   true,
+			ProjectID: "my-gcp-project",
+		}
+		for _, tc := range []struct {
+			component string
+			wantName  string
+		}{
+			{nodeComponent, "bindplane-node"},
+			{bindplaneJobsComponent, "bindplane-jobs"},
+			{bindplaneJobsMigrateComponent, "bindplane-jobs-migrate"},
+			{natsComponent, "bindplane-nats"},
+		} {
+			envVars := getBindplaneCommonEnvVars(bindplane, tc.component)
+			Expect(envVarByName(envVars, bindplaneProfilingEnabledEnvVar)).To(Equal("true"))
+			Expect(envVarByName(envVars, bindplaneProfilingProjectIDEnvVar)).To(Equal("my-gcp-project"))
+			Expect(envVarByName(envVars, bindplaneProfilingServiceNameEnvVar)).To(Equal(tc.wantName))
+		}
+	})
+
+	It("sets profiling env vars with explicit serviceName when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
+			Enabled:     true,
+			ProjectID:   "my-gcp-project",
+			ServiceName: "custom-service",
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneProfilingServiceNameEnvVar)).To(Equal("custom-service"))
+	})
+
+	It("sets profiling noCPU, noAlloc, noHeap, noGoroutine, mutex when enabled", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
+			Enabled:     true,
+			ProjectID:   "proj",
+			NoCPU:       true,
+			NoAlloc:     true,
+			NoHeap:      true,
+			NoGoroutine: true,
+			Mutex:       true,
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneProfilingNoCPUEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneProfilingNoAllocEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneProfilingNoHeapEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneProfilingNoGoroutineEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneProfilingMutexEnvVar)).To(Equal("true"))
+	})
+
+	It("sets pprof env vars with default endpoint when enabled and endpoint unset", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Pprof = &bindplanev1alpha1.PprofConfig{Enabled: true}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplanePprofEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplanePprofEndpointEnvVar)).To(Equal(defaultPprofEndpoint))
+	})
+
+	It("sets pprof env vars with explicit endpoint when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Pprof = &bindplanev1alpha1.PprofConfig{
+			Enabled:  true,
+			Endpoint: "0.0.0.0:6061",
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplanePprofEndpointEnvVar)).To(Equal("0.0.0.0:6061"))
 	})
 })
 

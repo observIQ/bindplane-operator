@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net"
 	"slices"
 	"unicode"
 
@@ -216,6 +217,25 @@ const (
 	bindplaneNatsTLSCertEnvVar   = "BINDPLANE_NATS_TLS_CERT"
 	bindplaneNatsTLSKeyEnvVar    = "BINDPLANE_NATS_TLS_KEY"
 	bindplaneNatsTLSCAEnvVar     = "BINDPLANE_NATS_TLS_CA"
+
+	// Profiling (Google Cloud Profiler)
+	bindplaneProfilingEnabledEnvVar     = "BINDPLANE_PROFILING_ENABLED"
+	bindplaneProfilingProjectIDEnvVar   = "BINDPLANE_PROFILING_PROJECT_ID"
+	bindplaneProfilingServiceNameEnvVar = "BINDPLANE_PROFILING_SERVICE_NAME"
+	bindplaneProfilingNoCPUEnvVar       = "BINDPLANE_PROFILING_NO_CPU"
+	bindplaneProfilingNoAllocEnvVar     = "BINDPLANE_PROFILING_NO_ALLOC"
+	bindplaneProfilingNoHeapEnvVar      = "BINDPLANE_PROFILING_NO_HEAP"
+	bindplaneProfilingNoGoroutineEnvVar = "BINDPLANE_PROFILING_NO_GOROUTINE"
+	bindplaneProfilingMutexEnvVar       = "BINDPLANE_PROFILING_MUTEX"
+
+	// Pprof
+	bindplanePprofEnabledEnvVar  = "BINDPLANE_PPROF_ENABLED"
+	bindplanePprofEndpointEnvVar = "BINDPLANE_PPROF_ENDPOINT"
+)
+
+const (
+	// defaultPprofEndpoint is the default host:port for the pprof server (matches Bindplane)
+	defaultPprofEndpoint = "127.0.0.1:6060"
 )
 
 // Common security and pod constants
@@ -335,6 +355,40 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	if err := validateLicenseConfig(&bindplane.Spec.Config); err != nil {
 		log.Error(err, "invalid Bindplane config: license must be set via license or licenseSecretRef")
+		condition := metav1.Condition{
+			Type:               "Reconciled",
+			Status:             metav1.ConditionFalse,
+			Reason:             "InvalidConfig",
+			Message:            err.Error(),
+			ObservedGeneration: bindplane.Generation,
+			LastTransitionTime: metav1.Now(),
+		}
+		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
+			log.Error(statusErr, "failed to update Bindplane status")
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, nil
+	}
+	if err := validateProfilingConfig(&bindplane.Spec.Config); err != nil {
+		log.Error(err, "invalid Bindplane config: profiling")
+		condition := metav1.Condition{
+			Type:               "Reconciled",
+			Status:             metav1.ConditionFalse,
+			Reason:             "InvalidConfig",
+			Message:            err.Error(),
+			ObservedGeneration: bindplane.Generation,
+			LastTransitionTime: metav1.Now(),
+		}
+		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
+			log.Error(statusErr, "failed to update Bindplane status")
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, nil
+	}
+	if err := validatePprofConfig(&bindplane.Spec.Config); err != nil {
+		log.Error(err, "invalid Bindplane config: pprof")
 		condition := metav1.Condition{
 			Type:               "Reconciled",
 			Status:             metav1.ConditionFalse,
@@ -474,6 +528,28 @@ func validateLicenseConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error 
 	hasLicenseSecretRef := config.LicenseSecretRef != nil
 	if hasLicense == hasLicenseSecretRef {
 		return fmt.Errorf("exactly one of spec.config.license or spec.config.licenseSecretRef must be set")
+	}
+	return nil
+}
+
+// validateProfilingConfig ensures projectID is set when profiling is enabled.
+func validateProfilingConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
+	if config == nil || config.Profiling == nil || !config.Profiling.Enabled {
+		return nil
+	}
+	if config.Profiling.ProjectID == "" {
+		return fmt.Errorf("projectID is required when profiling is enabled")
+	}
+	return nil
+}
+
+// validatePprofConfig ensures pprof endpoint is a valid host:port when set.
+func validatePprofConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
+	if config == nil || config.Pprof == nil || !config.Pprof.Enabled || config.Pprof.Endpoint == "" {
+		return nil
+	}
+	if _, _, err := net.SplitHostPort(config.Pprof.Endpoint); err != nil {
+		return fmt.Errorf("invalid pprof endpoint %q: %w", config.Pprof.Endpoint, err)
 	}
 	return nil
 }

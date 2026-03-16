@@ -127,7 +127,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								Env: combineEnvVars(
 									getKubernetesEnvVars(nodeContainerName),
 									getNodeEnvVars(),
-									getBindplaneCommonEnvVars(bindplane),
+									getBindplaneCommonEnvVars(bindplane, nodeComponent),
 									getNatsClientEnvVars(bindplane, true),
 								),
 								Resources: corev1.ResourceRequirements{

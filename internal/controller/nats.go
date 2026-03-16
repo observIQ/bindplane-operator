@@ -146,7 +146,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								Env: combineEnvVars(
 									getKubernetesEnvVars(natsContainerName),
 									getNatsEnvVars(bindplane, headlessServiceName, replicas),
-									getBindplaneCommonEnvVars(bindplane),
+									getBindplaneCommonEnvVars(bindplane, natsComponent),
 								),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{

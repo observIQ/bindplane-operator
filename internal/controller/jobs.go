@@ -218,7 +218,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 											Value: modeValue,
 										},
 									},
-									getBindplaneCommonEnvVars(bindplane),
+									getBindplaneCommonEnvVars(bindplane, component),
 									getNatsClientEnvVars(bindplane, includeNatsClient),
 								),
 								Resources: resources,

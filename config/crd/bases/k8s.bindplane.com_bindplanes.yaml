@@ -11630,6 +11630,42 @@ spec:
                       webURL:
                         type: string
                     type: object
+                  pprof:
+                    properties:
+                      enabled:
+                        default: false
+                        type: boolean
+                      endpoint:
+                        type: string
+                    type: object
+                  profiling:
+                    properties:
+                      enabled:
+                        default: false
+                        type: boolean
+                      mutex:
+                        default: false
+                        type: boolean
+                      noAlloc:
+                        default: false
+                        type: boolean
+                      noCPU:
+                        default: false
+                        type: boolean
+                      noGoroutine:
+                        default: false
+                        type: boolean
+                      noHeap:
+                        default: false
+                        type: boolean
+                      projectID:
+                        type: string
+                      serviceName:
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: projectID is required when profiling is enabled
+                      rule: '!self.enabled || (size(self.projectID) > 0)'
                   store:
                     properties:
                       postgres:

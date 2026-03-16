@@ -138,6 +138,14 @@ type BindplaneConfigSpec struct {
 	// Nats configures TLS for the NATS event bus (client and server). Cert-manager only.
 	// +optional
 	Nats *NatsConfig `json:"nats,omitempty"`
+
+	// Profiling configures Google Cloud Profiler for Bindplane. When omitted or disabled, profiling is off.
+	// +optional
+	Profiling *ProfilingConfig `json:"profiling,omitempty"`
+
+	// Pprof configures the pprof HTTP server for Bindplane. When omitted or disabled, pprof is off.
+	// +optional
+	Pprof *PprofConfig `json:"pprof,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration
@@ -146,6 +154,60 @@ type AuditTrailConfig struct {
 	// +optional
 	// +kubebuilder:default=365
 	RetentionDays int `json:"retentionDays,omitempty"`
+}
+
+// ProfilingConfig configures Google Cloud Profiler for Bindplane.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (size(self.projectID) > 0)",message="projectID is required when profiling is enabled"
+type ProfilingConfig struct {
+	// Enabled turns on Google Cloud Profiler. When false or omitted, profiling is disabled.
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// ProjectID is the GCP project ID. Required when enabled is true.
+	// +optional
+	ProjectID string `json:"projectID,omitempty"`
+
+	// ServiceName is the service name reported to Cloud Profiler. When unset, the operator defaults per component (e.g. bindplane-node, bindplane-jobs).
+	// +optional
+	ServiceName string `json:"serviceName,omitempty"`
+
+	// NoCPU disables CPU profiling.
+	// +optional
+	// +kubebuilder:default=false
+	NoCPU bool `json:"noCPU,omitempty"`
+
+	// NoAlloc disables allocation profiling.
+	// +optional
+	// +kubebuilder:default=false
+	NoAlloc bool `json:"noAlloc,omitempty"`
+
+	// NoHeap disables heap profiling.
+	// +optional
+	// +kubebuilder:default=false
+	NoHeap bool `json:"noHeap,omitempty"`
+
+	// NoGoroutine disables goroutine profiling.
+	// +optional
+	// +kubebuilder:default=false
+	NoGoroutine bool `json:"noGoroutine,omitempty"`
+
+	// Mutex enables mutex profiling (disabled by default in Bindplane).
+	// +optional
+	// +kubebuilder:default=false
+	Mutex bool `json:"mutex,omitempty"`
+}
+
+// PprofConfig configures the pprof HTTP server for Bindplane.
+type PprofConfig struct {
+	// Enabled turns on the pprof server. When false or omitted, pprof is disabled.
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Endpoint is the host:port the pprof server listens on. When unset, defaults to 127.0.0.1:6060.
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // TSDBConfig configures Bindplane's TSDB component (default implementation: Prometheus).
