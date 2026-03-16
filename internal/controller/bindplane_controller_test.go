@@ -1493,17 +1493,6 @@ var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 		}
 	})
 
-	It("sets profiling env vars with explicit serviceName when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
-			Enabled:     true,
-			ProjectID:   "my-gcp-project",
-			ServiceName: "custom-service",
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneProfilingServiceNameEnvVar)).To(Equal("custom-service"))
-	})
-
 	It("sets profiling noCPU, noAlloc, noHeap, noGoroutine, mutex when enabled", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{

@@ -489,10 +489,7 @@ func getProfilingEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec, componen
 		return nil
 	}
 	p := config.Profiling
-	serviceName := p.ServiceName
-	if serviceName == "" {
-		serviceName = getProfilingServiceNameDefault(component)
-	}
+	serviceName := getProfilingServiceNameDefault(component)
 	envVars := []corev1.EnvVar{
 		{Name: bindplaneProfilingEnabledEnvVar, Value: "true"},
 		{Name: bindplaneProfilingProjectIDEnvVar, Value: p.ProjectID},

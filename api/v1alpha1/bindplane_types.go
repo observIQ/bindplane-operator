@@ -168,10 +168,6 @@ type ProfilingConfig struct {
 	// +optional
 	ProjectID string `json:"projectID,omitempty"`
 
-	// ServiceName is the service name reported to Cloud Profiler. When unset, the operator defaults per component (e.g. bindplane-node, bindplane-jobs).
-	// +optional
-	ServiceName string `json:"serviceName,omitempty"`
-
 	// NoCPU disables CPU profiling.
 	// +optional
 	// +kubebuilder:default=false
