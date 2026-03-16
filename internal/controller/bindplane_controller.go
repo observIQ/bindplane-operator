@@ -985,10 +985,15 @@ func getNatsTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev
 
 // mergePodTemplateSpec merges user-provided pod template spec with operator-managed fields.
 // It supports ANY arbitrary field in the pod spec, while protecting only critical operator-managed fields.
-// Protected fields: ServiceAccountName, container names/images/ports/env/command/args, protected labels, TerminationGracePeriodSeconds
+// Protected fields: ServiceAccountName, container names/images/ports/env/command/args, protected labels, TerminationGracePeriodSeconds.
+// Resource-aware Go runtime env vars are applied after the final effective container Resources are known.
 func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *bindplanev1alpha1.PodTemplateSpec) corev1.PodTemplateSpec {
 	if userProvided == nil {
-		return operatorManaged
+		merged := operatorManaged.DeepCopy()
+		for i := range merged.Spec.Containers {
+			applyGoRuntimeEnvVars(&merged.Spec.Containers[i])
+		}
+		return *merged
 	}
 
 	// Deep copy operator-managed spec as the base
@@ -1014,6 +1019,9 @@ func mergePodTemplateSpec(operatorManaged corev1.PodTemplateSpec, userProvided *
 	merged.Spec.TerminationGracePeriodSeconds = protectedTerminationGracePeriodSeconds
 	merged.Spec.Containers = mergeContainers(protectedContainers, userProvided.Spec.Containers)
 	merged.Spec.Volumes = mergeVolumes(protectedVolumes, userProvided.Spec.Volumes)
+	for i := range merged.Spec.Containers {
+		applyGoRuntimeEnvVars(&merged.Spec.Containers[i])
+	}
 
 	return *merged
 }

@@ -18,12 +18,14 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -1118,6 +1120,174 @@ func envVarByName(envVars []corev1.EnvVar, name string) string {
 	}
 	return ""
 }
+
+func expectedGoMemLimit(quantity string) string {
+	q := resource.MustParse(quantity)
+	return strconv.FormatInt(applyMemoryHeadroom(q.Value()), 10)
+}
+
+var _ = Describe("getGoRuntimeEnvVars", func() {
+	It("prefers limits over requests and applies the conversion policy", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1500m"),
+				corev1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		})
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("2"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("1Gi")))
+	})
+
+	It("falls back to requests and rounds CPU up to at least one core", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		})
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("500Mi")))
+	})
+
+	It("rounds a 500m CPU limit up to one core", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("500m"),
+			},
+		})
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+	})
+
+	It("omits env vars when no CPU or memory resources are set", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{})
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(BeEmpty())
+	})
+})
+
+var _ = Describe("mergePodTemplateSpec Go runtime env vars", func() {
+	It("applies runtime env vars when no user pod template is provided", func() {
+		operatorManaged := corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name: "server",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("1000m"),
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := mergePodTemplateSpec(operatorManaged, nil)
+		envVars := result.Spec.Containers[0].Env
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("1Gi")))
+	})
+
+	It("uses user-overridden resources and protects env vars from user override", func() {
+		operatorManaged := corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name: "server",
+						Env:  []corev1.EnvVar{{Name: "BASE_ENV", Value: "operator"}},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("1000m"),
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+							},
+						},
+					},
+				},
+			},
+		}
+		userProvided := &bindplanev1alpha1.PodTemplateSpec{
+			PodTemplateSpec: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "server",
+							Env:  []corev1.EnvVar{{Name: goMaxProcsEnvVar, Value: "99"}},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse("2Gi"),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1500m"),
+									corev1.ResourceMemory: resource.MustParse("2Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := mergePodTemplateSpec(operatorManaged, userProvided)
+		container := result.Spec.Containers[0]
+
+		expectedLimitMemory := resource.MustParse("2Gi")
+		Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1500)))
+		Expect(container.Resources.Limits.Memory().Value()).To(Equal(expectedLimitMemory.Value()))
+		Expect(envVarByName(container.Env, "BASE_ENV")).To(Equal("operator"))
+		Expect(envVarByName(container.Env, goMaxProcsEnvVar)).To(Equal("2"))
+		Expect(envVarByName(container.Env, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2Gi")))
+	})
+})
+
+var _ = Describe("workload Go runtime env vars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		replicas := int32(3)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+						},
+					},
+				},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{
+					Replicas: &replicas,
+				},
+			},
+		}
+	}
+
+	It("adds runtime env vars to the node deployment from default resources", func() {
+		bindplane := baseBindplane()
+		deployment := (&BindplaneReconciler{}).nodeDeployment(bindplane)
+		envVars := deployment.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("2"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2048Mi")))
+	})
+
+	It("adds runtime env vars to the TSDB statefulset from default resources", func() {
+		bindplane := baseBindplane()
+		statefulSet := (&BindplaneReconciler{}).tsdbStatefulSet(bindplane)
+		envVars := statefulSet.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("500Mi")))
+	})
+})
 
 var _ = Describe("getBindplaneConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
