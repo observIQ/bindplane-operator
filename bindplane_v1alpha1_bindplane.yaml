@@ -81,6 +81,8 @@ spec:
           name: bindplane-internal-issuer
           kind: Issuer
           group: cert-manager.io
+    analytics:
+      disabled: true
     eventBus:
       health:
         requiredHosts: 3

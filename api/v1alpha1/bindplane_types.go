@@ -154,6 +154,10 @@ type BindplaneConfigSpec struct {
 	// EventBus configures the event bus (NATS) integration, including health checks.
 	// +optional
 	EventBus *EventBusConfig `json:"eventBus,omitempty"`
+
+	// Analytics configures Bindplane analytics reporting.
+	// +optional
+	Analytics *AnalyticsConfig `json:"analytics,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration
@@ -220,6 +224,20 @@ type StatusConfig struct {
 	// Takes precedence over Keys if both are set.
 	// +optional
 	KeysSecretRef *corev1.SecretKeySelector `json:"keysSecretRef,omitempty"`
+}
+
+// AnalyticsConfig configures Bindplane analytics reporting.
+type AnalyticsConfig struct {
+	// Disabled turns off analytics reporting. When false or omitted, analytics are enabled.
+	// Free licenses do not support disabling analytics; this option is ignored for that license type.
+	// +optional
+	// +kubebuilder:default=false
+	Disabled bool `json:"disabled,omitempty"`
+
+	// SegmentWriteKey overrides the default Segment write key used for analytics.
+	// Do not set unless directed by Bindplane support.
+	// +optional
+	SegmentWriteKey string `json:"segmentWriteKey,omitempty"`
 }
 
 // EventBusHealthConfig configures the Bindplane event bus health check.

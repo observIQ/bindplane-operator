@@ -238,6 +238,10 @@ const (
 	// Status check endpoints
 	bindplaneStatusEnabledEnvVar = "BINDPLANE_STATUS_ENABLED"
 	bindplaneStatusKeysEnvVar    = "BINDPLANE_STATUS_KEYS"
+
+	// Analytics
+	bindplaneAnalyticsDisabledEnvVar      = "BINDPLANE_ANALYTICS_DISABLED"
+	bindplaneAnalyticsSegmentWriteKeyEnvVar = "BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY"
 )
 
 const (

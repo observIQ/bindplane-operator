@@ -583,6 +583,23 @@ func getStatusEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.En
 	return envVars
 }
 
+// getAnalyticsEnvVars returns env vars for spec.config.analytics.
+// Returns nil when analytics is nil (analytics enabled, no custom key).
+func getAnalyticsEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	if config == nil || config.Analytics == nil {
+		return nil
+	}
+	a := config.Analytics
+	var envVars []corev1.EnvVar
+	if a.Disabled {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAnalyticsDisabledEnvVar, Value: "true"})
+	}
+	if a.SegmentWriteKey != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAnalyticsSegmentWriteKeyEnvVar, Value: a.SegmentWriteKey})
+	}
+	return envVars
+}
+
 // defaultRequiredHosts calculates the default event bus health required hosts:
 // floor(total / 2) + 1, where total = node + nats + jobs (1) + jobsMigrate (1).
 func defaultRequiredHosts(bindplane *bindplanev1alpha1.Bindplane) int32 {
@@ -633,6 +650,7 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component
 		getProfilingEnvVars(config, component),
 		getPprofEnvVars(config),
 		getStatusEnvVars(config),
+		getAnalyticsEnvVars(config),
 		getEventBusHealthEnvVars(bindplane),
 	)
 }

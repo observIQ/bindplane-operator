@@ -1897,6 +1897,55 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 	})
 })
 
+var _ = Describe("getAnalyticsEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("does not set analytics env vars when Analytics is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAnalyticsDisabledEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAnalyticsSegmentWriteKeyEnvVar)).To(BeEmpty())
+	})
+
+	It("does not set BINDPLANE_ANALYTICS_DISABLED when disabled is false", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{Disabled: false}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAnalyticsDisabledEnvVar)).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_ANALYTICS_DISABLED=true when disabled is true", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{Disabled: true}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAnalyticsDisabledEnvVar)).To(Equal("true"))
+	})
+
+	It("does not set BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY when not provided", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAnalyticsSegmentWriteKeyEnvVar)).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY when provided", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{SegmentWriteKey: "my-write-key"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAnalyticsSegmentWriteKeyEnvVar)).To(Equal("my-write-key"))
+	})
+})
+
 var _ = Describe("getPostgresTLSVolumeAndMount", func() {
 	It("returns nil when Postgres or TLS is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{

@@ -11369,6 +11369,14 @@ spec:
                 type: object
               config:
                 properties:
+                  analytics:
+                    properties:
+                      disabled:
+                        default: false
+                        type: boolean
+                      segmentWriteKey:
+                        type: string
+                    type: object
                   auditTrail:
                     properties:
                       retentionDays:
