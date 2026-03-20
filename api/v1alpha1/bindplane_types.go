@@ -158,6 +158,10 @@ type BindplaneConfigSpec struct {
 	// Analytics configures Bindplane analytics reporting.
 	// +optional
 	Analytics *AnalyticsConfig `json:"analytics,omitempty"`
+
+	// Logging configures the Bindplane log level and output destination.
+	// +optional
+	Logging *LoggingConfig `json:"logging,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration
@@ -467,6 +471,44 @@ type MetricsPrometheusConfig struct {
 	// Takes precedence over Password if both are set.
 	// +optional
 	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
+}
+
+// LoggingOTLPConfig defines OTLP logging configuration.
+type LoggingOTLPConfig struct {
+	// Endpoint is the gRPC endpoint to send logs to (e.g. localhost:4317).
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Insecure disables TLS verification for the OTLP connection.
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
+
+	// Interval is the interval at which to export logs (e.g. 60s).
+	// When omitted, defaults to 60s.
+	// +optional
+	// +kubebuilder:default="60s"
+	Interval string `json:"interval,omitempty"`
+}
+
+// LoggingConfig defines logging configuration.
+type LoggingConfig struct {
+	// Level specifies the log level. One of: debug, info, warn, error.
+	// +optional
+	// +kubebuilder:validation:Enum=debug;info;warn;error
+	// +kubebuilder:default=info
+	Level string `json:"level,omitempty"`
+
+	// Type specifies the logging output destination.
+	// Use "stdout" to write logs to standard output, "otlp" to export via OTLP,
+	// or "stdout,otlp" to write to both simultaneously.
+	// +optional
+	// +kubebuilder:default=stdout
+	// +kubebuilder:validation:Pattern=`^(stdout|otlp)(,(stdout|otlp))?$`
+	Type string `json:"type,omitempty"`
+
+	// OTLP configures OTLP log export when Type includes otlp.
+	// +optional
+	OTLP *LoggingOTLPConfig `json:"otlp,omitempty"`
 }
 
 // MetricsOTLPConfig defines OTLP metrics configuration

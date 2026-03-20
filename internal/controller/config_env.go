@@ -639,6 +639,41 @@ func getEventBusHealthEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.E
 	return envVars
 }
 
+// getLoggingConfigEnvVars returns env vars for spec.config.logging.
+// Returns nil when logging is nil; Bindplane uses its own defaults in that case.
+func getLoggingConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	if config == nil || config.Logging == nil {
+		return nil
+	}
+	l := config.Logging
+	level := l.Level
+	if level == "" {
+		level = "info"
+	}
+	loggingType := l.Type
+	if loggingType == "" {
+		loggingType = "stdout"
+	}
+	envVars := []corev1.EnvVar{
+		{Name: bindplaneLoggingLevelEnvVar, Value: level},
+		{Name: bindplaneLoggingTypeEnvVar, Value: loggingType},
+	}
+	if l.OTLP != nil {
+		if l.OTLP.Endpoint != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPEndpointEnvVar, Value: l.OTLP.Endpoint})
+		}
+		if l.OTLP.Insecure {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPInsecureEnvVar, Value: "true"})
+		}
+		interval := l.OTLP.Interval
+		if interval == "" {
+			interval = "60s"
+		}
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPIntervalEnvVar, Value: interval})
+	}
+	return envVars
+}
+
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
 // component is used to set the default profiling service name (e.g. bindplane-node, bindplane-jobs).
 func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component string) []corev1.EnvVar {
@@ -651,6 +686,7 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component
 		getPprofEnvVars(config),
 		getStatusEnvVars(config),
 		getAnalyticsEnvVars(config),
+		getLoggingConfigEnvVars(config),
 		getEventBusHealthEnvVars(bindplane),
 	)
 }

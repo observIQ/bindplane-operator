@@ -240,8 +240,15 @@ const (
 	bindplaneStatusKeysEnvVar    = "BINDPLANE_STATUS_KEYS"
 
 	// Analytics
-	bindplaneAnalyticsDisabledEnvVar      = "BINDPLANE_ANALYTICS_DISABLED"
+	bindplaneAnalyticsDisabledEnvVar        = "BINDPLANE_ANALYTICS_DISABLED"
 	bindplaneAnalyticsSegmentWriteKeyEnvVar = "BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY"
+
+	// Logging configuration
+	bindplaneLoggingLevelEnvVar        = "BINDPLANE_LOGGING_LEVEL"
+	bindplaneLoggingTypeEnvVar         = "BINDPLANE_LOGGING_TYPE"
+	bindplaneLoggingOTLPEndpointEnvVar = "BINDPLANE_LOGGING_OTLP_ENDPOINT"
+	bindplaneLoggingOTLPInsecureEnvVar = "BINDPLANE_LOGGING_OTLP_INSECURE"
+	bindplaneLoggingOTLPIntervalEnvVar = "BINDPLANE_LOGGING_OTLP_INTERVAL"
 )
 
 const (

@@ -11550,6 +11550,31 @@ spec:
                     - key
                     type: object
                     x-kubernetes-map-type: atomic
+                  logging:
+                    properties:
+                      level:
+                        default: info
+                        enum:
+                        - debug
+                        - info
+                        - warn
+                        - error
+                        type: string
+                      otlp:
+                        properties:
+                          endpoint:
+                            type: string
+                          insecure:
+                            type: boolean
+                          interval:
+                            default: 60s
+                            type: string
+                        type: object
+                      type:
+                        default: stdout
+                        pattern: ^(stdout|otlp)(,(stdout|otlp))?$
+                        type: string
+                    type: object
                   maxConcurrency:
                     default: 10
                     type: integer

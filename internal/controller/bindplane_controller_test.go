@@ -1946,6 +1946,98 @@ var _ = Describe("getAnalyticsEnvVars", func() {
 	})
 })
 
+var _ = Describe("getLoggingConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("does not set logging env vars when Logging is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPEndpointEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(BeEmpty())
+	})
+
+	It("sets default level=info and type=stdout when Logging is empty struct", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("info"))
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPEndpointEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_LOGGING_LEVEL=debug when level is debug", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Level: "debug"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("debug"))
+	})
+
+	It("sets BINDPLANE_LOGGING_TYPE=otlp when type is otlp", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Type: "otlp"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("otlp"))
+	})
+
+	It("sets BINDPLANE_LOGGING_TYPE=stdout,otlp when type is stdout,otlp", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Type: "stdout,otlp"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout,otlp"))
+	})
+
+	It("sets all OTLP vars when endpoint, insecure, and interval are configured", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.LoggingOTLPConfig{
+				Endpoint: "localhost:4317",
+				Insecure: true,
+				Interval: "30s",
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPEndpointEnvVar)).To(Equal("localhost:4317"))
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(Equal("30s"))
+	})
+
+	It("defaults BINDPLANE_LOGGING_OTLP_INTERVAL to 60s when interval is not set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.LoggingOTLPConfig{Endpoint: "localhost:4317"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(Equal("60s"))
+	})
+
+	It("does not set BINDPLANE_LOGGING_OTLP_INSECURE when insecure is false", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.LoggingOTLPConfig{Endpoint: "localhost:4317", Insecure: false},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(BeEmpty())
+	})
+})
+
 var _ = Describe("getPostgresTLSVolumeAndMount", func() {
 	It("returns nil when Postgres or TLS is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
