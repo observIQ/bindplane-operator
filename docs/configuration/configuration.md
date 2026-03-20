@@ -19,6 +19,12 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [TSDB](#tsdb)
 - [Max concurrency](#max-concurrency)
 - [Audit trail](#audit-trail)
+- [Profiling](#profiling)
+- [Pprof](#pprof)
+- [Status](#status)
+- [Event bus](#event-bus)
+- [Analytics](#analytics)
+- [Logging](#logging)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -583,6 +589,175 @@ Do not change `maxConcurrency` unless directed by Bindplane support.
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.auditTrail.retentionDays` | `BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS` | `365` | No |
+
+## Profiling
+
+Profiling integrates Google Cloud Profiler into Bindplane components. When omitted or `enabled: false`, profiling is off and no profiling environment variables are set. When `enabled: true`, `projectID` is required (enforced by a CRD XValidation rule). The `serviceName` is set automatically per component (e.g. `bindplane-node`); it cannot be overridden via the CRD.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.profiling.enabled` | `BINDPLANE_PROFILING_ENABLED` | `false` | No |
+| `spec.config.profiling.projectID` | `BINDPLANE_PROFILING_PROJECT_ID` | — | Yes when `enabled: true` |
+| `spec.config.profiling.noCPU` | `BINDPLANE_PROFILING_NO_CPU` | `false` | No |
+| `spec.config.profiling.noAlloc` | `BINDPLANE_PROFILING_NO_ALLOC` | `false` | No |
+| `spec.config.profiling.noHeap` | `BINDPLANE_PROFILING_NO_HEAP` | `false` | No |
+| `spec.config.profiling.noGoroutine` | `BINDPLANE_PROFILING_NO_GOROUTINE` | `false` | No |
+| `spec.config.profiling.mutex` | `BINDPLANE_PROFILING_MUTEX` | `false` | No |
+
+Example:
+
+```yaml
+spec:
+  config:
+    profiling:
+      enabled: true
+      projectID: my-gcp-project
+```
+
+## Pprof
+
+Pprof exposes a Go pprof HTTP server on each Bindplane component for CPU and memory profiling. When omitted or `enabled: false`, the server is not started.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.pprof.enabled` | `BINDPLANE_PPROF_ENABLED` | `false` | No |
+| `spec.config.pprof.endpoint` | `BINDPLANE_PPROF_ENDPOINT` | `127.0.0.1:6060` | No |
+
+Example:
+
+```yaml
+spec:
+  config:
+    pprof:
+      enabled: true
+      endpoint: "127.0.0.1:6060"
+```
+
+## Status
+
+Status configures the Bindplane status check endpoints. When `enabled: true`, at least one key must be provided via `keys` or `keysSecretRef` (enforced by a CRD XValidation rule). `keysSecretRef` takes precedence when both are set.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.status.enabled` | `BINDPLANE_STATUS_ENABLED` | `true` | Yes |
+| `spec.config.status.keys` | `BINDPLANE_STATUS_KEYS` | — | Yes when `enabled: true` (or use `keysSecretRef`) |
+| `spec.config.status.keysSecretRef` | `BINDPLANE_STATUS_KEYS` | — | Yes when `enabled: true` (or use `keys`) |
+
+Example (direct keys):
+
+```yaml
+spec:
+  config:
+    status:
+      enabled: true
+      keys:
+        - my-status-key
+```
+
+Example (Secret reference):
+
+```yaml
+spec:
+  config:
+    status:
+      enabled: true
+      keysSecretRef:
+        name: bindplane-secrets
+        key: status-keys
+```
+
+## Event bus
+
+Event bus configuration controls the NATS integration health check. The health check sends an event over NATS and waits for responses from Bindplane components. Failures affect the status page only — they do not cause pod restarts or rollouts.
+
+`requiredHosts` defaults to `floor(total/2)+1` where `total` is the sum of Node, NATS, Jobs, and Jobs Migrate replicas. This default ensures a majority quorum. `interval` controls how frequently the health check runs.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.eventBus.health.requiredHosts` | `BINDPLANE_EVENT_BUS_HEALTH_REQUIRED_HOSTS` | `floor(total/2)+1` | No |
+| `spec.config.eventBus.health.interval` | `BINDPLANE_EVENT_BUS_HEALTH_INTERVAL` | — | No |
+
+Example:
+
+```yaml
+spec:
+  config:
+    eventBus:
+      health:
+        requiredHosts: 2
+        interval: "30s"
+```
+
+## Analytics
+
+Analytics configures Bindplane analytics reporting. When `disabled: true`, analytics reporting is turned off. Note that free licenses do not support disabling analytics; this setting is ignored for those license types. Do not set `segmentWriteKey` unless directed by Bindplane support.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.analytics.disabled` | `BINDPLANE_ANALYTICS_DISABLED` | `false` | No |
+| `spec.config.analytics.segmentWriteKey` | `BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY` | — | No |
+
+Example:
+
+```yaml
+spec:
+  config:
+    analytics:
+      disabled: true
+```
+
+## Logging
+
+Logging configures the log level and output destination for Bindplane components. When `spec.config.logging` is omitted entirely, no logging environment variables are set and Bindplane uses its own internal defaults. The `otlp` block is only relevant when `type` includes `otlp`.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.logging.level` | `BINDPLANE_LOGGING_LEVEL` | `info` | No |
+| `spec.config.logging.type` | `BINDPLANE_LOGGING_TYPE` | `stdout` | No |
+| `spec.config.logging.otlp.endpoint` | `BINDPLANE_LOGGING_OTLP_ENDPOINT` | — | Yes when `type` includes `otlp` |
+| `spec.config.logging.otlp.insecure` | `BINDPLANE_LOGGING_OTLP_INSECURE` | `false` | No |
+| `spec.config.logging.otlp.interval` | `BINDPLANE_LOGGING_OTLP_INTERVAL` | `60s` | No |
+
+Valid values for `level`: `debug`, `info`, `warn`, `error`.
+
+Valid values for `type`: `stdout`, `otlp`, `stdout,otlp`.
+
+Example (stdout only):
+
+```yaml
+spec:
+  config:
+    logging:
+      level: debug
+      type: stdout
+```
+
+Example (OTLP):
+
+```yaml
+spec:
+  config:
+    logging:
+      level: info
+      type: otlp
+      otlp:
+        endpoint: otel-collector.observability.svc:4317
+        insecure: true
+        interval: "60s"
+```
+
+Example (stdout and OTLP):
+
+```yaml
+spec:
+  config:
+    logging:
+      level: warn
+      type: "stdout,otlp"
+      otlp:
+        endpoint: otel-collector.observability.svc:4317
+        insecure: false
+```
 
 ## Scope
 

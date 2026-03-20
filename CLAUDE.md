@@ -1,8 +1,3 @@
----
-description: Bindplane Operator project structure, conventions, and development guidelines
-alwaysApply: true
----
-
 # Bindplane Operator - Project Rules
 
 ## Project Overview
@@ -156,7 +151,7 @@ Each service file contains:
        // Reconcile other resources...
        return nil
    }
-   
+
    // Resource generation functions
    func (r *BindplaneReconciler) newServiceServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount { ... }
    func (r *BindplaneReconciler) newServiceDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment { ... }
@@ -289,3 +284,14 @@ make deploy IMG=bindplane-operator:local
 2. Edit `PROJECT` file (group field)
 3. Run `make manifests` to regenerate CRDs
 4. Update all references in code and config files
+
+## Documentation Sync Rule
+
+When adding or modifying any field under `spec.config` (i.e., any field in `BindplaneConfigSpec` or its nested structs in `api/v1alpha1/bindplane_types.go`), you MUST also update `docs/configuration/configuration.md` to document the new or changed field.
+
+The doc uses the following format for each section:
+- A prose description of the field's purpose and behavior
+- A markdown table of CRD fields, environment variables, defaults, and whether the field is required
+- One or more YAML examples
+
+The table of contents at the top of `configuration.md` must also be updated when adding new sections.
