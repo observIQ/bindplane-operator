@@ -81,6 +81,10 @@ spec:
           name: bindplane-internal-issuer
           kind: Issuer
           group: cert-manager.io
+    eventBus:
+      health:
+        requiredHosts: 3
+        interval: 5s
     status:
       enabled: true
       keysSecretRef:

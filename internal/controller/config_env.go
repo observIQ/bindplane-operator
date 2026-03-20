@@ -583,6 +583,45 @@ func getStatusEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.En
 	return envVars
 }
 
+// defaultRequiredHosts calculates the default event bus health required hosts:
+// floor(total / 2) + 1, where total = node + nats + jobs (1) + jobsMigrate (1).
+func defaultRequiredHosts(bindplane *bindplanev1alpha1.Bindplane) int32 {
+	nodeReplicas := int32(3)
+	if bindplane.Spec.Bindplane.Replicas != nil {
+		nodeReplicas = *bindplane.Spec.Bindplane.Replicas
+	}
+	natsReplicas := int32(1)
+	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil {
+		natsReplicas = *bindplane.Spec.Nats.Replicas
+	}
+	total := nodeReplicas + natsReplicas + 1 + 1 // +1 jobs, +1 jobs-migrate
+	return total/2 + 1
+}
+
+// getEventBusHealthEnvVars returns env vars for the event bus health check.
+// Returns nil when eventBus or eventBus.health is not configured.
+func getEventBusHealthEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	config := &bindplane.Spec.Config
+	if config.EventBus == nil || config.EventBus.Health == nil {
+		return nil
+	}
+	h := config.EventBus.Health
+	requiredHosts := defaultRequiredHosts(bindplane)
+	if h.RequiredHosts != nil {
+		requiredHosts = *h.RequiredHosts
+	}
+	envVars := []corev1.EnvVar{
+		{Name: bindplaneEventBusHealthRequiredHostsEnvVar, Value: strconv.Itoa(int(requiredHosts))},
+	}
+	if h.Interval != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  bindplaneEventBusHealthIntervalEnvVar,
+			Value: h.Interval,
+		})
+	}
+	return envVars
+}
+
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
 // component is used to set the default profiling service name (e.g. bindplane-node, bindplane-jobs).
 func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component string) []corev1.EnvVar {
@@ -594,5 +633,6 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component
 		getProfilingEnvVars(config, component),
 		getPprofEnvVars(config),
 		getStatusEnvVars(config),
+		getEventBusHealthEnvVars(bindplane),
 	)
 }

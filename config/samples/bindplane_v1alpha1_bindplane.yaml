@@ -24,6 +24,10 @@ spec:
         database: bindplane
         username: bindplane
         password: bindplane
+    eventBus:
+      health:
+        requiredHosts: 3
+        interval: 5s
   bindplane:
     # podTemplate: # Optional - pod template for bindplane node containers
     # replicas: 3  # Optional - number of replicas for bindplane node (default: 3)

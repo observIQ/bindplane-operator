@@ -150,6 +150,10 @@ type BindplaneConfigSpec struct {
 	// Status configures the Bindplane status check endpoints.
 	// +optional
 	Status *StatusConfig `json:"status,omitempty"`
+
+	// EventBus configures the event bus (NATS) integration, including health checks.
+	// +optional
+	EventBus *EventBusConfig `json:"eventBus,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration
@@ -216,6 +220,32 @@ type StatusConfig struct {
 	// Takes precedence over Keys if both are set.
 	// +optional
 	KeysSecretRef *corev1.SecretKeySelector `json:"keysSecretRef,omitempty"`
+}
+
+// EventBusHealthConfig configures the Bindplane event bus health check.
+// The health check sends an event over NATS and waits for responses from other pods.
+// Health check failures affect only the status page in the Bindplane web interface;
+// they do not cause pod shutdown or failure.
+type EventBusHealthConfig struct {
+	// RequiredHosts is the minimum number of pods that must respond to the health check
+	// event for the event bus to be considered healthy. When omitted, defaults to
+	// floor(total / 2) + 1, where total is the sum of node, NATS, jobs, and
+	// jobs-migrate replicas.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	RequiredHosts *int32 `json:"requiredHosts,omitempty"`
+
+	// Interval is how often the event bus health check is performed (e.g. 15s, 1m).
+	// When omitted, the Bindplane server default is used.
+	// +optional
+	Interval string `json:"interval,omitempty"`
+}
+
+// EventBusConfig configures the Bindplane event bus (NATS) integration.
+type EventBusConfig struct {
+	// Health configures the event bus health check endpoints.
+	// +optional
+	Health *EventBusHealthConfig `json:"health,omitempty"`
 }
 
 // PprofConfig configures the pprof HTTP server for Bindplane.

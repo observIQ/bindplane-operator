@@ -11514,6 +11514,18 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
+                  eventBus:
+                    properties:
+                      health:
+                        properties:
+                          interval:
+                            type: string
+                          requiredHosts:
+                            format: int32
+                            minimum: 1
+                            type: integer
+                        type: object
+                    type: object
                   license:
                     minLength: 1
                     type: string
@@ -11664,6 +11676,35 @@ spec:
                     x-kubernetes-validations:
                     - message: projectID is required when profiling is enabled
                       rule: '!self.enabled || (size(self.projectID) > 0)'
+                  status:
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                      keys:
+                        items:
+                          type: string
+                        type: array
+                      keysSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - message: at least one key must be configured when status is
+                        enabled
+                      rule: '!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))'
                   store:
                     properties:
                       postgres:

@@ -194,7 +194,9 @@ const (
 	bindplaneTransformAgentRemoteAgentsEnvVar = "BINDPLANE_TRANSFORM_AGENT_REMOTE_AGENTS"
 
 	// Event Bus configuration
-	bindplaneEventBusTypeEnvVar = "BINDPLANE_EVENT_BUS_TYPE"
+	bindplaneEventBusTypeEnvVar                = "BINDPLANE_EVENT_BUS_TYPE"
+	bindplaneEventBusHealthRequiredHostsEnvVar = "BINDPLANE_EVENT_BUS_HEALTH_REQUIRED_HOSTS"
+	bindplaneEventBusHealthIntervalEnvVar      = "BINDPLANE_EVENT_BUS_HEALTH_INTERVAL"
 
 	// NATS client configuration
 	bindplaneNatsClientNameEnvVar     = "BINDPLANE_NATS_CLIENT_NAME"

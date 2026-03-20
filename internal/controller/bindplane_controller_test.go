@@ -1805,6 +1805,98 @@ var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 	})
 })
 
+var _ = Describe("defaultRequiredHosts", func() {
+	It("returns floor(total/2)+1 with default replicas (node=3, nats=1)", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+		// total = 3 + 1 + 1 + 1 = 6, floor(6/2)+1 = 4
+		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(4)))
+	})
+
+	It("returns floor(total/2)+1 with custom replicas (node=5, nats=3)", func() {
+		nodeReplicas := int32(5)
+		natsReplicas := int32(3)
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+			},
+		}
+		// total = 5 + 3 + 1 + 1 = 10, floor(10/2)+1 = 6
+		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(6)))
+	})
+})
+
+var _ = Describe("getEventBusHealthEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		replicas := int32(3)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &replicas},
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("does not set event bus health env vars when EventBus is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
+	})
+
+	It("uses default requiredHosts (node=3, nats=1) = 4 when not overridden", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(Equal("4"))
+	})
+
+	It("uses override requiredHosts when set", func() {
+		override := int32(3)
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{RequiredHosts: &override},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(Equal("3"))
+	})
+
+	It("sets interval env var when interval is provided", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{Interval: "15s"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(Equal("15s"))
+	})
+
+	It("omits interval env var when interval is not set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
+	})
+})
+
 var _ = Describe("getPostgresTLSVolumeAndMount", func() {
 	It("returns nil when Postgres or TLS is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
