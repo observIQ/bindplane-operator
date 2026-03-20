@@ -665,11 +665,9 @@ func getLoggingConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []co
 		if l.OTLP.Insecure {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPInsecureEnvVar, Value: "true"})
 		}
-		interval := l.OTLP.Interval
-		if interval == "" {
-			interval = "60s"
+		if l.OTLP.Interval != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPIntervalEnvVar, Value: l.OTLP.Interval})
 		}
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPIntervalEnvVar, Value: interval})
 	}
 	return envVars
 }

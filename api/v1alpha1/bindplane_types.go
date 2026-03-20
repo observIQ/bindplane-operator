@@ -484,9 +484,8 @@ type LoggingOTLPConfig struct {
 	Insecure bool `json:"insecure,omitempty"`
 
 	// Interval is the interval at which to export logs (e.g. 60s).
-	// When omitted, defaults to 60s.
+	// When omitted, Bindplane uses its own default.
 	// +optional
-	// +kubebuilder:default="60s"
 	Interval string `json:"interval,omitempty"`
 }
 

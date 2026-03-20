@@ -11567,7 +11567,6 @@ spec:
                           insecure:
                             type: boolean
                           interval:
-                            default: 60s
                             type: string
                         type: object
                       type:

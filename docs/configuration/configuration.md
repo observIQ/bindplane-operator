@@ -716,7 +716,7 @@ Logging configures the log level and output destination for Bindplane components
 | `spec.config.logging.type` | `BINDPLANE_LOGGING_TYPE` | `stdout` | No |
 | `spec.config.logging.otlp.endpoint` | `BINDPLANE_LOGGING_OTLP_ENDPOINT` | — | Yes when `type` includes `otlp` |
 | `spec.config.logging.otlp.insecure` | `BINDPLANE_LOGGING_OTLP_INSECURE` | `false` | No |
-| `spec.config.logging.otlp.interval` | `BINDPLANE_LOGGING_OTLP_INTERVAL` | `60s` | No |
+| `spec.config.logging.otlp.interval` | `BINDPLANE_LOGGING_OTLP_INTERVAL` | — | No |
 
 Valid values for `level`: `debug`, `info`, `warn`, `error`.
 
@@ -743,7 +743,7 @@ spec:
       otlp:
         endpoint: otel-collector.observability.svc:4317
         insecure: true
-        interval: "60s"
+        interval: "5s"
 ```
 
 Example (stdout and OTLP):
