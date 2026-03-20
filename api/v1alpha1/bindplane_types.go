@@ -146,6 +146,10 @@ type BindplaneConfigSpec struct {
 	// Pprof configures the pprof HTTP server for Bindplane. When omitted or disabled, pprof is off.
 	// +optional
 	Pprof *PprofConfig `json:"pprof,omitempty"`
+
+	// Status configures the Bindplane status check endpoints.
+	// +optional
+	Status *StatusConfig `json:"status,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration
@@ -192,6 +196,26 @@ type ProfilingConfig struct {
 	// +optional
 	// +kubebuilder:default=false
 	Mutex bool `json:"mutex,omitempty"`
+}
+
+// StatusConfig configures the Bindplane status check endpoints.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))",message="at least one key must be configured when status is enabled"
+type StatusConfig struct {
+	// Enabled controls whether the status check endpoints are enabled.
+	// Defaults to true.
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled"`
+
+	// Keys are UUIDs used to authenticate requests to the status check endpoints.
+	// Supports multiple keys to allow rotation. At least one is required when enabled is true.
+	// +optional
+	Keys []string `json:"keys,omitempty"`
+
+	// KeysSecretRef references a Kubernetes Secret containing status check keys.
+	// The secret value should be comma-delimited UUIDs to support rotation.
+	// Takes precedence over Keys if both are set.
+	// +optional
+	KeysSecretRef *corev1.SecretKeySelector `json:"keysSecretRef,omitempty"`
 }
 
 // PprofConfig configures the pprof HTTP server for Bindplane.

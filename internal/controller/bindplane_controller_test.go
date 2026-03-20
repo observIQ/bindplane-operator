@@ -158,6 +158,60 @@ var _ = Describe("validatePprofConfig", func() {
 	})
 })
 
+var _ = Describe("validateStatusConfig", func() {
+	It("accepts when Status is nil", func() {
+		Expect(validateStatusConfig(nil)).To(Succeed())
+		Expect(validateStatusConfig(&bindplanev1alpha1.BindplaneConfigSpec{})).To(Succeed())
+	})
+
+	It("accepts when enabled is false and no keys set", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Status: &bindplanev1alpha1.StatusConfig{Enabled: false},
+		}
+		Expect(validateStatusConfig(cfg)).To(Succeed())
+	})
+
+	It("accepts when enabled is true with valid UUID keys", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Status: &bindplanev1alpha1.StatusConfig{
+				Enabled: true,
+				Keys:    []string{"550e8400-e29b-41d4-a716-446655440000"},
+			},
+		}
+		Expect(validateStatusConfig(cfg)).To(Succeed())
+	})
+
+	It("accepts when enabled is true with keysSecretRef set", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Status: &bindplanev1alpha1.StatusConfig{
+				Enabled: true,
+				KeysSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+					Key:                  "keys",
+				},
+			},
+		}
+		Expect(validateStatusConfig(cfg)).To(Succeed())
+	})
+
+	It("rejects when enabled is true with no keys and no keysSecretRef", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Status: &bindplanev1alpha1.StatusConfig{Enabled: true},
+		}
+		Expect(validateStatusConfig(cfg)).NotTo(Succeed())
+	})
+
+	It("rejects when a key is not a valid UUID", func() {
+		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+			Status: &bindplanev1alpha1.StatusConfig{
+				Enabled: true,
+				Keys:    []string{"not-a-uuid"},
+			},
+		}
+		Expect(validateStatusConfig(cfg)).NotTo(Succeed())
+	})
+})
+
 var _ = Describe("Bindplane Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -1698,6 +1752,56 @@ var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 		}
 		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
 		Expect(envVarByName(envVars, bindplanePprofEndpointEnvVar)).To(Equal("0.0.0.0:6061"))
+	})
+
+	It("does not set status env vars when Status is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STATUS_ENABLED=true and BINDPLANE_STATUS_KEYS from inline keys", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(Equal("550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+	})
+
+	It("sets BINDPLANE_STATUS_ENABLED=false and no keys env var when disabled", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: false}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("false"))
+		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STATUS_KEYS from keysSecretRef using ValueFrom", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			KeysSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+				Key:                  "keys",
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		var keysVar *corev1.EnvVar
+		for i := range envVars {
+			if envVars[i].Name == bindplaneStatusKeysEnvVar {
+				keysVar = &envVars[i]
+				break
+			}
+		}
+		Expect(keysVar).NotTo(BeNil())
+		Expect(keysVar.ValueFrom).NotTo(BeNil())
+		Expect(keysVar.ValueFrom.SecretKeyRef.Name).To(Equal("my-secret"))
+		Expect(keysVar.ValueFrom.SecretKeyRef.Key).To(Equal("keys"))
 	})
 })
 

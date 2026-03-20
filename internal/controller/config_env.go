@@ -560,6 +560,29 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 	return envVars
 }
 
+// getStatusEnvVars returns environment variables for the status check endpoint configuration.
+func getStatusEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	if config == nil || config.Status == nil {
+		return nil
+	}
+	s := config.Status
+	envVars := []corev1.EnvVar{
+		{Name: bindplaneStatusEnabledEnvVar, Value: strconv.FormatBool(s.Enabled)},
+	}
+	if s.KeysSecretRef != nil {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:      bindplaneStatusKeysEnvVar,
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: s.KeysSecretRef},
+		})
+	} else if len(s.Keys) > 0 {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  bindplaneStatusKeysEnvVar,
+			Value: strings.Join(s.Keys, ","),
+		})
+	}
+	return envVars
+}
+
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
 // component is used to set the default profiling service name (e.g. bindplane-node, bindplane-jobs).
 func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component string) []corev1.EnvVar {
@@ -570,5 +593,6 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component
 		getTransformAgentEnvVars(bindplane),
 		getProfilingEnvVars(config, component),
 		getPprofEnvVars(config),
+		getStatusEnvVars(config),
 	)
 }

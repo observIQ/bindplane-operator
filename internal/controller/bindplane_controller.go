@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"regexp"
 	"slices"
 	"unicode"
 
@@ -231,6 +232,10 @@ const (
 	// Pprof
 	bindplanePprofEnabledEnvVar  = "BINDPLANE_PPROF_ENABLED"
 	bindplanePprofEndpointEnvVar = "BINDPLANE_PPROF_ENDPOINT"
+
+	// Status check endpoints
+	bindplaneStatusEnabledEnvVar = "BINDPLANE_STATUS_ENABLED"
+	bindplaneStatusKeysEnvVar    = "BINDPLANE_STATUS_KEYS"
 )
 
 const (
@@ -404,6 +409,23 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		return ctrl.Result{}, nil
 	}
+	if err := validateStatusConfig(&bindplane.Spec.Config); err != nil {
+		log.Error(err, "invalid Bindplane config: status")
+		condition := metav1.Condition{
+			Type:               "Reconciled",
+			Status:             metav1.ConditionFalse,
+			Reason:             "InvalidConfig",
+			Message:            err.Error(),
+			ObservedGeneration: bindplane.Generation,
+			LastTransitionTime: metav1.Now(),
+		}
+		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
+			log.Error(statusErr, "failed to update Bindplane status")
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, nil
+	}
 
 	// Reconcile internal TLS certificates (cert-manager) before workloads that mount them.
 	if err := r.reconcileInternalTLSCertificates(ctx, bindplane, log); err != nil {
@@ -539,6 +561,26 @@ func validateProfilingConfig(config *bindplanev1alpha1.BindplaneConfigSpec) erro
 	}
 	if config.Profiling.ProjectID == "" {
 		return fmt.Errorf("projectID is required when profiling is enabled")
+	}
+	return nil
+}
+
+// uuidRegex matches standard UUID format (case-insensitive).
+var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// validateStatusConfig ensures status check keys are valid UUIDs when set inline.
+func validateStatusConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
+	if config == nil || config.Status == nil {
+		return nil
+	}
+	s := config.Status
+	if s.Enabled && len(s.Keys) == 0 && s.KeysSecretRef == nil {
+		return fmt.Errorf("at least one key must be configured when status is enabled")
+	}
+	for i, key := range s.Keys {
+		if !uuidRegex.MatchString(key) {
+			return fmt.Errorf("spec.config.status.keys[%d]: %q is not a valid UUID", i, key)
+		}
 	}
 	return nil
 }
