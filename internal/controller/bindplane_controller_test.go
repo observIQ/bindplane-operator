@@ -2017,14 +2017,14 @@ var _ = Describe("getLoggingConfigEnvVars", func() {
 		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(Equal("30s"))
 	})
 
-	It("defaults BINDPLANE_LOGGING_OTLP_INTERVAL to 60s when interval is not set", func() {
+	It("does not set BINDPLANE_LOGGING_OTLP_INTERVAL when interval is not set", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{
 			Type: "otlp",
 			OTLP: &bindplanev1alpha1.LoggingOTLPConfig{Endpoint: "localhost:4317"},
 		}
 		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(Equal("60s"))
+		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(BeEmpty())
 	})
 
 	It("does not set BINDPLANE_LOGGING_OTLP_INSECURE when insecure is false", func() {
