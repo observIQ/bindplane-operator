@@ -44,7 +44,7 @@ const (
 	// tsdbContainerName is the container name for the TSDB StatefulSet
 	tsdbContainerName = "tsdb"
 	// tsdbImage is the default container image for Prometheus
-	tsdbImage = "ghcr.io/observiq/bindplane-prometheus:1.96.3"
+	tsdbImage = "ghcr.io/observiq/bindplane-prometheus:" + defaultBindplaneVersion
 	// tsdbDataVolumeSuffix is the suffix for TSDB data volume names
 	tsdbDataVolumeSuffix = "tsdb-data"
 	// tsdbHTTPPort is the HTTP port for Prometheus

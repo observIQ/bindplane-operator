@@ -35,7 +35,7 @@ const (
 	// transformAgentContainerName is the container name for Transform Agent
 	transformAgentContainerName = "transform-agent"
 	// transformAgentImage is the default container image for Transform Agent
-	transformAgentImage = "ghcr.io/observiq/bindplane-transform-agent:1.96.3-bindplane"
+	transformAgentImage = "ghcr.io/observiq/bindplane-transform-agent:" + defaultBindplaneVersion + "-bindplane"
 	// transformAgentHTTPPort is the HTTP port for Transform Agent
 	transformAgentHTTPPort = 4568
 	// transformAgentHTTPPortName is the name of the HTTP port for Transform Agent

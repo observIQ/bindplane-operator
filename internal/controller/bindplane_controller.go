@@ -306,6 +306,10 @@ const (
 )
 
 const (
+	// defaultBindplaneVersion is the Bindplane release tag used for all default container images.
+	// Update this single constant to change all image defaults simultaneously.
+	// Transform Agent uses this version with a "-bindplane" suffix; Prometheus uses it directly.
+	defaultBindplaneVersion = "1.98.1"
 	// defaultPprofEndpoint is the default host:port for the pprof server (matches Bindplane)
 	defaultPprofEndpoint = "127.0.0.1:6060"
 	// defaultConcurrency is the default value for maxConcurrency and maxSimultaneousConnections.
