@@ -107,6 +107,12 @@ spec:
 EOF
 ```
 
+Once deployed, the `default` namespace will have the following pods:
+
+```
+
+```
+
 ## Further Reading
 
 - [Configuration Reference](configuration/configuration.md) — all available `spec.config` fields with examples

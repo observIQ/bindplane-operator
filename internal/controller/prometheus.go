@@ -221,11 +221,9 @@ func (r *BindplaneReconciler) reconcileTSDB(ctx context.Context, bindplane *bind
 	if err := r.reconcileTSDBBasicAuthSecret(ctx, bindplane, log); err != nil {
 		return err
 	}
-	// When Prometheus server TLS is enabled (spec.prometheus.tls), reconcile web-config ConfigMap (basic auth + tls_server_config)
-	if isTSDBServerTLSEnabled(bindplane) {
-		if err := r.reconcileTSDBWebConfigConfigMap(ctx, bindplane, log); err != nil {
-			return err
-		}
+	// Reconcile web-config ConfigMap (basic auth + optional tls_server_config) — always needed for probe credentials.
+	if err := r.reconcileTSDBWebConfigConfigMap(ctx, bindplane, log); err != nil {
+		return err
 	}
 
 	// Reconcile ServiceAccount
@@ -329,26 +327,28 @@ func (r *BindplaneReconciler) reconcileTSDBWebConfigConfigMap(ctx context.Contex
 	if err := yaml.Unmarshal(webConfigBytes, &cfg); err != nil {
 		return fmt.Errorf("unmarshal web config from secret: %w", err)
 	}
-	// TLS server config: cert and key always; client CA and client_auth_type only for mTLS.
+	// TLS server config: only set when TLS is enabled. Without TLS, web.yml contains basic auth only.
 	// With cert-manager: server secret at /etc/prometheus-web-tls (server cert + ca.crt for client verification).
 	// With user secret: single secret at /etc/prometheus-tls.
-	tlsCfg := &tsdbTLSServerConfig{}
-	if isTSDBServerCertManagerTLSEnabled(bindplane) {
-		tlsCfg.CertFile = tsdbWebServerTLSMountPath + "/tls.crt"
-		tlsCfg.KeyFile = tsdbWebServerTLSMountPath + "/tls.key"
-		if isTSDBServerMTLSEnabled(bindplane) {
-			tlsCfg.ClientCAFile = tsdbWebServerTLSMountPath + "/ca.crt"
-			tlsCfg.ClientAuthType = "RequireAndVerifyClientCert"
+	if isTSDBServerTLSEnabled(bindplane) {
+		tlsCfg := &tsdbTLSServerConfig{}
+		if isTSDBServerCertManagerTLSEnabled(bindplane) {
+			tlsCfg.CertFile = tsdbWebServerTLSMountPath + "/tls.crt"
+			tlsCfg.KeyFile = tsdbWebServerTLSMountPath + "/tls.key"
+			if isTSDBServerMTLSEnabled(bindplane) {
+				tlsCfg.ClientCAFile = tsdbWebServerTLSMountPath + "/ca.crt"
+				tlsCfg.ClientAuthType = "RequireAndVerifyClientCert"
+			}
+		} else {
+			tlsCfg.CertFile = tsdbTLSMountPath + "/tls.crt"
+			tlsCfg.KeyFile = tsdbTLSMountPath + "/tls.key"
+			if isTSDBServerMTLSEnabled(bindplane) {
+				tlsCfg.ClientCAFile = tsdbTLSMountPath + "/ca.crt"
+				tlsCfg.ClientAuthType = "RequireAndVerifyClientCert"
+			}
 		}
-	} else {
-		tlsCfg.CertFile = tsdbTLSMountPath + "/tls.crt"
-		tlsCfg.KeyFile = tsdbTLSMountPath + "/tls.key"
-		if isTSDBServerMTLSEnabled(bindplane) {
-			tlsCfg.ClientCAFile = tsdbTLSMountPath + "/ca.crt"
-			tlsCfg.ClientAuthType = "RequireAndVerifyClientCert"
-		}
+		cfg.TLSServerConfig = tlsCfg
 	}
-	cfg.TLSServerConfig = tlsCfg
 	mergedWebConfig, err := yaml.Marshal(&cfg)
 	if err != nil {
 		return fmt.Errorf("marshal web config: %w", err)
@@ -514,10 +514,21 @@ func getTSDBVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
 			{
 				Name: tsdbWebConfigVolumeName,
 				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: getResourceName(bindplane, tsdbWebConfigConfigMapSuffix),
+						},
+					},
+				},
+			},
+			{
+				Name: tsdbProbeAuthVolumeName,
+				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: getResourceName(bindplane, tsdbBasicAuthSecretSuffix),
 						Items: []corev1.KeyToPath{
-							{Key: tsdbBasicAuthSecretKeyWeb, Path: tsdbWebConfigFileName},
+							{Key: tsdbBasicAuthSecretKeyUser, Path: "username"},
+							{Key: tsdbBasicAuthSecretKeyPass, Path: "password"},
 						},
 					},
 				},
@@ -640,11 +651,21 @@ func getTSDBVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume
 		}
 		mounts = append(mounts, corev1.VolumeMount{Name: tsdbProbeAuthVolumeName, MountPath: tsdbProbeAuthMountPath, ReadOnly: true})
 	} else {
-		// Secret with web.yml only (subPath so only that key is mounted).
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      tsdbWebConfigVolumeName,
 			MountPath: tsdbWebConfigMountPath + "/" + tsdbWebConfigFileName,
 			SubPath:   tsdbWebConfigFileName,
+			ReadOnly:  true,
+		})
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      tsdbWebConfigVolumeName,
+			MountPath: tsdbWebConfigMountPath + "/" + tsdbProbeHTTPFileName,
+			SubPath:   tsdbProbeHTTPFileName,
+			ReadOnly:  true,
+		})
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      tsdbProbeAuthVolumeName,
+			MountPath: tsdbProbeAuthMountPath,
 			ReadOnly:  true,
 		})
 	}
@@ -656,11 +677,10 @@ func getTSDBVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume
 // HTTPS with probe-http.yml when TLS or mTLS is enabled.
 func getTSDBProbeCommand(bindplane *bindplanev1alpha1.Bindplane, check string) []string {
 	url := "http://127.0.0.1:" + fmt.Sprintf("%d", tsdbHTTPPort)
-	configFile := ""
 	if isTSDBServerTLSEnabled(bindplane) {
 		url = "https://127.0.0.1:" + fmt.Sprintf("%d", tsdbHTTPPort)
-		configFile = " --http.config.file=" + tsdbWebConfigMountPath + "/" + tsdbProbeHTTPFileName
 	}
+	configFile := " --http.config.file=" + tsdbWebConfigMountPath + "/" + tsdbProbeHTTPFileName
 	script := "promtool check " + check + " --url=" + url + configFile
 	return []string{"/bin/sh", "-ec", script}
 }
