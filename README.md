@@ -12,7 +12,7 @@
 
 A Kubernetes operator for managing [Bindplane](https://bindplane.com/) server deployments in Kubernetes clusters.
 
-## About Bindplane
+## About
 
 Bindplane is a telemetry pipeline built on [OpenTelemetry](https://opentelemetry.io/) that enables teams to collect,
 refine, and export metrics, logs, and traces from any source to any destination. The Bindplane Operator automates the
