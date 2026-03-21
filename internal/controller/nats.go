@@ -281,20 +281,13 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName 
 	clusterName := fmt.Sprintf("%s-%s", bindplane.Name, natsComponent)
 	clusterRoutes := getNatsClusterRoutes(bindplane, headlessServiceName, replicas)
 
-	envVars := []corev1.EnvVar{
-		{
-			Name:  bindplaneModeEnvVar,
-			Value: natsModeValue,
-		},
-		{
-			Name:  bindplaneEventBusTypeEnvVar,
-			Value: natsEventBusType,
-		},
-		{
-			Name:  bindplaneNatsServerEnableEnvVar,
-			Value: natsServerEnableValue,
-		},
-		{
+	tlsVars := getNatsTLSEnvVars(bindplane)
+	envVars := make([]corev1.EnvVar, 0, 15+len(tlsVars))
+	envVars = append(envVars,
+		corev1.EnvVar{Name: bindplaneModeEnvVar, Value: natsModeValue},
+		corev1.EnvVar{Name: bindplaneEventBusTypeEnvVar, Value: natsEventBusType},
+		corev1.EnvVar{Name: bindplaneNatsServerEnableEnvVar, Value: natsServerEnableValue},
+		corev1.EnvVar{
 			Name: bindplaneNatsServerNameEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
@@ -302,39 +295,15 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName 
 				},
 			},
 		},
-		{
-			Name:  bindplaneNatsServerClientHostEnvVar,
-			Value: natsBindAddress,
-		},
-		{
-			Name:  bindplaneNatsServerClientPortEnvVar,
-			Value: strconv.Itoa(int(natsClientPort)),
-		},
-		{
-			Name:  bindplaneNatsServerHTTPHostEnvVar,
-			Value: natsBindAddress,
-		},
-		{
-			Name:  bindplaneNatsServerHTTPPortEnvVar,
-			Value: strconv.Itoa(int(natsHTTPPort)),
-		},
-		{
-			Name:  bindplaneNatsServerClusterNameEnvVar,
-			Value: clusterName,
-		},
-		{
-			Name:  bindplaneNatsServerClusterHostEnvVar,
-			Value: natsBindAddress,
-		},
-		{
-			Name:  bindplaneNatsServerClusterPortEnvVar,
-			Value: strconv.Itoa(int(natsClusterPort)),
-		},
-		{
-			Name:  bindplaneNatsServerClusterRoutesEnvVar,
-			Value: clusterRoutes,
-		},
-		{
+		corev1.EnvVar{Name: bindplaneNatsServerClientHostEnvVar, Value: natsBindAddress},
+		corev1.EnvVar{Name: bindplaneNatsServerClientPortEnvVar, Value: strconv.Itoa(int(natsClientPort))},
+		corev1.EnvVar{Name: bindplaneNatsServerHTTPHostEnvVar, Value: natsBindAddress},
+		corev1.EnvVar{Name: bindplaneNatsServerHTTPPortEnvVar, Value: strconv.Itoa(int(natsHTTPPort))},
+		corev1.EnvVar{Name: bindplaneNatsServerClusterNameEnvVar, Value: clusterName},
+		corev1.EnvVar{Name: bindplaneNatsServerClusterHostEnvVar, Value: natsBindAddress},
+		corev1.EnvVar{Name: bindplaneNatsServerClusterPortEnvVar, Value: strconv.Itoa(int(natsClusterPort))},
+		corev1.EnvVar{Name: bindplaneNatsServerClusterRoutesEnvVar, Value: clusterRoutes},
+		corev1.EnvVar{
 			Name: bindplaneNatsClientNameEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
@@ -342,16 +311,10 @@ func getNatsEnvVars(bindplane *bindplanev1alpha1.Bindplane, headlessServiceName 
 				},
 			},
 		},
-		{
-			Name:  bindplaneNatsClientEndpointEnvVar,
-			Value: fmt.Sprintf("%s%s", natsProtocolPrefix, natsLocalhostEndpoint),
-		},
-		{
-			Name:  bindplaneNatsClientSubjectEnvVar,
-			Value: natsClientSubject,
-		},
-	}
-	envVars = append(envVars, getNatsTLSEnvVars(bindplane)...)
+		corev1.EnvVar{Name: bindplaneNatsClientEndpointEnvVar, Value: fmt.Sprintf("%s%s", natsProtocolPrefix, natsLocalhostEndpoint)},
+		corev1.EnvVar{Name: bindplaneNatsClientSubjectEnvVar, Value: natsClientSubject},
+	)
+	envVars = append(envVars, tlsVars...)
 	return envVars
 }
 

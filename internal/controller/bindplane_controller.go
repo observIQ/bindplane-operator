@@ -759,7 +759,11 @@ func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *b
 // that should be present in all pods deployed by this operator
 // combineEnvVars combines multiple slices of environment variables into a single slice
 func combineEnvVars(envVarSlices ...[]corev1.EnvVar) []corev1.EnvVar {
-	var result []corev1.EnvVar
+	total := 0
+	for _, s := range envVarSlices {
+		total += len(s)
+	}
+	result := make([]corev1.EnvVar, 0, total)
 	for _, envVars := range envVarSlices {
 		result = append(result, envVars...)
 	}

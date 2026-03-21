@@ -307,7 +307,7 @@ func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.
 
 // getMiscConfigEnvVars returns env vars for maxConcurrency (default 10) and auditTrail.retentionDays (default 365).
 func getMiscConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	var envVars []corev1.EnvVar
+	envVars := make([]corev1.EnvVar, 0, 2)
 	maxConcurrency := config.MaxConcurrency
 	if maxConcurrency <= 0 {
 		maxConcurrency = 10
@@ -534,12 +534,11 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 		return nil
 	}
 
-	envVars := []corev1.EnvVar{
-		{
-			Name:  bindplaneEventBusTypeEnvVar,
-			Value: natsEventBusType,
-		},
-		{
+	tlsVars := getNatsTLSEnvVars(bindplane)
+	envVars := make([]corev1.EnvVar, 0, 4+len(tlsVars))
+	envVars = append(envVars,
+		corev1.EnvVar{Name: bindplaneEventBusTypeEnvVar, Value: natsEventBusType},
+		corev1.EnvVar{
 			Name: bindplaneNatsClientNameEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
@@ -547,16 +546,10 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 				},
 			},
 		},
-		{
-			Name:  bindplaneNatsClientEndpointEnvVar,
-			Value: getNatsClientEndpoint(bindplane),
-		},
-		{
-			Name:  bindplaneNatsClientSubjectEnvVar,
-			Value: natsClientSubject,
-		},
-	}
-	envVars = append(envVars, getNatsTLSEnvVars(bindplane)...)
+		corev1.EnvVar{Name: bindplaneNatsClientEndpointEnvVar, Value: getNatsClientEndpoint(bindplane)},
+		corev1.EnvVar{Name: bindplaneNatsClientSubjectEnvVar, Value: natsClientSubject},
+	)
+	envVars = append(envVars, tlsVars...)
 	return envVars
 }
 

@@ -53,7 +53,7 @@ const (
 	tsdbHTTPPortName = "http"
 
 	// TSDB basic auth (operator-generated secret)
-	tsdbBasicAuthSecretSuffix  = "tsdb-basic-auth"
+	tsdbBasicAuthSecretSuffix  = "tsdb-basic-auth" // #nosec G101 -- secret name suffix, not a credential
 	tsdbBasicAuthUsername      = "tsdb"
 	tsdbBasicAuthSecretKeyUser = "username"
 	tsdbBasicAuthSecretKeyPass = "password"

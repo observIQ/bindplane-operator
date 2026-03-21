@@ -256,6 +256,16 @@ make deploy IMG=bindplane-operator:local
 - E2E tests: `make test-e2e`
 - Run controller locally: `make run`
 
+## Quality Checks (Required After Every Change)
+
+After making any code changes, always run the following in order and resolve all findings before finishing:
+
+1. **Tests** — `make test` (or target changed packages: `go test ./internal/controller/...`)
+2. **Linter** — `make lint` (or target changed files: `golangci-lint run ./internal/controller/...`)
+3. **Security scanner** — `make gosec` (or target changed files: `gosec ./internal/controller/...`)
+
+When only specific files changed, prefer the targeted form to save time. Resolve every finding; do not skip or suppress issues without a documented reason (`// #nosec GXX -- reason`).
+
 ## Important Notes
 
 1. **Always run `make manifests` after changing types** - This regenerates CRDs and RBAC
