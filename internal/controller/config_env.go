@@ -503,7 +503,7 @@ func getProfilingServiceNameDefault(component string) string {
 	case bindplaneJobsComponent:
 		return "bindplane-jobs"
 	case bindplaneJobsMigrateComponent:
-		return "bindplane-jobs-migrate"
+		return "bindplane-migrate"
 	case natsComponent:
 		return "bindplane-nats"
 	default:
@@ -622,14 +622,15 @@ func getAnalyticsEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1
 }
 
 // defaultRequiredHosts calculates the default event bus health required hosts:
-// floor(total / 2) + 1, where total = node + nats + jobs (1) + jobsMigrate (1).
+// floor(total / 2) + 1, where total = node + nats + jobs (1).
+// Jobs Migrate is a batch/v1 Job (not a long-running pod) and is excluded from this total.
 func defaultRequiredHosts(bindplane *bindplanev1alpha1.Bindplane) int32 {
 	nodeReplicas := int32(3)
 	if bindplane.Spec.Bindplane.Replicas != nil {
 		nodeReplicas = *bindplane.Spec.Bindplane.Replicas
 	}
 	natsReplicas := *bindplane.Spec.Nats.Replicas
-	total := nodeReplicas + natsReplicas + 1 + 1 // +1 jobs, +1 jobs-migrate
+	total := nodeReplicas + natsReplicas + 1 // +1 jobs (migrate is now a batch Job)
 	return total/2 + 1
 }
 

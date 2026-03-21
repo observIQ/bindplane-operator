@@ -24,6 +24,7 @@ import (
 	"net"
 	"regexp"
 	"slices"
+	"time"
 	"unicode"
 
 	"github.com/go-logr/logr"
@@ -386,6 +387,7 @@ type BindplaneReconciler struct {
 // +kubebuilder:rbac:groups=k8s.bindplane.com,resources=bindplanes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
@@ -518,8 +520,19 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile the Jobs Migrate batch/v1 Job; block downstream workloads until it completes.
+	migrationComplete, err := r.reconcileMigrateJob(ctx, bindplane, log)
+	if err != nil {
+		log.Error(err, "unable to reconcile Jobs Migrate Job")
+		return ctrl.Result{}, err
+	}
+	if !migrationComplete {
+		log.Info("waiting for Jobs Migrate Job to complete")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	// Reconcile Bindplane Jobs resources
-	if err := r.reconcileBindplaneJobs(ctx, bindplane, log); err != nil {
+	if err := r.reconcileBindplaneJobsRegular(ctx, bindplane, log); err != nil {
 		log.Error(err, "unable to reconcile Bindplane Jobs")
 		return ctrl.Result{}, err
 	}

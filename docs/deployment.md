@@ -87,6 +87,7 @@ spec:
                 memory: 1024Mi
               limits:
                 memory: 1024Mi
+  # bindplaneJobsMigrate configures the batch/v1 Job pod template for database migrations.
   bindplaneJobsMigrate:
     podTemplate:
       spec:
@@ -187,6 +188,7 @@ spec:
                 memory: 1024Mi
               limits:
                 memory: 1024Mi
+  # bindplaneJobsMigrate configures the batch/v1 Job pod template for database migrations.
   bindplaneJobsMigrate:
     podTemplate:
       spec:
@@ -287,6 +289,7 @@ spec:
                 memory: 1024Mi
               limits:
                 memory: 1024Mi
+  # bindplaneJobsMigrate configures the batch/v1 Job pod template for database migrations.
   bindplaneJobsMigrate:
     podTemplate:
       spec:

@@ -82,10 +82,11 @@ type BindplaneJobsComponentSpec struct {
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 
-// BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification
+// BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification.
+// Jobs Migrate runs as a Kubernetes batch/v1 Job that performs database migrations at install time
+// and whenever the Bindplane image version changes.
 type BindplaneJobsMigrateComponentSpec struct {
-	// PodTemplate defines pod template specification for Bindplane Jobs Migrate
-	// Note: Jobs Migrate are restricted to 1 replica and cannot be scaled
+	// PodTemplate defines pod template specification for the Bindplane Jobs Migrate batch/v1 Job
 	// +optional
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -497,8 +498,8 @@ type AnalyticsConfig struct {
 type EventBusHealthConfig struct {
 	// RequiredHosts is the minimum number of pods that must respond to the health check
 	// event for the event bus to be considered healthy. When omitted, defaults to
-	// floor(total / 2) + 1, where total is the sum of node, NATS, jobs, and
-	// jobs-migrate replicas.
+	// floor(total / 2) + 1, where total is the sum of node, NATS, and jobs replicas.
+	// Jobs Migrate is a batch/v1 Job (not a long-running pod) and is excluded from this total.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	RequiredHosts *int32 `json:"requiredHosts,omitempty"`
@@ -1164,6 +1165,12 @@ type BindplaneStatus struct {
 	// Conditions represent the latest available observations of the Bindplane's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// MigratedImage records the container image for which a successful migrate Job
+	// has completed. The controller uses this to determine whether migration must
+	// run before applying an image change to NATS, Jobs, and Node workloads.
+	// +optional
+	MigratedImage string `json:"migratedImage,omitempty"`
 }
 
 // +kubebuilder:object:root=true

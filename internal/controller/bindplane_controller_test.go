@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1790,7 +1791,7 @@ var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 		}{
 			{nodeComponent, "bindplane-node"},
 			{bindplaneJobsComponent, "bindplane-jobs"},
-			{bindplaneJobsMigrateComponent, "bindplane-jobs-migrate"},
+			{bindplaneJobsMigrateComponent, "bindplane-migrate"},
 			{natsComponent, "bindplane-nats"},
 		} {
 			envVars := getBindplaneCommonEnvVars(bindplane, tc.component)
@@ -1900,7 +1901,7 @@ var _ = Describe("defaultRequiredHosts", func() {
 				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 			},
 		}
-		// total = 3 + 2 + 1 + 1 = 7, floor(7/2)+1 = 4
+		// total = 3 + 2 + 1 = 6, floor(6/2)+1 = 4
 		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(4)))
 	})
 
@@ -1917,8 +1918,127 @@ var _ = Describe("defaultRequiredHosts", func() {
 				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 			},
 		}
-		// total = 5 + 3 + 1 + 1 = 10, floor(10/2)+1 = 6
-		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(6)))
+		// total = 5 + 3 + 1 = 9, floor(9/2)+1 = 5
+		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(5)))
+	})
+})
+
+var _ = Describe("migrate Job helpers", func() {
+	makeJob := func(image string, conditions ...batchv1.JobCondition) *batchv1.Job {
+		return &batchv1.Job{
+			Spec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Image: image}},
+					},
+				},
+			},
+			Status: batchv1.JobStatus{Conditions: conditions},
+		}
+	}
+
+	Describe("isJobSucceeded", func() {
+		It("returns true when JobComplete condition is True", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+			})
+			Expect(isJobSucceeded(job)).To(BeTrue())
+		})
+
+		It("returns false when no conditions", func() {
+			Expect(isJobSucceeded(makeJob("img"))).To(BeFalse())
+		})
+
+		It("returns false when JobComplete condition is False", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionFalse,
+			})
+			Expect(isJobSucceeded(job)).To(BeFalse())
+		})
+	})
+
+	Describe("isJobFailed", func() {
+		It("returns true when JobFailed condition is True", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobFailed,
+				Status: corev1.ConditionTrue,
+			})
+			Expect(isJobFailed(job)).To(BeTrue())
+		})
+
+		It("returns false when no conditions", func() {
+			Expect(isJobFailed(makeJob("img"))).To(BeFalse())
+		})
+	})
+
+	Describe("extractJobContainerImage", func() {
+		It("returns the first container image", func() {
+			Expect(extractJobContainerImage(makeJob("my-image:1.2.3"))).To(Equal("my-image:1.2.3"))
+		})
+
+		It("returns empty string when no containers", func() {
+			job := &batchv1.Job{}
+			Expect(extractJobContainerImage(job)).To(Equal(""))
+		})
+	})
+
+	Describe("bindplaneJobsMigrateJob", func() {
+		var bindplane *bindplanev1alpha1.Bindplane
+		var r *BindplaneReconciler
+
+		BeforeEach(func() {
+			bindplane = &bindplanev1alpha1.Bindplane{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: bindplanev1alpha1.BindplaneSpec{
+					Config: bindplanev1alpha1.BindplaneConfigSpec{
+						License: "license",
+						Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					},
+				},
+			}
+			r = &BindplaneReconciler{}
+		})
+
+		It("produces a Job with correct name and namespace", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Name).To(Equal("test-migrate"))
+			Expect(job.Namespace).To(Equal("default"))
+		})
+
+		It("sets the migrate command", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			containers := job.Spec.Template.Spec.Containers
+			Expect(containers).To(HaveLen(1))
+			Expect(containers[0].Command).To(Equal([]string{"/bindplane", "migrate", "-y"}))
+		})
+
+		It("sets RestartPolicy to OnFailure", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyOnFailure))
+		})
+
+		It("sets BackoffLimit to 3", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.BackoffLimit).NotTo(BeNil())
+			Expect(*job.Spec.BackoffLimit).To(Equal(int32(3)))
+		})
+
+		It("sets TTLSecondsAfterFinished to 300", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.TTLSecondsAfterFinished).NotTo(BeNil())
+			Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(300)))
+		})
+
+		It("has no ports or probes", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			c := job.Spec.Template.Spec.Containers[0]
+			Expect(c.Ports).To(BeEmpty())
+			Expect(c.LivenessProbe).To(BeNil())
+			Expect(c.ReadinessProbe).To(BeNil())
+			Expect(c.StartupProbe).To(BeNil())
+		})
 	})
 })
 
