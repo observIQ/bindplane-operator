@@ -122,11 +122,11 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 								Env: getKubernetesEnvVars(transformAgentContainerName),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("1024Mi"),
+										corev1.ResourceMemory: resource.MustParse("512Mi"),
 									},
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:    resource.MustParse("250m"),
-										corev1.ResourceMemory: resource.MustParse("1024Mi"),
+										corev1.ResourceMemory: resource.MustParse("512Mi"),
 									},
 								},
 								StartupProbe: &corev1.Probe{

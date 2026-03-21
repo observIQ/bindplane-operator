@@ -441,11 +441,11 @@ func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								Env: getKubernetesEnvVars(tsdbContainerName),
 								Resources: corev1.ResourceRequirements{
 									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("500Mi"),
+										corev1.ResourceMemory: resource.MustParse("2048Mi"),
 									},
 									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("250m"),
-										corev1.ResourceMemory: resource.MustParse("500Mi"),
+										corev1.ResourceCPU:    resource.MustParse("1000m"),
+										corev1.ResourceMemory: resource.MustParse("2048Mi"),
 									},
 								},
 								VolumeMounts: volumeMounts,

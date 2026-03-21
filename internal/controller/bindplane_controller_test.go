@@ -1339,7 +1339,7 @@ var _ = Describe("workload Go runtime env vars", func() {
 		envVars := statefulSet.Spec.Template.Spec.Containers[0].Env
 
 		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
-		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("500Mi")))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2048Mi")))
 	})
 })
 
