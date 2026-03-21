@@ -11451,6 +11451,56 @@ spec:
                             type: object
                         type: object
                     type: object
+                  agents:
+                    properties:
+                      auth:
+                        properties:
+                          oauth:
+                            properties:
+                              audiences:
+                                items:
+                                  type: string
+                                type: array
+                              cacheTTL:
+                                type: string
+                              issuer:
+                                type: string
+                              requiredClaims:
+                                items:
+                                  type: string
+                                type: array
+                              requiredScopes:
+                                items:
+                                  type: string
+                                type: array
+                            type: object
+                          secretKey:
+                            properties:
+                              headers:
+                                items:
+                                  type: string
+                                type: array
+                            type: object
+                          type:
+                            type: string
+                        type: object
+                      heartbeatExpiryInterval:
+                        type: string
+                      heartbeatInterval:
+                        type: string
+                      heartbeatTTL:
+                        type: string
+                      rebalanceInterval:
+                        type: string
+                      rebalanceJitter:
+                        maximum: 100
+                        minimum: 0
+                        type: integer
+                      rebalancePercentage:
+                        maximum: 100
+                        minimum: 0
+                        type: integer
+                    type: object
                   analytics:
                     properties:
                       disabled:

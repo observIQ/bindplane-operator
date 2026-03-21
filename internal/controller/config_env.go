@@ -357,6 +357,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getTracingConfigEnvVars(config.Tracing)...)
 	envVars = append(envVars, getMetricsConfigEnvVars(config.Metrics)...)
 	envVars = append(envVars, getMiscConfigEnvVars(config)...)
+	envVars = append(envVars, getAgentsConfigEnvVars(config.Agents)...)
 	return envVars
 }
 
@@ -682,6 +683,68 @@ func getLoggingConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []co
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPIntervalEnvVar, Value: l.OTLP.Interval})
 		}
 	}
+	return envVars
+}
+
+// getAgentsConfigEnvVars returns env vars for spec.config.agents.
+// Returns nil when agents is nil (Bindplane uses its own defaults).
+func getAgentsConfigEnvVars(agents *bindplanev1alpha1.AgentsConfig) []corev1.EnvVar {
+	if agents == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+
+	// Auth
+	if agents.Auth != nil {
+		auth := agents.Auth
+		if auth.Type != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthTypeEnvVar, Value: auth.Type})
+		}
+		if auth.SecretKey != nil && len(auth.SecretKey.Headers) > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthSecretKeyHeadersEnvVar, Value: strings.Join(auth.SecretKey.Headers, ",")})
+		}
+		if auth.OAuth != nil {
+			oauth := auth.OAuth
+			if oauth.Issuer != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthIssuerEnvVar, Value: oauth.Issuer})
+			}
+			if len(oauth.Audiences) > 0 {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthAudiencesEnvVar, Value: strings.Join(oauth.Audiences, ",")})
+			}
+			if len(oauth.RequiredClaims) > 0 {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthRequiredClaimsEnvVar, Value: strings.Join(oauth.RequiredClaims, ",")})
+			}
+			if len(oauth.RequiredScopes) > 0 {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthRequiredScopesEnvVar, Value: strings.Join(oauth.RequiredScopes, ",")})
+			}
+			if oauth.CacheTTL != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthCacheTTLEnvVar, Value: oauth.CacheTTL})
+			}
+		}
+	}
+
+	// Heartbeat
+	if agents.HeartbeatInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsHeartbeatIntervalEnvVar, Value: agents.HeartbeatInterval})
+	}
+	if agents.HeartbeatTTL != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsHeartbeatTTLEnvVar, Value: agents.HeartbeatTTL})
+	}
+	if agents.HeartbeatExpiryInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsHeartbeatExpiryIntervalEnvVar, Value: agents.HeartbeatExpiryInterval})
+	}
+
+	// Rebalance
+	if agents.RebalanceInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsRebalanceIntervalEnvVar, Value: agents.RebalanceInterval})
+	}
+	if agents.RebalancePercentage != nil {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsRebalancePercentageEnvVar, Value: strconv.Itoa(*agents.RebalancePercentage)})
+	}
+	if agents.RebalanceJitter != nil {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsRebalanceJitterEnvVar, Value: strconv.Itoa(*agents.RebalanceJitter)})
+	}
+
 	return envVars
 }
 

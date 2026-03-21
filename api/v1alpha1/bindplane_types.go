@@ -167,6 +167,102 @@ type BindplaneConfigSpec struct {
 	// fine-tune behavior at scale and are not required for basic operation.
 	// +optional
 	Advanced *AdvancedConfig `json:"advanced,omitempty"`
+
+	// Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.
+	// When omitted, Bindplane uses its own defaults.
+	// +optional
+	Agents *AgentsConfig `json:"agents,omitempty"`
+}
+
+// AgentsConfig configures how Bindplane communicates with agents.
+type AgentsConfig struct {
+	// Auth configures authentication for agent connections.
+	// +optional
+	Auth *AgentsAuthConfig `json:"auth,omitempty"`
+
+	// HeartbeatInterval is the interval on which to perform a heartbeat over agent connections (e.g. "30s").
+	// When omitted, Bindplane uses its own default.
+	// +optional
+	HeartbeatInterval string `json:"heartbeatInterval,omitempty"`
+
+	// HeartbeatTTL is the amount of time between agent-initiated heartbeat messages before an agent
+	// connection expires (e.g. "1m"). When omitted, Bindplane uses its own default.
+	// +optional
+	HeartbeatTTL string `json:"heartbeatTTL,omitempty"`
+
+	// HeartbeatExpiryInterval is the interval between reaping expired agents (e.g. "30s").
+	// When omitted, Bindplane uses its own default.
+	// +optional
+	HeartbeatExpiryInterval string `json:"heartbeatExpiryInterval,omitempty"`
+
+	// RebalanceInterval is the interval between rebalancing agents (e.g. "1h").
+	// When omitted, Bindplane uses its own default.
+	// +optional
+	RebalanceInterval string `json:"rebalanceInterval,omitempty"`
+
+	// RebalancePercentage is the percentage of agents to rebalance (0–100).
+	// 0 disables percentage-based rebalancing. When omitted, Bindplane uses its own default.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	RebalancePercentage *int `json:"rebalancePercentage,omitempty"`
+
+	// RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).
+	// When omitted, Bindplane uses its own default.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	RebalanceJitter *int `json:"rebalanceJitter,omitempty"`
+}
+
+// AgentsAuthConfig configures authentication for agent connections.
+type AgentsAuthConfig struct {
+	// Type specifies the authentication method(s) for agent connections.
+	// Can be a single method or a comma-separated list (e.g. "oauth,secretKey").
+	// Valid values: secretKey, oauth. When omitted, Bindplane defaults to secretKey.
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// SecretKey configures the secret key authentication method.
+	// +optional
+	SecretKey *AgentsAuthSecretKeyConfig `json:"secretKey,omitempty"`
+
+	// OAuth configures the OAuth authentication method.
+	// +optional
+	OAuth *AgentsAuthOAuthConfig `json:"oauth,omitempty"`
+}
+
+// AgentsAuthSecretKeyConfig configures secret key authentication for agent connections.
+type AgentsAuthSecretKeyConfig struct {
+	// Headers is the list of HTTP headers to read the secret key from.
+	// When omitted, Bindplane defaults to ["X-Bindplane-Authorization", "Authorization"].
+	// +optional
+	Headers []string `json:"headers,omitempty"`
+}
+
+// AgentsAuthOAuthConfig configures OAuth authentication for agent connections.
+type AgentsAuthOAuthConfig struct {
+	// Issuer is the URL of the OAuth provider used to validate the token's iss claim.
+	// +optional
+	Issuer string `json:"issuer,omitempty"`
+
+	// Audiences is the list of valid audience values. The token's aud claim must match
+	// at least one of these values.
+	// +optional
+	Audiences []string `json:"audiences,omitempty"`
+
+	// RequiredClaims is the list of claim names that must be present in the token.
+	// +optional
+	RequiredClaims []string `json:"requiredClaims,omitempty"`
+
+	// RequiredScopes is the list of scopes that must all be present in the token.
+	// +optional
+	RequiredScopes []string `json:"requiredScopes,omitempty"`
+
+	// CacheTTL is the duration a valid OAuth token is cached (e.g. "1h").
+	// When omitted, Bindplane uses its own default.
+	// +optional
+	CacheTTL string `json:"cacheTTL,omitempty"`
 }
 
 // AdvancedConfig defines advanced Bindplane configuration options.

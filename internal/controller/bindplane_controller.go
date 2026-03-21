@@ -283,6 +283,21 @@ const (
 	// Advanced cache Redis TLS volume mount (operator-managed path; user specifies only Secret name and keys)
 	advancedCacheRedisTLSVolumeName = "advanced-cache-redis-tls"
 	advancedCacheRedisTLSMountPath  = "/etc/bindplane/advanced-cache-redis-tls"
+
+	// Agents configuration
+	bindplaneAgentsAuthTypeEnvVar                = "BINDPLANE_AGENTS_AUTH_TYPE"
+	bindplaneAgentsAuthSecretKeyHeadersEnvVar    = "BINDPLANE_AGENTS_AUTH_SECRET_KEY_HEADERS"
+	bindplaneAgentsAuthOAuthIssuerEnvVar         = "BINDPLANE_AGENTS_AUTH_OAUTH_ISSUER"
+	bindplaneAgentsAuthOAuthAudiencesEnvVar      = "BINDPLANE_AGENTS_AUTH_OAUTH_AUDIENCES"
+	bindplaneAgentsAuthOAuthRequiredClaimsEnvVar = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_CLAIMS"
+	bindplaneAgentsAuthOAuthRequiredScopesEnvVar = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_SCOPES"
+	bindplaneAgentsAuthOAuthCacheTTLEnvVar       = "BINDPLANE_AGENTS_AUTH_OAUTH_CACHE_TTL"
+	bindplaneAgentsHeartbeatIntervalEnvVar       = "BINDPLANE_AGENTS_HEARTBEAT_INTERVAL"
+	bindplaneAgentsHeartbeatTTLEnvVar            = "BINDPLANE_AGENTS_HEARTBEAT_TTL"
+	bindplaneAgentsHeartbeatExpiryIntervalEnvVar = "BINDPLANE_AGENTS_HEARTBEAT_EXPIRY_INTERVAL"
+	bindplaneAgentsRebalanceIntervalEnvVar       = "BINDPLANE_AGENTS_REBALANCE_INTERVAL"
+	bindplaneAgentsRebalancePercentageEnvVar     = "BINDPLANE_AGENTS_REBALANCE_PERCENTAGE"
+	bindplaneAgentsRebalanceJitterEnvVar         = "BINDPLANE_AGENTS_REBALANCE_JITTER"
 )
 
 const (

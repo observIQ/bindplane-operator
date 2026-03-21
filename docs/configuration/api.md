@@ -148,6 +148,82 @@ _Appears in:_
 | `batchChannelSize` _integer_ | BatchChannelSize is the buffer size for the batch channel between accept and save workers. |  | Optional: \{\} <br /> |
 
 
+#### AgentsAuthConfig
+
+
+
+AgentsAuthConfig configures authentication for agent connections.
+
+
+
+_Appears in:_
+- [AgentsConfig](#agentsconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type specifies the authentication method(s) for agent connections.<br />Can be a single method or a comma-separated list (e.g. "oauth,secretKey").<br />Valid values: secretKey, oauth. When omitted, Bindplane defaults to secretKey. |  | Optional: \{\} <br /> |
+| `secretKey` _[AgentsAuthSecretKeyConfig](#agentsauthsecretkeyconfig)_ | SecretKey configures the secret key authentication method. |  | Optional: \{\} <br /> |
+| `oauth` _[AgentsAuthOAuthConfig](#agentsauthoauthconfig)_ | OAuth configures the OAuth authentication method. |  | Optional: \{\} <br /> |
+
+
+#### AgentsAuthOAuthConfig
+
+
+
+AgentsAuthOAuthConfig configures OAuth authentication for agent connections.
+
+
+
+_Appears in:_
+- [AgentsAuthConfig](#agentsauthconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `issuer` _string_ | Issuer is the URL of the OAuth provider used to validate the token's iss claim. |  | Optional: \{\} <br /> |
+| `audiences` _string array_ | Audiences is the list of valid audience values. The token's aud claim must match<br />at least one of these values. |  | Optional: \{\} <br /> |
+| `requiredClaims` _string array_ | RequiredClaims is the list of claim names that must be present in the token. |  | Optional: \{\} <br /> |
+| `requiredScopes` _string array_ | RequiredScopes is the list of scopes that must all be present in the token. |  | Optional: \{\} <br /> |
+| `cacheTTL` _string_ | CacheTTL is the duration a valid OAuth token is cached (e.g. "1h").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+
+
+#### AgentsAuthSecretKeyConfig
+
+
+
+AgentsAuthSecretKeyConfig configures secret key authentication for agent connections.
+
+
+
+_Appears in:_
+- [AgentsAuthConfig](#agentsauthconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `headers` _string array_ | Headers is the list of HTTP headers to read the secret key from.<br />When omitted, Bindplane defaults to ["X-Bindplane-Authorization", "Authorization"]. |  | Optional: \{\} <br /> |
+
+
+#### AgentsConfig
+
+
+
+AgentsConfig configures how Bindplane communicates with agents.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `auth` _[AgentsAuthConfig](#agentsauthconfig)_ | Auth configures authentication for agent connections. |  | Optional: \{\} <br /> |
+| `heartbeatInterval` _string_ | HeartbeatInterval is the interval on which to perform a heartbeat over agent connections (e.g. "30s").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `heartbeatTTL` _string_ | HeartbeatTTL is the amount of time between agent-initiated heartbeat messages before an agent<br />connection expires (e.g. "1m"). When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `heartbeatExpiryInterval` _string_ | HeartbeatExpiryInterval is the interval between reaping expired agents (e.g. "30s").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `rebalanceInterval` _string_ | RebalanceInterval is the interval between rebalancing agents (e.g. "1h").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `rebalancePercentage` _integer_ | RebalancePercentage is the percentage of agents to rebalance (0–100).<br />0 disables percentage-based rebalancing. When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `rebalanceJitter` _integer_ | RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).<br />When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+
+
 #### AnalyticsConfig
 
 
@@ -269,6 +345,7 @@ _Appears in:_
 | `analytics` _[AnalyticsConfig](#analyticsconfig)_ | Analytics configures Bindplane analytics reporting. |  | Optional: \{\} <br /> |
 | `logging` _[LoggingConfig](#loggingconfig)_ | Logging configures the Bindplane log level and output destination. |  | Optional: \{\} <br /> |
 | `advanced` _[AdvancedConfig](#advancedconfig)_ | Advanced configures advanced Bindplane options. These are typically used to<br />fine-tune behavior at scale and are not required for basic operation. |  | Optional: \{\} <br /> |
+| `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 
 
 #### BindplaneJobsComponentSpec

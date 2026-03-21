@@ -2731,3 +2731,187 @@ var _ = Describe("getAdvancedCacheRedisTLSVolumeAndMount", func() {
 		Expect(mounts[0].ReadOnly).To(BeTrue())
 	})
 })
+
+var _ = Describe("getAgentsConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	intPtr := func(i int) *int { return &i }
+
+	It("does not set agents env vars when Agents is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthTypeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthIssuerEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthAudiencesEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredClaimsEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredScopesEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthCacheTTLEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatTTLEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatExpiryIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(BeEmpty())
+	})
+
+	It("sets auth.type when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{Type: "oauth,secretKey"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthTypeEnvVar)).To(Equal("oauth,secretKey"))
+	})
+
+	It("sets auth.secretKey.headers as comma-joined when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				SecretKey: &bindplanev1alpha1.AgentsAuthSecretKeyConfig{
+					Headers: []string{"X-Bindplane-Authorization", "Authorization"},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(Equal("X-Bindplane-Authorization,Authorization"))
+	})
+
+	It("does not set auth.secretKey.headers when slice is empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				SecretKey: &bindplanev1alpha1.AgentsAuthSecretKeyConfig{},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(BeEmpty())
+	})
+
+	It("sets auth.oauth.issuer when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{Issuer: "https://auth.example.com"},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthIssuerEnvVar)).To(Equal("https://auth.example.com"))
+	})
+
+	It("sets auth.oauth.audiences as comma-joined when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{
+					Audiences: []string{"aud1", "aud2"},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthAudiencesEnvVar)).To(Equal("aud1,aud2"))
+	})
+
+	It("sets auth.oauth.requiredClaims as comma-joined when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{
+					RequiredClaims: []string{"claim1", "claim2"},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredClaimsEnvVar)).To(Equal("claim1,claim2"))
+	})
+
+	It("sets auth.oauth.requiredScopes as comma-joined when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{
+					RequiredScopes: []string{"scope1", "scope2"},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredScopesEnvVar)).To(Equal("scope1,scope2"))
+	})
+
+	It("sets auth.oauth.cacheTTL when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{CacheTTL: "2h"},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthCacheTTLEnvVar)).To(Equal("2h"))
+	})
+
+	It("sets heartbeatInterval when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatInterval: "45s"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatIntervalEnvVar)).To(Equal("45s"))
+	})
+
+	It("sets heartbeatTTL when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatTTL: "2m"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatTTLEnvVar)).To(Equal("2m"))
+	})
+
+	It("sets heartbeatExpiryInterval when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatExpiryInterval: "1m"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatExpiryIntervalEnvVar)).To(Equal("1m"))
+	})
+
+	It("sets rebalanceInterval when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalanceInterval: "30m"}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceIntervalEnvVar)).To(Equal("30m"))
+	})
+
+	It("sets rebalancePercentage when non-nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalancePercentage: intPtr(50)}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(Equal("50"))
+	})
+
+	It("does not set rebalancePercentage when nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(BeEmpty())
+	})
+
+	It("sets rebalanceJitter when non-nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalanceJitter: intPtr(10)}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(Equal("10"))
+	})
+
+	It("does not set rebalanceJitter when nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(BeEmpty())
+	})
+})

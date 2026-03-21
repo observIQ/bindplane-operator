@@ -30,6 +30,10 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Server](#server)
   - [Cache](#cache)
     - [Redis](#redis)
+- [Agents](#agents)
+  - [Authentication](#agents-authentication)
+  - [Heartbeat](#heartbeat)
+  - [Rebalance](#rebalance)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -907,6 +911,60 @@ spec:
             keyKey: tls.key
             caKey: ca.crt
             minTLSVersion: "1.3"
+```
+
+## Agents
+
+The `spec.config.agents` section configures how Bindplane communicates with agents, including heartbeat timing, rebalancing, and authentication. When omitted, Bindplane uses its own defaults.
+
+### Agents Authentication
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.agents.auth.type` | `BINDPLANE_AGENTS_AUTH_TYPE` | `secretKey` | No |
+| `spec.config.agents.auth.secretKey.headers` | `BINDPLANE_AGENTS_AUTH_SECRET_KEY_HEADERS` | `X-Bindplane-Authorization,Authorization` | No |
+| `spec.config.agents.auth.oauth.issuer` | `BINDPLANE_AGENTS_AUTH_OAUTH_ISSUER` | — | No |
+| `spec.config.agents.auth.oauth.audiences` | `BINDPLANE_AGENTS_AUTH_OAUTH_AUDIENCES` | — | No |
+| `spec.config.agents.auth.oauth.requiredClaims` | `BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_CLAIMS` | — | No |
+| `spec.config.agents.auth.oauth.requiredScopes` | `BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_SCOPES` | — | No |
+| `spec.config.agents.auth.oauth.cacheTTL` | `BINDPLANE_AGENTS_AUTH_OAUTH_CACHE_TTL` | `1h` | No |
+
+`auth.type` accepts a single value or a comma-separated list (e.g. `"oauth,secretKey"`).
+`[]string` fields (headers, audiences, requiredClaims, requiredScopes) are comma-separated in the env var.
+
+### Heartbeat
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.agents.heartbeatInterval` | `BINDPLANE_AGENTS_HEARTBEAT_INTERVAL` | `30s` | No |
+| `spec.config.agents.heartbeatTTL` | `BINDPLANE_AGENTS_HEARTBEAT_TTL` | `1m` | No |
+| `spec.config.agents.heartbeatExpiryInterval` | `BINDPLANE_AGENTS_HEARTBEAT_EXPIRY_INTERVAL` | `30s` | No |
+
+### Rebalance
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.agents.rebalanceInterval` | `BINDPLANE_AGENTS_REBALANCE_INTERVAL` | `1h` | No |
+| `spec.config.agents.rebalancePercentage` | `BINDPLANE_AGENTS_REBALANCE_PERCENTAGE` | `0` | No |
+| `spec.config.agents.rebalanceJitter` | `BINDPLANE_AGENTS_REBALANCE_JITTER` | `0` | No |
+
+`rebalancePercentage` and `rebalanceJitter` are integers in the range 0–100. A value of 0 disables that feature.
+
+```yaml
+spec:
+  config:
+    agents:
+      auth:
+        type: "oauth,secretKey"
+        oauth:
+          issuer: "https://auth.example.com"
+          audiences:
+            - "https://api.example.com"
+          cacheTTL: "2h"
+      heartbeatInterval: "45s"
+      heartbeatTTL: "2m"
+      rebalanceInterval: "30m"
+      rebalancePercentage: 50
 ```
 
 ## Scope
