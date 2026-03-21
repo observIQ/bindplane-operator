@@ -7,6 +7,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
+	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.48.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
@@ -69,7 +70,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
