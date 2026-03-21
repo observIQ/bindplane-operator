@@ -162,6 +162,127 @@ type BindplaneConfigSpec struct {
 	// Logging configures the Bindplane log level and output destination.
 	// +optional
 	Logging *LoggingConfig `json:"logging,omitempty"`
+
+	// Advanced configures advanced Bindplane options. These are typically used to
+	// fine-tune behavior at scale and are not required for basic operation.
+	// +optional
+	Advanced *AdvancedConfig `json:"advanced,omitempty"`
+}
+
+// AdvancedConfig defines advanced Bindplane configuration options.
+type AdvancedConfig struct {
+	// Store contains advanced store configuration options.
+	// +optional
+	Store *AdvancedStoreConfig `json:"store,omitempty"`
+	// Server contains advanced server configuration options.
+	// +optional
+	Server *AdvancedServerConfig `json:"server,omitempty"`
+	// Cache contains advanced cache configuration options.
+	// +optional
+	Cache *AdvancedCacheConfig `json:"cache,omitempty"`
+}
+
+// AdvancedStoreConfig contains advanced store configuration options.
+type AdvancedStoreConfig struct {
+	// Stats configures advanced measurement storage tuning.
+	// +optional
+	Stats *AdvancedStoreStatsConfig `json:"stats,omitempty"`
+}
+
+// AdvancedStoreStatsConfig tunes measurement pipeline performance.
+// All fields are optional; when omitted Bindplane uses its own defaults.
+type AdvancedStoreStatsConfig struct {
+	// BatchFlushInterval is the interval at which to flush measurement batches (e.g. "1s").
+	// +optional
+	BatchFlushInterval string `json:"batchFlushInterval,omitempty"`
+	// WorkerCount is the number of workers saving measurements to the backend.
+	// +optional
+	WorkerCount int `json:"workerCount,omitempty"`
+	// EnableSorting enables sorting of metrics by timestamp before saving.
+	// +optional
+	EnableSorting bool `json:"enableSorting,omitempty"`
+	// MetricChannelSize is the buffer size for the incoming metrics channel.
+	// +optional
+	MetricChannelSize int `json:"metricChannelSize,omitempty"`
+	// BatchChannelSize is the buffer size for the batch channel between accept and save workers.
+	// +optional
+	BatchChannelSize int `json:"batchChannelSize,omitempty"`
+}
+
+// AdvancedServerConfig contains advanced HTTP/OpAMP server options.
+// All fields are optional; when omitted Bindplane uses its own defaults.
+type AdvancedServerConfig struct {
+	// MaxRequestBytes is the maximum request body size the server accepts, excluding offline
+	// agent uploads. When omitted, Bindplane defaults to 10485760 (10 MiB).
+	// +optional
+	MaxRequestBytes int64 `json:"maxRequestBytes,omitempty"`
+	// OpAMPShutdownGracePeriod is how long the OpAMP server waits for agents to disconnect
+	// during shutdown (e.g. "30s"). When omitted, Bindplane defaults to 30s.
+	// +optional
+	OpAMPShutdownGracePeriod string `json:"opampShutdownGracePeriod,omitempty"`
+}
+
+// AdvancedCacheConfig configures the distributed cache.
+type AdvancedCacheConfig struct {
+	// Type is the cache backend to use. Currently only "redis" is supported.
+	// +optional
+	// +kubebuilder:validation:Enum=redis
+	Type string `json:"type,omitempty"`
+	// Redis configures the Redis cache connection.
+	// +optional
+	Redis *AdvancedCacheRedisConfig `json:"redis,omitempty"`
+}
+
+// AdvancedCacheRedisConfig configures a Redis cache backend.
+type AdvancedCacheRedisConfig struct {
+	// Address is the Redis server address in host:port form (e.g. "redis.default.svc:6379").
+	Address string `json:"address"`
+	// Password is the Redis password (plain text). Use PasswordSecretRef instead for sensitive values.
+	// +optional
+	Password string `json:"password,omitempty"`
+	// PasswordSecretRef references a Kubernetes Secret containing the Redis password.
+	// Takes precedence over Password when both are set.
+	// +optional
+	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
+	// DB is the Redis database index. When omitted, defaults to 0.
+	// +optional
+	DB int `json:"db,omitempty"`
+	// ReadTimeout is the read timeout for Redis commands (e.g. "5s"). When omitted, the Redis client default is used.
+	// +optional
+	ReadTimeout string `json:"readTimeout,omitempty"`
+	// WriteTimeout is the write timeout for Redis commands (e.g. "5s"). When omitted, the Redis client default is used.
+	// +optional
+	WriteTimeout string `json:"writeTimeout,omitempty"`
+	// EnableTLS enables TLS for the Redis connection.
+	// +optional
+	EnableTLS bool `json:"enableTLS,omitempty"`
+	// TLS configures TLS for the Redis connection. Only relevant when EnableTLS is true.
+	// +optional
+	TLS *AdvancedCacheRedisTLSConfig `json:"tls,omitempty"`
+}
+
+// AdvancedCacheRedisTLSConfig configures TLS for Redis via a Kubernetes Secret.
+// The operator mounts the Secret and sets file-path env vars automatically.
+type AdvancedCacheRedisTLSConfig struct {
+	// SecretName is the name of the Secret containing TLS assets.
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
+	// CertKey is the key within SecretName for the TLS certificate file.
+	// +optional
+	CertKey string `json:"certKey,omitempty"`
+	// KeyKey is the key within SecretName for the TLS private key file.
+	// +optional
+	KeyKey string `json:"keyKey,omitempty"`
+	// CAKey is the key within SecretName for the CA certificate file.
+	// +optional
+	CAKey string `json:"caKey,omitempty"`
+	// SkipVerify disables TLS certificate verification.
+	// +optional
+	SkipVerify bool `json:"skipVerify,omitempty"`
+	// MinTLSVersion is the minimum TLS version. One of: 1.2, 1.3.
+	// +optional
+	// +kubebuilder:validation:Enum="1.2";"1.3"
+	MinTLSVersion string `json:"minTLSVersion,omitempty"`
 }
 
 // AuditTrailConfig defines audit trail configuration

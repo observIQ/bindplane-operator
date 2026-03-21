@@ -11369,6 +11369,88 @@ spec:
                 type: object
               config:
                 properties:
+                  advanced:
+                    properties:
+                      cache:
+                        properties:
+                          redis:
+                            properties:
+                              address:
+                                type: string
+                              db:
+                                type: integer
+                              enableTLS:
+                                type: boolean
+                              password:
+                                type: string
+                              passwordSecretRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              readTimeout:
+                                type: string
+                              tls:
+                                properties:
+                                  caKey:
+                                    type: string
+                                  certKey:
+                                    type: string
+                                  keyKey:
+                                    type: string
+                                  minTLSVersion:
+                                    enum:
+                                    - "1.2"
+                                    - "1.3"
+                                    type: string
+                                  secretName:
+                                    type: string
+                                  skipVerify:
+                                    type: boolean
+                                type: object
+                              writeTimeout:
+                                type: string
+                            required:
+                            - address
+                            type: object
+                          type:
+                            enum:
+                            - redis
+                            type: string
+                        type: object
+                      server:
+                        properties:
+                          maxRequestBytes:
+                            format: int64
+                            type: integer
+                          opampShutdownGracePeriod:
+                            type: string
+                        type: object
+                      store:
+                        properties:
+                          stats:
+                            properties:
+                              batchChannelSize:
+                                type: integer
+                              batchFlushInterval:
+                                type: string
+                              enableSorting:
+                                type: boolean
+                              metricChannelSize:
+                                type: integer
+                              workerCount:
+                                type: integer
+                            type: object
+                        type: object
+                    type: object
                   analytics:
                     properties:
                       disabled:

@@ -672,6 +672,97 @@ func getLoggingConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []co
 	return envVars
 }
 
+// getAdvancedConfigEnvVars returns env vars for spec.config.advanced.
+// Only StoreStats, Server, and Cache sections are translated.
+// Returns nil when advanced is nil.
+func getAdvancedConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	if config == nil || config.Advanced == nil {
+		return nil
+	}
+	adv := config.Advanced
+	var envVars []corev1.EnvVar
+
+	// --- StoreStats ---
+	if adv.Store != nil && adv.Store.Stats != nil {
+		s := adv.Store.Stats
+		if s.BatchFlushInterval != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar, Value: s.BatchFlushInterval})
+		}
+		if s.WorkerCount > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsWorkerCountEnvVar, Value: strconv.Itoa(s.WorkerCount)})
+		}
+		if s.EnableSorting {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsEnableSortingEnvVar, Value: "true"})
+		}
+		if s.MetricChannelSize > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar, Value: strconv.Itoa(s.MetricChannelSize)})
+		}
+		if s.BatchChannelSize > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar, Value: strconv.Itoa(s.BatchChannelSize)})
+		}
+	}
+
+	// --- Server ---
+	if adv.Server != nil {
+		srv := adv.Server
+		if srv.MaxRequestBytes > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerMaxRequestBytesEnvVar, Value: strconv.FormatInt(srv.MaxRequestBytes, 10)})
+		}
+		if srv.OpAMPShutdownGracePeriod != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar, Value: srv.OpAMPShutdownGracePeriod})
+		}
+	}
+
+	// --- Cache ---
+	if adv.Cache != nil {
+		c := adv.Cache
+		if c.Type != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheTypeEnvVar, Value: c.Type})
+		}
+		if c.Redis != nil {
+			r := c.Redis
+			if r.Address != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisAddressEnvVar, Value: r.Address})
+			}
+			if ev := secretOrValue(bindplaneAdvancedCacheRedisPasswordEnvVar, r.Password, r.PasswordSecretRef); ev != nil {
+				envVars = append(envVars, *ev)
+			}
+			if r.DB > 0 {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisDBEnvVar, Value: strconv.Itoa(r.DB)})
+			}
+			if r.ReadTimeout != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisReadTimeoutEnvVar, Value: r.ReadTimeout})
+			}
+			if r.WriteTimeout != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisWriteTimeoutEnvVar, Value: r.WriteTimeout})
+			}
+			if r.EnableTLS {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisEnableTLSEnvVar, Value: "true"})
+			}
+			if r.TLS != nil && r.TLS.SecretName != "" {
+				tls := r.TLS
+				if tls.CertKey != "" {
+					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCertEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CertKey})
+				}
+				if tls.KeyKey != "" {
+					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSKeyEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.KeyKey})
+				}
+				if tls.CAKey != "" {
+					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCAEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CAKey})
+				}
+				if tls.SkipVerify {
+					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar, Value: "true"})
+				}
+				if tls.MinTLSVersion != "" {
+					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSMinVersionEnvVar, Value: tls.MinTLSVersion})
+				}
+			}
+		}
+	}
+
+	return envVars
+}
+
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
 // component is used to set the default profiling service name (e.g. bindplane-node, bindplane-jobs).
 func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component string) []corev1.EnvVar {
@@ -686,5 +777,6 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component
 		getAnalyticsEnvVars(config),
 		getLoggingConfigEnvVars(config),
 		getEventBusHealthEnvVars(bindplane),
+		getAdvancedConfigEnvVars(config),
 	)
 }

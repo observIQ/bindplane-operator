@@ -2398,3 +2398,263 @@ var _ = Describe("generateTSDBBasicAuthSecretData", func() {
 		Expect(webConfig).To(MatchRegexp(`\$2[aby]\$\d{2}\$`)) // bcrypt hash prefix
 	})
 })
+
+var _ = Describe("getAdvancedConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("does not set advanced env vars when Advanced is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsWorkerCountEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsEnableSortingEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheTypeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisAddressEnvVar)).To(BeEmpty())
+	})
+
+	It("sets StoreStats env vars when all fields are non-zero/non-empty/true", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Store: &bindplanev1alpha1.AdvancedStoreConfig{
+				Stats: &bindplanev1alpha1.AdvancedStoreStatsConfig{
+					BatchFlushInterval: "2s",
+					WorkerCount:        4,
+					EnableSorting:      true,
+					MetricChannelSize:  100,
+					BatchChannelSize:   50,
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar)).To(Equal("2s"))
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsWorkerCountEnvVar)).To(Equal("4"))
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsEnableSortingEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar)).To(Equal("100"))
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(Equal("50"))
+	})
+
+	It("does not set StoreStats int fields when zero or bool when false", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Store: &bindplanev1alpha1.AdvancedStoreConfig{
+				Stats: &bindplanev1alpha1.AdvancedStoreStatsConfig{},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsWorkerCountEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsEnableSortingEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(BeEmpty())
+	})
+
+	It("sets Server env vars when maxRequestBytes and opampShutdownGracePeriod are set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Server: &bindplanev1alpha1.AdvancedServerConfig{
+				MaxRequestBytes:          20971520,
+				OpAMPShutdownGracePeriod: "60s",
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(Equal("20971520"))
+		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar)).To(Equal("60s"))
+	})
+
+	It("does not set Server env vars when maxRequestBytes is zero and opampShutdownGracePeriod is empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Server: &bindplanev1alpha1.AdvancedServerConfig{},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar)).To(BeEmpty())
+	})
+
+	It("sets Cache type env var when type is non-empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Cache: &bindplanev1alpha1.AdvancedCacheConfig{Type: "redis"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheTypeEnvVar)).To(Equal("redis"))
+	})
+
+	It("sets Redis address, plain password, readTimeout, writeTimeout, and enableTLS", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+				Type: "redis",
+				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
+					Address:      "redis.default.svc:6379",
+					Password:     "secret",
+					DB:           2,
+					ReadTimeout:  "3s",
+					WriteTimeout: "3s",
+					EnableTLS:    true,
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisAddressEnvVar)).To(Equal("redis.default.svc:6379"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisPasswordEnvVar)).To(Equal("secret"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisDBEnvVar)).To(Equal("2"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisReadTimeoutEnvVar)).To(Equal("3s"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisWriteTimeoutEnvVar)).To(Equal("3s"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisEnableTLSEnvVar)).To(Equal("true"))
+	})
+
+	It("sources Redis password from SecretRef when PasswordSecretRef is set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+				Type: "redis",
+				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
+					Address: "redis.default.svc:6379",
+					PasswordSecretRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "redis-secret"},
+						Key:                  "password",
+					},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		ref := envVarSecretKeyRef(envVars, bindplaneAdvancedCacheRedisPasswordEnvVar)
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("redis-secret"))
+		Expect(ref.Key).To(Equal("password"))
+	})
+
+	It("does not set Redis DB env var when DB is zero", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{Address: "redis:6379", DB: 0},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisDBEnvVar)).To(BeEmpty())
+	})
+
+	It("does not set BINDPLANE_ADVANCED_CACHE_REDIS_ENABLE_TLS when enableTLS is false", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{Address: "redis:6379", EnableTLS: false},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisEnableTLSEnvVar)).To(BeEmpty())
+	})
+
+	It("sets Redis TLS cert/key/ca paths, skipVerify, and minTLSVersion when TLS secret is configured", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
+					Address:   "redis:6379",
+					EnableTLS: true,
+					TLS: &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{
+						SecretName:    "redis-tls",
+						CertKey:       "tls.crt",
+						KeyKey:        "tls.key",
+						CAKey:         "ca.crt",
+						SkipVerify:    true,
+						MinTLSVersion: "1.3",
+					},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCertEnvVar)).To(Equal(advancedCacheRedisTLSMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSKeyEnvVar)).To(Equal(advancedCacheRedisTLSMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCAEnvVar)).To(Equal(advancedCacheRedisTLSMountPath + "/ca.crt"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSMinVersionEnvVar)).To(Equal("1.3"))
+	})
+
+	It("does not set Redis TLS path env vars when TLS secretName is empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
+					Address:   "redis:6379",
+					EnableTLS: true,
+					TLS:       &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{CertKey: "tls.crt"},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCertEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSKeyEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCAEnvVar)).To(BeEmpty())
+	})
+})
+
+var _ = Describe("getAdvancedCacheRedisTLSVolumeAndMount", func() {
+	It("returns nil when Advanced is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		vols, mounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns nil when Redis TLS secretName is empty", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Advanced: &bindplanev1alpha1.AdvancedConfig{
+						Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+							Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
+								Address: "redis:6379",
+								TLS:     &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{},
+							},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns one volume and one mount when Redis TLS secretName is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Advanced: &bindplanev1alpha1.AdvancedConfig{
+						Cache: &bindplanev1alpha1.AdvancedCacheConfig{
+							Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
+								Address: "redis:6379",
+								TLS:     &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{SecretName: "redis-tls"},
+							},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal(advancedCacheRedisTLSVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("redis-tls"))
+		Expect(mounts).To(HaveLen(1))
+		Expect(mounts[0].Name).To(Equal(advancedCacheRedisTLSVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(advancedCacheRedisTLSMountPath))
+		Expect(mounts[0].ReadOnly).To(BeTrue())
+	})
+})

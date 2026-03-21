@@ -25,6 +25,11 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Event bus](#event-bus)
 - [Analytics](#analytics)
 - [Logging](#logging)
+- [Advanced](#advanced)
+  - [Store stats](#store-stats)
+  - [Server](#server)
+  - [Cache](#cache)
+    - [Redis](#redis)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -757,6 +762,130 @@ spec:
       otlp:
         endpoint: otel-collector.observability.svc:4317
         insecure: false
+```
+
+## Advanced
+
+Advanced options allow fine-grained control of Bindplane's internal pipelines and distributed cache. They are not required for basic operation. When `spec.config.advanced` is omitted entirely, Bindplane uses its own internal defaults for all of these settings.
+
+### Store stats
+
+The store stats section tunes the measurement ingestion pipeline (how agent metrics are batched and saved to the backend store).
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.advanced.store.stats.batchFlushInterval` | `BINDPLANE_ADVANCED_STORE_STATS_BATCH_FLUSH_INTERVAL` | — | No |
+| `spec.config.advanced.store.stats.workerCount` | `BINDPLANE_ADVANCED_STORE_STATS_WORKER_COUNT` | — | No |
+| `spec.config.advanced.store.stats.enableSorting` | `BINDPLANE_ADVANCED_STORE_STATS_ENABLE_SORTING` | — | No |
+| `spec.config.advanced.store.stats.metricChannelSize` | `BINDPLANE_ADVANCED_STORE_STATS_METRIC_CHANNEL_SIZE` | — | No |
+| `spec.config.advanced.store.stats.batchChannelSize` | `BINDPLANE_ADVANCED_STORE_STATS_BATCH_CHANNEL_SIZE` | — | No |
+
+Example:
+
+```yaml
+spec:
+  config:
+    advanced:
+      store:
+        stats:
+          batchFlushInterval: "2s"
+          workerCount: 8
+          enableSorting: true
+          metricChannelSize: 200
+          batchChannelSize: 100
+```
+
+### Server
+
+The server section configures HTTP and OpAMP server limits.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.advanced.server.maxRequestBytes` | `BINDPLANE_ADVANCED_SERVER_MAX_REQUEST_BYTES` | — | No |
+| `spec.config.advanced.server.opampShutdownGracePeriod` | `BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD` | — | No |
+
+- `maxRequestBytes`: Maximum request body size (in bytes) the server accepts, excluding offline agent uploads. Bindplane defaults to 10485760 (10 MiB) when omitted.
+- `opampShutdownGracePeriod`: How long the OpAMP server waits for agents to disconnect during shutdown. Bindplane defaults to 30s when omitted.
+
+Example:
+
+```yaml
+spec:
+  config:
+    advanced:
+      server:
+        maxRequestBytes: 20971520
+        opampShutdownGracePeriod: "60s"
+```
+
+### Cache
+
+The cache section configures the distributed cache backend. Currently only `redis` is supported as the cache type.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.advanced.cache.type` | `BINDPLANE_ADVANCED_CACHE_TYPE` | — | No |
+
+#### Redis
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.advanced.cache.redis.address` | `BINDPLANE_ADVANCED_CACHE_REDIS_ADDRESS` | — | Yes when `type` is `redis` |
+| `spec.config.advanced.cache.redis.password` | `BINDPLANE_ADVANCED_CACHE_REDIS_PASSWORD` | — | No |
+| `spec.config.advanced.cache.redis.passwordSecretRef` | `BINDPLANE_ADVANCED_CACHE_REDIS_PASSWORD` | — | No |
+| `spec.config.advanced.cache.redis.db` | `BINDPLANE_ADVANCED_CACHE_REDIS_DB` | — | No |
+| `spec.config.advanced.cache.redis.readTimeout` | `BINDPLANE_ADVANCED_CACHE_REDIS_READ_TIMEOUT` | — | No |
+| `spec.config.advanced.cache.redis.writeTimeout` | `BINDPLANE_ADVANCED_CACHE_REDIS_WRITE_TIMEOUT` | — | No |
+| `spec.config.advanced.cache.redis.enableTLS` | `BINDPLANE_ADVANCED_CACHE_REDIS_ENABLE_TLS` | — | No |
+| `spec.config.advanced.cache.redis.tls.secretName` | (mounts Secret) | — | No |
+| `spec.config.advanced.cache.redis.tls.certKey` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_CERT` | — | No |
+| `spec.config.advanced.cache.redis.tls.keyKey` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_KEY` | — | No |
+| `spec.config.advanced.cache.redis.tls.caKey` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_CA` | — | No |
+| `spec.config.advanced.cache.redis.tls.skipVerify` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_SKIP_VERIFY` | — | No |
+| `spec.config.advanced.cache.redis.tls.minTLSVersion` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_MIN_TLSVERSION` | — | No |
+
+`passwordSecretRef` takes precedence over `password` when both are set.
+
+When `tls.secretName` is set, the operator mounts the Secret at `/etc/bindplane/advanced-cache-redis-tls` and sets the TLS env vars to the corresponding file paths. Specify only the Secret name and key names; the operator manages the mount path.
+
+Example (Redis without TLS):
+
+```yaml
+spec:
+  config:
+    advanced:
+      cache:
+        type: redis
+        redis:
+          address: redis.default.svc:6379
+          passwordSecretRef:
+            name: redis-credentials
+            key: password
+          db: 1
+          readTimeout: "5s"
+          writeTimeout: "5s"
+```
+
+Example (Redis with TLS):
+
+```yaml
+spec:
+  config:
+    advanced:
+      cache:
+        type: redis
+        redis:
+          address: redis.default.svc:6379
+          passwordSecretRef:
+            name: redis-credentials
+            key: password
+          enableTLS: true
+          tls:
+            secretName: redis-tls
+            certKey: tls.crt
+            keyKey: tls.key
+            caKey: ca.crt
+            minTLSVersion: "1.3"
 ```
 
 ## Scope

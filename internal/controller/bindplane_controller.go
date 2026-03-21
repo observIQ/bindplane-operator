@@ -249,6 +249,37 @@ const (
 	bindplaneLoggingOTLPEndpointEnvVar = "BINDPLANE_LOGGING_OTLP_ENDPOINT"
 	bindplaneLoggingOTLPInsecureEnvVar = "BINDPLANE_LOGGING_OTLP_INSECURE"
 	bindplaneLoggingOTLPIntervalEnvVar = "BINDPLANE_LOGGING_OTLP_INTERVAL"
+
+	// Advanced store stats
+	bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar = "BINDPLANE_ADVANCED_STORE_STATS_BATCH_FLUSH_INTERVAL"
+	bindplaneAdvancedStoreStatsWorkerCountEnvVar        = "BINDPLANE_ADVANCED_STORE_STATS_WORKER_COUNT"
+	bindplaneAdvancedStoreStatsEnableSortingEnvVar      = "BINDPLANE_ADVANCED_STORE_STATS_ENABLE_SORTING"
+	bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar  = "BINDPLANE_ADVANCED_STORE_STATS_METRIC_CHANNEL_SIZE"
+	bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar   = "BINDPLANE_ADVANCED_STORE_STATS_BATCH_CHANNEL_SIZE"
+
+	// Advanced server
+	bindplaneAdvancedServerMaxRequestBytesEnvVar          = "BINDPLANE_ADVANCED_SERVER_MAX_REQUEST_BYTES"
+	bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar = "BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD"
+
+	// Advanced cache
+	bindplaneAdvancedCacheTypeEnvVar              = "BINDPLANE_ADVANCED_CACHE_TYPE"
+	bindplaneAdvancedCacheRedisAddressEnvVar      = "BINDPLANE_ADVANCED_CACHE_REDIS_ADDRESS"
+	bindplaneAdvancedCacheRedisPasswordEnvVar     = "BINDPLANE_ADVANCED_CACHE_REDIS_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplaneAdvancedCacheRedisDBEnvVar           = "BINDPLANE_ADVANCED_CACHE_REDIS_DB"
+	bindplaneAdvancedCacheRedisReadTimeoutEnvVar  = "BINDPLANE_ADVANCED_CACHE_REDIS_READ_TIMEOUT"
+	bindplaneAdvancedCacheRedisWriteTimeoutEnvVar = "BINDPLANE_ADVANCED_CACHE_REDIS_WRITE_TIMEOUT"
+	bindplaneAdvancedCacheRedisEnableTLSEnvVar    = "BINDPLANE_ADVANCED_CACHE_REDIS_ENABLE_TLS"
+
+	// Advanced cache Redis TLS (file-path env vars; operator mounts Secret)
+	bindplaneAdvancedCacheRedisTLSCertEnvVar       = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_CERT"
+	bindplaneAdvancedCacheRedisTLSKeyEnvVar        = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_KEY"
+	bindplaneAdvancedCacheRedisTLSCAEnvVar         = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_CA"
+	bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_SKIP_VERIFY"
+	bindplaneAdvancedCacheRedisTLSMinVersionEnvVar = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_MIN_TLSVERSION"
+
+	// Advanced cache Redis TLS volume mount (operator-managed path; user specifies only Secret name and keys)
+	advancedCacheRedisTLSVolumeName = "advanced-cache-redis-tls"
+	advancedCacheRedisTLSMountPath  = "/etc/bindplane/advanced-cache-redis-tls"
 )
 
 const (
@@ -957,8 +988,35 @@ func getPostgresTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1al
 	return bindplane.Spec.Config.Store.Postgres.TLS
 }
 
+// getAdvancedCacheRedisTLSVolumeAndMount returns a Secret volume and mount for Redis TLS
+// when spec.config.advanced.cache.redis.tls.secretName is set.
+// The Secret is mounted at advancedCacheRedisTLSMountPath; file-path env vars are set by getAdvancedConfigEnvVars.
+// Returns (nil, nil) when not configured.
+func getAdvancedCacheRedisTLSVolumeAndMount(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	adv := bindplane.Spec.Config.Advanced
+	if adv == nil || adv.Cache == nil || adv.Cache.Redis == nil || adv.Cache.Redis.TLS == nil {
+		return nil, nil
+	}
+	tls := adv.Cache.Redis.TLS
+	if tls.SecretName == "" {
+		return nil, nil
+	}
+	vol := corev1.Volume{
+		Name: advancedCacheRedisTLSVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: tls.SecretName},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      advancedCacheRedisTLSVolumeName,
+		MountPath: advancedCacheRedisTLSMountPath,
+		ReadOnly:  true,
+	}
+	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
+}
+
 // getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, Postgres TLS,
-// and internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS).
+// internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS), and advanced cache Redis TLS.
 // Used by Node, Jobs, Jobs Migrate, and NATS so they receive all config TLS secrets when configured.
 func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
 	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
@@ -966,8 +1024,9 @@ func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]cor
 	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
 	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
 	natsVols, natsMounts := getNatsTLSVolumesAndMounts(bindplane)
-	vols := append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), natsVols...)
-	mounts := append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), natsMounts...)
+	redisVols, redisMounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
+	vols := append(append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), natsVols...), redisVols...)
+	mounts := append(append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), natsMounts...), redisMounts...)
 	return vols, mounts
 }
 
