@@ -804,7 +804,7 @@ type TSDBComponentSpec struct {
 type NatsComponentSpec struct {
 	// Replicas specifies the number of replicas for NATS StatefulSet
 	// +optional
-	// +kubebuilder:default=1
+	// +kubebuilder:default=2
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// PodTemplate defines pod template specification for NATS

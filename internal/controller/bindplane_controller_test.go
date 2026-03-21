@@ -1889,16 +1889,18 @@ var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 })
 
 var _ = Describe("defaultRequiredHosts", func() {
-	It("returns floor(total/2)+1 with default replicas (node=3, nats=1)", func() {
+	It("returns floor(total/2)+1 with default replicas (node=3, nats=2)", func() {
+		natsReplicas := int32(2)
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "license",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
+				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 			},
 		}
-		// total = 3 + 1 + 1 + 1 = 6, floor(6/2)+1 = 4
+		// total = 3 + 2 + 1 + 1 = 7, floor(7/2)+1 = 4
 		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(4)))
 	})
 
@@ -1922,11 +1924,13 @@ var _ = Describe("defaultRequiredHosts", func() {
 
 var _ = Describe("getEventBusHealthEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
-		replicas := int32(3)
+		nodeReplicas := int32(3)
+		natsReplicas := int32(2)
 		return &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
 			Spec: bindplanev1alpha1.BindplaneSpec{
-				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &replicas},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
+				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "license",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
@@ -1942,7 +1946,7 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
 	})
 
-	It("uses default requiredHosts (node=3, nats=1) = 4 when not overridden", func() {
+	It("uses default requiredHosts (node=3, nats=2) = 4 when not overridden", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
 			Health: &bindplanev1alpha1.EventBusHealthConfig{},

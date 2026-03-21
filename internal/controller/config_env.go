@@ -628,10 +628,7 @@ func defaultRequiredHosts(bindplane *bindplanev1alpha1.Bindplane) int32 {
 	if bindplane.Spec.Bindplane.Replicas != nil {
 		nodeReplicas = *bindplane.Spec.Bindplane.Replicas
 	}
-	natsReplicas := int32(1)
-	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil {
-		natsReplicas = *bindplane.Spec.Nats.Replicas
-	}
+	natsReplicas := *bindplane.Spec.Nats.Replicas
 	total := nodeReplicas + natsReplicas + 1 + 1 // +1 jobs, +1 jobs-migrate
 	return total/2 + 1
 }

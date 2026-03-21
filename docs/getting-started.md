@@ -107,10 +107,27 @@ spec:
 EOF
 ```
 
-Once deployed, the `default` namespace will have the following pods:
+Once deployed, the `default` namespace will have the following workloads:
+- Bindplane Node: The primary Bindplane deployment that handles all user and collector connections
+- Bindplane Jobs: Periodic jobs
+- Bindplane Jobs Migrate: Handles database migrations
+- Bindplane NATS: Bindplane with the embedded NATS server, forming the distributed event bus for Bindplane communication
+- Bindplane TSDB: The Bindplane metrics storage backend, typically Prometheus
+- Bindplane Transform Agent: The transform agent powers Bindplane's [Live Preview](https://docs.bindplane.com/feature-guides/live-preview)
 
 ```
-
+NAME                                         READY   STATUS    RESTARTS   AGE
+bindplane-jobs-b4d59c95b-vnn9z               1/1     Running   0          60s
+bindplane-jobs-migrate-8bbc555c-bghrb        1/1     Running   0          60s
+bindplane-nats-0                             1/1     Running   0          88s
+bindplane-nats-1                             1/1     Running   0          60s
+bindplane-node-6cd57b4977-8k7zr              1/1     Running   0          52s
+bindplane-node-6cd57b4977-b4ct9              1/1     Running   0          60s
+bindplane-node-6cd57b4977-xzj9p              1/1     Running   0          60s
+bindplane-postgres-1                         1/1     Running   0          8m38s
+bindplane-transform-agent-79b648557d-nhj98   1/1     Running   0          60s
+bindplane-transform-agent-79b648557d-scwhk   1/1     Running   0          60s
+bindplane-tsdb-0                             1/1     Running   0          7m29s
 ```
 
 ## Further Reading
