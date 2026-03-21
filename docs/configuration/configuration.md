@@ -2,7 +2,7 @@
 
 This document describes **Bindplane configuration**—the `spec.config` field and related Bindplane server settings (license, auth, network, store, tracing, metrics). For the full list of custom resource options (all CRD fields, including component specs and pod templates), see the [API Reference](api.md). The API reference is generated from the CRD; run `make generate-api-docs` to regenerate it. For an overview of TLS and Secret usage (including operator-generated secrets), see [Security: TLS and Secrets](security.md).
 
-Configuration is provided via the `spec.config` field of the `Bindplane` custom resource. The operator translates these fields into environment variables on the Node, NATS, Jobs, and Jobs Migrate deployments.
+Configuration is provided via the `spec.config` field of the `Bindplane` custom resource. The operator translates these fields into environment variables on the Node, NATS, Jobs, and Jobs Migrate workloads.
 
 ## Table of contents
 
@@ -706,7 +706,7 @@ spec:
 
 Event bus configuration controls the NATS integration health check. The health check sends an event over NATS and waits for responses from Bindplane components. Failures affect the status page only — they do not cause pod restarts or rollouts.
 
-`requiredHosts` defaults to `floor(total/2)+1` where `total` is the sum of Node, NATS, Jobs, and Jobs Migrate replicas. This default ensures a majority quorum. `interval` controls how frequently the health check runs.
+`requiredHosts` defaults to `floor(total/2)+1` where `total` is the sum of Node, NATS, and Jobs replicas. Jobs Migrate is a batch/v1 Job (not a long-running pod) and is excluded from this total. This default ensures a majority quorum. `interval` controls how frequently the health check runs.
 
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
@@ -1012,7 +1012,19 @@ All configuration options above are applied to the following Bindplane services:
 - Node
 - NATS
 - Jobs
-- Jobs Migrate
+- Jobs Migrate (batch/v1 Job — runs at install time and on image upgrades; not a long-running pod)
+
+## Force migration
+
+To force a migration run without changing the image (e.g. after a failed Job), annotate the `Bindplane` resource:
+
+```bash
+kubectl patch bindplane <name> -n <namespace> \
+  --type=merge \
+  -p '{"metadata":{"annotations":{"k8s.bindplane.com/force-migrate":"true"}}}'
+```
+
+The controller clears this annotation and resets `status.migratedImage` on the next reconcile, then creates a new Jobs Migrate Job via the normal image-change flow.
 
 ## Examples
 

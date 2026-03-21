@@ -21,23 +21,27 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
 const (
 	// bindplaneJobsMigrateComponent is the component name for Bindplane Jobs Migrate
-	bindplaneJobsMigrateComponent = "jobs-migrate"
+	bindplaneJobsMigrateComponent = "migrate"
 	// bindplaneJobsComponent is the component name for Bindplane Jobs
 	bindplaneJobsComponent = "jobs"
 	// bindplaneJobsContainerName is the container name for Bindplane Jobs
 	bindplaneJobsContainerName = "server"
-	// bindplaneJobsImage is the default container image for Bindplane Jobs
-	bindplaneJobsImage = "ghcr.io/observiq/bindplane-ee:1.96.3"
 	// bindplaneJobsHTTPPort is the HTTP port for Bindplane Jobs
 	bindplaneJobsHTTPPort = int32(3001)
 	// bindplaneJobsHTTPPortName is the name of the HTTP port for Bindplane Jobs
@@ -46,40 +50,13 @@ const (
 	bindplaneJobsMigrateModeValue = "migrate"
 	// bindplaneJobsModeValue is the value for BINDPLANE_MODE for regular jobs
 	bindplaneJobsModeValue = "all,-migrate"
+	// forceMigrateAnnotation is the annotation key to force a migration run
+	forceMigrateAnnotation = "k8s.bindplane.com/force-migrate"
+	// migrateJobBackoffLimit is the backoff limit for the migrate Job
+	migrateJobBackoffLimit = int32(3)
+	// migrateJobTTLSeconds is the TTL for the migrate Job after completion (24 hours)
+	migrateJobTTLSeconds = int32(86400)
 )
-
-// reconcileBindplaneJobs reconciles all Bindplane Jobs resources
-// Note: These deployments do NOT create Services, as traffic should not be routed to them
-func (r *BindplaneReconciler) reconcileBindplaneJobs(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	// Reconcile Jobs Migrate
-	if err := r.reconcileBindplaneJobsMigrate(ctx, bindplane, log); err != nil {
-		return err
-	}
-
-	// Reconcile Jobs
-	if err := r.reconcileBindplaneJobsRegular(ctx, bindplane, log); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// reconcileBindplaneJobsMigrate reconciles the Bindplane Jobs Migrate deployment
-func (r *BindplaneReconciler) reconcileBindplaneJobsMigrate(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	// Reconcile ServiceAccount
-	sa := r.bindplaneJobsMigrateServiceAccount(bindplane)
-	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
-		return err
-	}
-
-	// Reconcile Deployment
-	deployment := r.bindplaneJobsMigrateDeployment(bindplane)
-	if err := r.reconcileDeployment(ctx, bindplane, deployment, log); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // reconcileBindplaneJobsRegular reconciles the Bindplane Jobs deployment
 func (r *BindplaneReconciler) reconcileBindplaneJobsRegular(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
@@ -106,30 +83,6 @@ func (r *BindplaneReconciler) bindplaneJobsServiceAccount(bindplane *bindplanev1
 	return newServiceAccount(bindplane, bindplaneJobsComponent)
 }
 
-func (r *BindplaneReconciler) bindplaneJobsMigrateDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
-	// Jobs Migrate resources: 100m CPU, 2048Mi memory
-	resources := corev1.ResourceRequirements{
-		Limits: corev1.ResourceList{
-			corev1.ResourceMemory: resource.MustParse("2048Mi"),
-		},
-		Requests: corev1.ResourceList{
-			corev1.ResourceCPU:    resource.MustParse("100m"),
-			corev1.ResourceMemory: resource.MustParse("2048Mi"),
-		},
-	}
-	// maxSurge=0 ensures the old pod is deleted before the new pod is created,
-	// so only one migrate pod runs at a time.
-	maxSurge := intstr.FromInt32(0)
-	maxUnavailable := intstr.FromInt32(1)
-	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsMigrateComponent, bindplaneJobsMigrateModeValue, appsv1.DeploymentStrategy{
-		Type: appsv1.RollingUpdateDeploymentStrategyType,
-		RollingUpdate: &appsv1.RollingUpdateDeployment{
-			MaxSurge:       &maxSurge,
-			MaxUnavailable: &maxUnavailable,
-		},
-	}, false, resources) // false = don't include NATS client config
-}
-
 func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
 	// maxSurge=1 allows a new pod to start before the old one is deleted,
 	// so two pods may briefly run in parallel during a rollout.
@@ -145,42 +98,27 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 			corev1.ResourceMemory: resource.MustParse("1024Mi"),
 		},
 	}
-	return r.bindplaneJobsDeploymentCommon(bindplane, bindplaneJobsComponent, bindplaneJobsModeValue, appsv1.DeploymentStrategy{
-		Type: appsv1.RollingUpdateDeploymentStrategyType,
-		RollingUpdate: &appsv1.RollingUpdateDeployment{
-			MaxSurge:       &maxSurge,
-			MaxUnavailable: &maxUnavailable,
-		},
-	}, true, resources) // true = include NATS client config
-}
 
-// bindplaneJobsDeploymentCommon creates a deployment for Bindplane Jobs with configurable component, mode, and strategy
-func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplanev1alpha1.Bindplane, component string, modeValue string, strategy appsv1.DeploymentStrategy, includeNatsClient bool, resources corev1.ResourceRequirements) *appsv1.Deployment {
 	replicas := int32(1)
-	labels := getLabels(bindplane, component)
-	selectorLabels := getSelectorLabels(bindplane, component)
+	labels := getLabels(bindplane, bindplaneJobsComponent)
+	selectorLabels := getSelectorLabels(bindplane, bindplaneJobsComponent)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
-
-	// Get the appropriate PodTemplate and Affinity based on component
-	var podTemplate *bindplanev1alpha1.PodTemplateSpec
-	var affinity *corev1.Affinity
-	if component == bindplaneJobsMigrateComponent {
-		podTemplate = getBindplaneJobsMigratePodTemplate(bindplane)
-		affinity = getBindplaneJobsMigrateAffinity(bindplane)
-	} else {
-		podTemplate = getBindplaneJobsPodTemplate(bindplane)
-		affinity = getBindplaneJobsAffinity(bindplane)
-	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      getResourceName(bindplane, component),
+			Name:      getResourceName(bindplane, bindplaneJobsComponent),
 			Namespace: bindplane.Namespace,
 			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Strategy: strategy,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       &maxSurge,
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
@@ -191,17 +129,17 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 					},
 					Spec: corev1.PodSpec{
 						Volumes:            configVols,
-						ServiceAccountName: getResourceName(bindplane, component),
+						ServiceAccountName: getResourceName(bindplane, bindplaneJobsComponent),
 						SecurityContext: &corev1.PodSecurityContext{
 							FSGroup:    new(defaultRunAsGroup),
 							RunAsGroup: new(defaultRunAsGroup),
 							RunAsUser:  new(defaultRunAsUser),
 						},
-						Affinity: affinity,
+						Affinity: getBindplaneJobsAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
 								Name:         bindplaneJobsContainerName,
-								Image:        bindplaneJobsImage,
+								Image:        getBindplaneEEImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{
@@ -215,11 +153,11 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 									[]corev1.EnvVar{
 										{
 											Name:  bindplaneModeEnvVar,
-											Value: modeValue,
+											Value: bindplaneJobsModeValue,
 										},
 									},
-									getBindplaneCommonEnvVars(bindplane, component),
-									getNatsClientEnvVars(bindplane, includeNatsClient),
+									getBindplaneCommonEnvVars(bindplane, bindplaneJobsComponent),
+									getNatsClientEnvVars(bindplane, true),
 								),
 								Resources: resources,
 								StartupProbe: &corev1.Probe{
@@ -270,10 +208,213 @@ func (r *BindplaneReconciler) bindplaneJobsDeploymentCommon(bindplane *bindplane
 						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),
 					},
 				},
-				podTemplate,
+				getBindplaneJobsPodTemplate(bindplane),
 			),
 		},
 	}
+}
+
+// bindplaneJobsMigrateJob creates a batch/v1 Job for Bindplane database migrations.
+func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alpha1.Bindplane) *batchv1.Job {
+	labels := getLabels(bindplane, bindplaneJobsMigrateComponent)
+	selectorLabels := getSelectorLabels(bindplane, bindplaneJobsMigrateComponent)
+	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
+	backoffLimit := migrateJobBackoffLimit
+	ttl := migrateJobTTLSeconds
+
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      getResourceName(bindplane, bindplaneJobsMigrateComponent),
+			Namespace: bindplane.Namespace,
+			Labels:    labels,
+		},
+		Spec: batchv1.JobSpec{
+			BackoffLimit:            &backoffLimit,
+			TTLSecondsAfterFinished: &ttl,
+			Template: mergePodTemplateSpec(
+				corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: selectorLabels},
+					Spec: corev1.PodSpec{
+						RestartPolicy:      corev1.RestartPolicyOnFailure,
+						ServiceAccountName: getResourceName(bindplane, bindplaneJobsMigrateComponent),
+						Volumes:            configVols,
+						SecurityContext: &corev1.PodSecurityContext{
+							FSGroup:    new(defaultRunAsGroup),
+							RunAsGroup: new(defaultRunAsGroup),
+							RunAsUser:  new(defaultRunAsUser),
+						},
+						Affinity: getBindplaneJobsMigrateAffinity(bindplane),
+						Containers: []corev1.Container{{
+							Name:         bindplaneJobsContainerName,
+							Image:        getBindplaneEEImage(bindplane),
+							Command:      []string{"/bindplane", "migrate", "-y"},
+							VolumeMounts: configMounts,
+							Env: combineEnvVars(
+								getKubernetesEnvVars(bindplaneJobsContainerName),
+								[]corev1.EnvVar{{Name: bindplaneModeEnvVar, Value: bindplaneJobsMigrateModeValue}},
+								getBindplaneCommonEnvVars(bindplane, bindplaneJobsMigrateComponent),
+							),
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse("2048Mi"),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("2048Mi"),
+								},
+							},
+							SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
+							ImagePullPolicy: corev1.PullIfNotPresent,
+						}},
+					},
+				},
+				getBindplaneJobsMigratePodTemplate(bindplane),
+			),
+		},
+	}
+}
+
+// reconcileMigrateJob ensures the migration batch/v1 Job runs to completion before downstream
+// workloads (NATS, Jobs, Node) are reconciled. Returns (migrationComplete, error).
+func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) (bool, error) {
+	jobName := getResourceName(bindplane, bindplaneJobsMigrateComponent)
+	ns := bindplane.Namespace
+
+	// Clean up legacy Deployment (operator upgrade path).
+	oldDeployment := &appsv1.Deployment{}
+	if err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ns}, oldDeployment); err == nil {
+		log.Info("deleting legacy Jobs Migrate Deployment", "name", jobName)
+		if delErr := r.Delete(ctx, oldDeployment); delErr != nil && !errors.IsNotFound(delErr) {
+			log.Error(delErr, "failed to delete legacy Jobs Migrate Deployment")
+		}
+	}
+
+	// Reconcile ServiceAccount (always needed).
+	sa := r.bindplaneJobsMigrateServiceAccount(bindplane)
+	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
+		return false, err
+	}
+
+	// Handle force annotation: clear it and reset MigratedImage so the normal
+	// image-change flow triggers Job creation on the next reconcile.
+	if bindplane.Annotations[forceMigrateAnnotation] == "true" {
+		patch := client.MergeFrom(bindplane.DeepCopy())
+		delete(bindplane.Annotations, forceMigrateAnnotation)
+		if err := r.Patch(ctx, bindplane, patch); err != nil {
+			return false, err
+		}
+		bindplane.Status.MigratedImage = ""
+		if err := r.Status().Update(ctx, bindplane); err != nil {
+			return false, err
+		}
+		return false, nil // requeue; next reconcile will detect MigratedImage mismatch
+	}
+
+	desiredImage := getBindplaneEEImage(bindplane)
+
+	// Already migrated for this image — skip.
+	if bindplane.Status.MigratedImage == desiredImage {
+		return true, nil
+	}
+
+	// Look up existing Job.
+	existingJob := &batchv1.Job{}
+	err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ns}, existingJob)
+	if err != nil && !errors.IsNotFound(err) {
+		return false, err
+	}
+
+	if errors.IsNotFound(err) {
+		// No Job yet — create it.
+		job := r.bindplaneJobsMigrateJob(bindplane)
+		if err := controllerutil.SetControllerReference(bindplane, job, r.Scheme); err != nil {
+			return false, err
+		}
+		log.Info("creating Jobs Migrate Job", "name", jobName, "image", desiredImage)
+		if err := r.Create(ctx, job); err != nil {
+			return false, err
+		}
+		return false, nil // requeue to check status
+	}
+
+	// Job exists — check image.
+	if extractJobContainerImage(existingJob) != desiredImage {
+		// Stale Job from a previous image version — delete and requeue.
+		log.Info("deleting stale Jobs Migrate Job", "name", jobName)
+		if err := r.deleteJobWithPods(ctx, existingJob, log); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	if isJobSucceeded(existingJob) {
+		bindplane.Status.MigratedImage = desiredImage
+		if err := r.Status().Update(ctx, bindplane); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	if isJobFailed(existingJob) {
+		setMigrateFailureCondition(bindplane)
+		if err := r.Status().Update(ctx, bindplane); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	// Job is still active (running).
+	return false, nil
+}
+
+// isJobSucceeded returns true when the Job's Complete condition is True.
+func isJobSucceeded(job *batchv1.Job) bool {
+	for _, c := range job.Status.Conditions {
+		if c.Type == batchv1.JobComplete && c.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// isJobFailed returns true when the Job's Failed condition is True.
+func isJobFailed(job *batchv1.Job) bool {
+	for _, c := range job.Status.Conditions {
+		if c.Type == batchv1.JobFailed && c.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
+// extractJobContainerImage returns the image of the first container in the Job's pod template, or "".
+func extractJobContainerImage(job *batchv1.Job) string {
+	if len(job.Spec.Template.Spec.Containers) == 0 {
+		return ""
+	}
+	return job.Spec.Template.Spec.Containers[0].Image
+}
+
+// deleteJobWithPods deletes a Job with foreground propagation so pods are removed too.
+func (r *BindplaneReconciler) deleteJobWithPods(ctx context.Context, job *batchv1.Job, log logr.Logger) error {
+	propagation := metav1.DeletePropagationForeground
+	if err := r.Delete(ctx, job, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "failed to delete Jobs Migrate Job", "name", job.Name)
+		return err
+	}
+	return nil
+}
+
+// setMigrateFailureCondition records a MigrationFailed condition on the Bindplane CR.
+func setMigrateFailureCondition(bindplane *bindplanev1alpha1.Bindplane) {
+	meta.SetStatusCondition(&bindplane.Status.Conditions, metav1.Condition{
+		Type:               "Reconciled",
+		Status:             metav1.ConditionFalse,
+		Reason:             "MigrationFailed",
+		Message:            "Jobs Migrate Job failed; downstream workloads are blocked until migration succeeds",
+		ObservedGeneration: bindplane.Generation,
+		LastTransitionTime: metav1.Now(),
+	})
 }
 
 // getBindplaneJobsAffinity returns the affinity configuration for Bindplane Jobs pods

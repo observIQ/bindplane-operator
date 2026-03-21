@@ -24,6 +24,7 @@ import (
 	"net"
 	"regexp"
 	"slices"
+	"time"
 	"unicode"
 
 	"github.com/go-logr/logr"
@@ -312,6 +313,22 @@ const (
 	defaultConcurrency = 10
 )
 
+// getBindplaneEEImage returns the Bindplane EE container image for the given Bindplane instance.
+// Used by Jobs, Jobs Migrate, NATS, and Node.
+func getBindplaneEEImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	return "ghcr.io/observiq/bindplane-ee:" + bindplane.Spec.Version
+}
+
+// getTransformAgentImage returns the Transform Agent container image for the given Bindplane instance.
+func getTransformAgentImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	return "ghcr.io/observiq/bindplane-transform-agent:" + bindplane.Spec.Version + "-bindplane"
+}
+
+// getTSDBImage returns the TSDB (Prometheus) container image for the given Bindplane instance.
+func getTSDBImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	return "ghcr.io/observiq/bindplane-prometheus:" + bindplane.Spec.Version
+}
+
 // Common security and pod constants
 const (
 	// defaultRunAsUser is the default user ID for security contexts
@@ -382,6 +399,7 @@ type BindplaneReconciler struct {
 // +kubebuilder:rbac:groups=k8s.bindplane.com,resources=bindplanes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
@@ -514,8 +532,19 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile the Jobs Migrate batch/v1 Job; block downstream workloads until it completes.
+	migrationComplete, err := r.reconcileMigrateJob(ctx, bindplane, log)
+	if err != nil {
+		log.Error(err, "unable to reconcile Jobs Migrate Job")
+		return ctrl.Result{}, err
+	}
+	if !migrationComplete {
+		log.Info("waiting for Jobs Migrate Job to complete")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	// Reconcile Bindplane Jobs resources
-	if err := r.reconcileBindplaneJobs(ctx, bindplane, log); err != nil {
+	if err := r.reconcileBindplaneJobsRegular(ctx, bindplane, log); err != nil {
 		log.Error(err, "unable to reconcile Bindplane Jobs")
 		return ctrl.Result{}, err
 	}

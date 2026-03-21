@@ -27,6 +27,7 @@ spec:
           spec:
             properties:
               bindplane:
+                default: {}
                 properties:
                   podTemplate:
                     properties:
@@ -15840,7 +15841,7 @@ spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                   replicas:
-                    default: 1
+                    default: 2
                     format: int32
                     type: integer
                 type: object
@@ -23534,8 +23535,10 @@ spec:
                         type: boolean
                     type: object
                 type: object
+              version:
+                default: 1.98.1
+                type: string
             required:
-            - bindplane
             - config
             type: object
           status:
@@ -23576,6 +23579,8 @@ spec:
                   - type
                   type: object
                 type: array
+              migratedImage:
+                type: string
             type: object
         type: object
     served: true

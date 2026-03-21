@@ -175,6 +175,32 @@ Add kubebuilder markers to `bindplane_controller.go`:
 
 Then run `make manifests` to regenerate `config/rbac/role.yaml`.
 
+## Container Image Conventions
+
+There are three image families, all tied to the same Bindplane release tag:
+
+| Component | Image | Notes |
+|-----------|-------|-------|
+| Node, NATS, Jobs, Jobs Migrate | `ghcr.io/observiq/bindplane-ee:<version>` | Main Bindplane binary |
+| Transform Agent | `ghcr.io/observiq/bindplane-transform-agent:<version>-bindplane` | Appends `-bindplane` suffix to tag |
+| Prometheus (TSDB) | `ghcr.io/observiq/bindplane-prometheus:<version>` | Vanilla Prometheus binary |
+
+### Single source of truth
+
+All default images are derived from `defaultBindplaneVersion` in `internal/controller/bindplane_controller.go`:
+
+```go
+defaultBindplaneVersion = "1.98.1"
+```
+
+- `bindplaneJobsImage` (jobs.go) = `"ghcr.io/observiq/bindplane-ee:" + defaultBindplaneVersion`
+- `natsImage` (nats.go) = `bindplaneJobsImage`
+- `nodeImage` (node.go) = `natsImage`
+- `transformAgentImage` (transform_agent.go) = `"ghcr.io/observiq/bindplane-transform-agent:" + defaultBindplaneVersion + "-bindplane"`
+- `tsdbImage` (prometheus.go) = `"ghcr.io/observiq/bindplane-prometheus:" + defaultBindplaneVersion`
+
+**To update all image defaults at once, change only `defaultBindplaneVersion`.**
+
 ## Code Conventions
 
 ### Labels

@@ -26,11 +26,11 @@ Manages periodic background jobs, such as agent cleanup and maintenance tasks.
 
 ### Bindplane Jobs Migrate
 
-**Type**: Deployment
+**Type**: Job (batch/v1)
 
-Manages Postgres setup and migrations for the Bindplane database schema.
+Manages Postgres setup and migrations for the Bindplane database schema. The Job runs at install time and whenever the Bindplane image version changes, then exits. Downstream workloads (NATS, Jobs, Node) are blocked until the Job completes successfully.
 
-**Scaling**: Always one pod.
+**Scaling**: Runs to completion; not a long-running pod.
 
 ### Bindplane NATS
 

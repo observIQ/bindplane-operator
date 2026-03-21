@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1339,7 +1340,52 @@ var _ = Describe("workload Go runtime env vars", func() {
 		envVars := statefulSet.Spec.Template.Spec.Containers[0].Env
 
 		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
-		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("500Mi")))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2048Mi")))
+	})
+})
+
+var _ = Describe("nodeTerminationGracePeriodSeconds", func() {
+	makeBindplane := func(opampPeriod string) *bindplanev1alpha1.Bindplane {
+		bp := &bindplanev1alpha1.Bindplane{}
+		if opampPeriod != "" {
+			bp.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+				Server: &bindplanev1alpha1.AdvancedServerConfig{
+					OpAMPShutdownGracePeriod: opampPeriod,
+				},
+			}
+		}
+		return bp
+	}
+
+	It("returns default when OpAMPShutdownGracePeriod is not set", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane(""))).To(Equal(int64(60)))
+	})
+
+	It("returns 125% of 100s rounded up", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("100s"))).To(Equal(int64(125)))
+	})
+
+	It("returns 125% of 60s rounded up", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("60s"))).To(Equal(int64(75)))
+	})
+
+	It("returns 125% of 1m (60s) rounded up", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("1m"))).To(Equal(int64(75)))
+	})
+
+	It("rounds a fractional result up to the next whole second", func() {
+		// 4s * 1.25 = 5s exactly — no rounding needed
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("4s"))).To(Equal(int64(5)))
+		// 1s * 1.25 = 1.25s → ceil = 2s
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("1s"))).To(Equal(int64(2)))
+	})
+
+	It("falls back to default on an unparseable value", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("invalid"))).To(Equal(int64(60)))
+	})
+
+	It("falls back to default when Advanced is nil", func() {
+		Expect(nodeTerminationGracePeriodSeconds(&bindplanev1alpha1.Bindplane{})).To(Equal(int64(60)))
 	})
 })
 
@@ -1790,7 +1836,7 @@ var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 		}{
 			{nodeComponent, "bindplane-node"},
 			{bindplaneJobsComponent, "bindplane-jobs"},
-			{bindplaneJobsMigrateComponent, "bindplane-jobs-migrate"},
+			{bindplaneJobsMigrateComponent, "bindplane-migrate"},
 			{natsComponent, "bindplane-nats"},
 		} {
 			envVars := getBindplaneCommonEnvVars(bindplane, tc.component)
@@ -1889,16 +1935,18 @@ var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 })
 
 var _ = Describe("defaultRequiredHosts", func() {
-	It("returns floor(total/2)+1 with default replicas (node=3, nats=1)", func() {
+	It("returns floor(total/2)+1 with default replicas (node=3, nats=2)", func() {
+		natsReplicas := int32(2)
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "license",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
+				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 			},
 		}
-		// total = 3 + 1 + 1 + 1 = 6, floor(6/2)+1 = 4
+		// total = 3 + 2 + 1 = 6, floor(6/2)+1 = 4
 		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(4)))
 	})
 
@@ -1915,18 +1963,139 @@ var _ = Describe("defaultRequiredHosts", func() {
 				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 			},
 		}
-		// total = 5 + 3 + 1 + 1 = 10, floor(10/2)+1 = 6
-		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(6)))
+		// total = 5 + 3 + 1 = 9, floor(9/2)+1 = 5
+		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(5)))
+	})
+})
+
+var _ = Describe("migrate Job helpers", func() {
+	makeJob := func(image string, conditions ...batchv1.JobCondition) *batchv1.Job {
+		return &batchv1.Job{
+			Spec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Image: image}},
+					},
+				},
+			},
+			Status: batchv1.JobStatus{Conditions: conditions},
+		}
+	}
+
+	Describe("isJobSucceeded", func() {
+		It("returns true when JobComplete condition is True", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+			})
+			Expect(isJobSucceeded(job)).To(BeTrue())
+		})
+
+		It("returns false when no conditions", func() {
+			Expect(isJobSucceeded(makeJob("img"))).To(BeFalse())
+		})
+
+		It("returns false when JobComplete condition is False", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionFalse,
+			})
+			Expect(isJobSucceeded(job)).To(BeFalse())
+		})
+	})
+
+	Describe("isJobFailed", func() {
+		It("returns true when JobFailed condition is True", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobFailed,
+				Status: corev1.ConditionTrue,
+			})
+			Expect(isJobFailed(job)).To(BeTrue())
+		})
+
+		It("returns false when no conditions", func() {
+			Expect(isJobFailed(makeJob("img"))).To(BeFalse())
+		})
+	})
+
+	Describe("extractJobContainerImage", func() {
+		It("returns the first container image", func() {
+			Expect(extractJobContainerImage(makeJob("my-image:1.2.3"))).To(Equal("my-image:1.2.3"))
+		})
+
+		It("returns empty string when no containers", func() {
+			job := &batchv1.Job{}
+			Expect(extractJobContainerImage(job)).To(Equal(""))
+		})
+	})
+
+	Describe("bindplaneJobsMigrateJob", func() {
+		var bindplane *bindplanev1alpha1.Bindplane
+		var r *BindplaneReconciler
+
+		BeforeEach(func() {
+			bindplane = &bindplanev1alpha1.Bindplane{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: bindplanev1alpha1.BindplaneSpec{
+					Config: bindplanev1alpha1.BindplaneConfigSpec{
+						License: "license",
+						Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					},
+				},
+			}
+			r = &BindplaneReconciler{}
+		})
+
+		It("produces a Job with correct name and namespace", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Name).To(Equal("test-migrate"))
+			Expect(job.Namespace).To(Equal("default"))
+		})
+
+		It("sets the migrate command", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			containers := job.Spec.Template.Spec.Containers
+			Expect(containers).To(HaveLen(1))
+			Expect(containers[0].Command).To(Equal([]string{"/bindplane", "migrate", "-y"}))
+		})
+
+		It("sets RestartPolicy to OnFailure", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyOnFailure))
+		})
+
+		It("sets BackoffLimit to 3", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.BackoffLimit).NotTo(BeNil())
+			Expect(*job.Spec.BackoffLimit).To(Equal(int32(3)))
+		})
+
+		It("sets TTLSecondsAfterFinished to 86400 (24 hours)", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.TTLSecondsAfterFinished).NotTo(BeNil())
+			Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(86400)))
+		})
+
+		It("has no ports or probes", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			c := job.Spec.Template.Spec.Containers[0]
+			Expect(c.Ports).To(BeEmpty())
+			Expect(c.LivenessProbe).To(BeNil())
+			Expect(c.ReadinessProbe).To(BeNil())
+			Expect(c.StartupProbe).To(BeNil())
+		})
 	})
 })
 
 var _ = Describe("getEventBusHealthEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
-		replicas := int32(3)
+		nodeReplicas := int32(3)
+		natsReplicas := int32(2)
 		return &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
 			Spec: bindplanev1alpha1.BindplaneSpec{
-				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &replicas},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
+				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "license",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
@@ -1942,7 +2111,7 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
 	})
 
-	It("uses default requiredHosts (node=3, nats=1) = 4 when not overridden", func() {
+	It("uses default requiredHosts (node=3, nats=2) = 4 when not overridden", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
 			Health: &bindplanev1alpha1.EventBusHealthConfig{},

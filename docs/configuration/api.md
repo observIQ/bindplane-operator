@@ -387,7 +387,9 @@ _Appears in:_
 
 
 
-BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification
+BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification.
+Jobs Migrate runs as a Kubernetes batch/v1 Job that performs database migrations at install time
+and whenever the Bindplane image version changes.
 
 
 
@@ -396,7 +398,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Bindplane Jobs Migrate<br />Note: Jobs Migrate are restricted to 1 replica and cannot be scaled |  | Type: object <br />Optional: \{\} <br /> |
+| `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for the Bindplane Jobs Migrate batch/v1 Job |  | Type: object <br />Optional: \{\} <br /> |
 
 
 #### BindplaneSpec
@@ -412,8 +414,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `version` _string_ | Version specifies the Bindplane release version used for all component container images.<br />Changing this value triggers a rolling update of all Bindplane workloads and a new<br />database migration Job before downstream workloads are updated. | 1.98.1 | Optional: \{\} <br /> |
 | `config` _[BindplaneConfigSpec](#bindplaneconfigspec)_ | Config contains Bindplane's configuration (license, auth, network, store, eventBus)<br />This config is shared by Node, Jobs, and Jobs Migrate |  |  |
-| `bindplane` _[BindplaneComponentSpec](#bindplanecomponentspec)_ | Bindplane configuration and pod specification |  |  |
+| `bindplane` _[BindplaneComponentSpec](#bindplanecomponentspec)_ | Bindplane configuration and pod specification | \{  \} | Optional: \{\} <br /> |
 | `bindplaneJobs` _[BindplaneJobsComponentSpec](#bindplanejobscomponentspec)_ | Bindplane Jobs pod specification |  | Optional: \{\} <br /> |
 | `bindplaneJobsMigrate` _[BindplaneJobsMigrateComponentSpec](#bindplanejobsmigratecomponentspec)_ | Bindplane Jobs Migrate pod specification |  | Optional: \{\} <br /> |
 | `transformAgent` _[TransformAgentComponentSpec](#transformagentcomponentspec)_ | Transform Agent pod specification | \{  \} | Optional: \{\} <br /> |
@@ -475,7 +478,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `requiredHosts` _integer_ | RequiredHosts is the minimum number of pods that must respond to the health check<br />event for the event bus to be considered healthy. When omitted, defaults to<br />floor(total / 2) + 1, where total is the sum of node, NATS, jobs, and<br />jobs-migrate replicas. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `requiredHosts` _integer_ | RequiredHosts is the minimum number of pods that must respond to the health check<br />event for the event bus to be considered healthy. When omitted, defaults to<br />floor(total / 2) + 1, where total is the sum of node, NATS, and jobs replicas.<br />Jobs Migrate is a batch/v1 Job (not a long-running pod) and is excluded from this total. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `interval` _string_ | Interval is how often the event bus health check is performed (e.g. 15s, 1m).<br />When omitted, the Bindplane server default is used. |  | Optional: \{\} <br /> |
 
 
@@ -630,7 +633,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `replicas` _integer_ | Replicas specifies the number of replicas for NATS StatefulSet | 1 | Optional: \{\} <br /> |
+| `replicas` _integer_ | Replicas specifies the number of replicas for NATS StatefulSet | 2 | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for NATS |  | Type: object <br />Optional: \{\} <br /> |
 
 

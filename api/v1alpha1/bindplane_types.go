@@ -26,12 +26,21 @@ import (
 
 // BindplaneSpec defines the desired state of Bindplane.
 type BindplaneSpec struct {
+	// Version specifies the Bindplane release version used for all component container images.
+	// Changing this value triggers a rolling update of all Bindplane workloads and a new
+	// database migration Job before downstream workloads are updated.
+	// +optional
+	// +kubebuilder:default="1.98.1"
+	Version string `json:"version,omitempty"`
+
 	// Config contains Bindplane's configuration (license, auth, network, store, eventBus)
 	// This config is shared by Node, Jobs, and Jobs Migrate
 	Config BindplaneConfigSpec `json:"config"`
 
 	// Bindplane configuration and pod specification
-	Bindplane BindplaneComponentSpec `json:"bindplane"`
+	// +optional
+	// +kubebuilder:default={}
+	Bindplane BindplaneComponentSpec `json:"bindplane,omitempty"`
 
 	// Bindplane Jobs pod specification
 	// +optional
@@ -80,10 +89,11 @@ type BindplaneJobsComponentSpec struct {
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 
-// BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification
+// BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification.
+// Jobs Migrate runs as a Kubernetes batch/v1 Job that performs database migrations at install time
+// and whenever the Bindplane image version changes.
 type BindplaneJobsMigrateComponentSpec struct {
-	// PodTemplate defines pod template specification for Bindplane Jobs Migrate
-	// Note: Jobs Migrate are restricted to 1 replica and cannot be scaled
+	// PodTemplate defines pod template specification for the Bindplane Jobs Migrate batch/v1 Job
 	// +optional
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -495,8 +505,8 @@ type AnalyticsConfig struct {
 type EventBusHealthConfig struct {
 	// RequiredHosts is the minimum number of pods that must respond to the health check
 	// event for the event bus to be considered healthy. When omitted, defaults to
-	// floor(total / 2) + 1, where total is the sum of node, NATS, jobs, and
-	// jobs-migrate replicas.
+	// floor(total / 2) + 1, where total is the sum of node, NATS, and jobs replicas.
+	// Jobs Migrate is a batch/v1 Job (not a long-running pod) and is excluded from this total.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	RequiredHosts *int32 `json:"requiredHosts,omitempty"`
@@ -802,7 +812,7 @@ type TSDBComponentSpec struct {
 type NatsComponentSpec struct {
 	// Replicas specifies the number of replicas for NATS StatefulSet
 	// +optional
-	// +kubebuilder:default=1
+	// +kubebuilder:default=2
 	Replicas *int32 `json:"replicas,omitempty"`
 
 	// PodTemplate defines pod template specification for NATS
@@ -1162,6 +1172,12 @@ type BindplaneStatus struct {
 	// Conditions represent the latest available observations of the Bindplane's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// MigratedImage records the container image for which a successful migrate Job
+	// has completed. The controller uses this to determine whether migration must
+	// run before applying an image change to NATS, Jobs, and Node workloads.
+	// +optional
+	MigratedImage string `json:"migratedImage,omitempty"`
 }
 
 // +kubebuilder:object:root=true
