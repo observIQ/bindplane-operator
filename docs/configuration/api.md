@@ -222,6 +222,7 @@ _Appears in:_
 | `rebalanceInterval` _string_ | RebalanceInterval is the interval between rebalancing agents (e.g. "1h").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
 | `rebalancePercentage` _integer_ | RebalancePercentage is the percentage of agents to rebalance (0–100).<br />0 disables percentage-based rebalancing. When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `rebalanceJitter` _integer_ | RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).<br />When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `maxSimultaneousConnections` _integer_ | MaxSimultaneousConnections is the maximum number of goroutines that will service<br />OpAMP connections concurrently. Generally set to the same value as<br />spec.config.maxConcurrency. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
 
 
 #### AnalyticsConfig
@@ -335,7 +336,7 @@ _Appears in:_
 | `store` _[StoreConfig](#storeconfig)_ | Store configuration for Bindplane |  |  |
 | `tracing` _[TracingConfig](#tracingconfig)_ | Tracing configuration for Bindplane. When omitted or type empty, tracing is disabled. |  | Optional: \{\} <br /> |
 | `metrics` _[MetricsConfig](#metricsconfig)_ | Metrics configuration for Bindplane. When omitted, defaults to prometheus type with interval 60s and endpoint /metrics. |  | Optional: \{\} <br /> |
-| `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
+| `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations.<br />Generally set to the same value as spec.config.agents.maxSimultaneousConnections.<br />Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
 | `auditTrail` _[AuditTrailConfig](#audittrailconfig)_ | AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365. |  | Optional: \{\} <br /> |
 | `tsdb` _[TSDBConfig](#tsdbconfig)_ | TSDB configures TLS and remote settings for Bindplane's TSDB integration. |  | Optional: \{\} <br /> |
 | `nats` _[NatsConfig](#natsconfig)_ | Nats configures TLS for the NATS event bus (client and server). Cert-manager only. |  | Optional: \{\} <br /> |

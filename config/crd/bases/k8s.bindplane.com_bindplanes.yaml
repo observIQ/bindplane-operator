@@ -11490,6 +11490,9 @@ spec:
                         type: string
                       heartbeatTTL:
                         type: string
+                      maxSimultaneousConnections:
+                        default: 10
+                        type: integer
                       rebalanceInterval:
                         type: string
                       rebalanceJitter:

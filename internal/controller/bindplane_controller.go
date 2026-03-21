@@ -285,24 +285,27 @@ const (
 	advancedCacheRedisTLSMountPath  = "/etc/bindplane/advanced-cache-redis-tls"
 
 	// Agents configuration
-	bindplaneAgentsAuthTypeEnvVar                = "BINDPLANE_AGENTS_AUTH_TYPE"
-	bindplaneAgentsAuthSecretKeyHeadersEnvVar    = "BINDPLANE_AGENTS_AUTH_SECRET_KEY_HEADERS"
-	bindplaneAgentsAuthOAuthIssuerEnvVar         = "BINDPLANE_AGENTS_AUTH_OAUTH_ISSUER"
-	bindplaneAgentsAuthOAuthAudiencesEnvVar      = "BINDPLANE_AGENTS_AUTH_OAUTH_AUDIENCES"
-	bindplaneAgentsAuthOAuthRequiredClaimsEnvVar = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_CLAIMS"
-	bindplaneAgentsAuthOAuthRequiredScopesEnvVar = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_SCOPES"
-	bindplaneAgentsAuthOAuthCacheTTLEnvVar       = "BINDPLANE_AGENTS_AUTH_OAUTH_CACHE_TTL"
-	bindplaneAgentsHeartbeatIntervalEnvVar       = "BINDPLANE_AGENTS_HEARTBEAT_INTERVAL"
-	bindplaneAgentsHeartbeatTTLEnvVar            = "BINDPLANE_AGENTS_HEARTBEAT_TTL"
-	bindplaneAgentsHeartbeatExpiryIntervalEnvVar = "BINDPLANE_AGENTS_HEARTBEAT_EXPIRY_INTERVAL"
-	bindplaneAgentsRebalanceIntervalEnvVar       = "BINDPLANE_AGENTS_REBALANCE_INTERVAL"
-	bindplaneAgentsRebalancePercentageEnvVar     = "BINDPLANE_AGENTS_REBALANCE_PERCENTAGE"
-	bindplaneAgentsRebalanceJitterEnvVar         = "BINDPLANE_AGENTS_REBALANCE_JITTER"
+	bindplaneAgentsAuthTypeEnvVar                   = "BINDPLANE_AGENTS_AUTH_TYPE"
+	bindplaneAgentsAuthSecretKeyHeadersEnvVar       = "BINDPLANE_AGENTS_AUTH_SECRET_KEY_HEADERS"
+	bindplaneAgentsAuthOAuthIssuerEnvVar            = "BINDPLANE_AGENTS_AUTH_OAUTH_ISSUER"
+	bindplaneAgentsAuthOAuthAudiencesEnvVar         = "BINDPLANE_AGENTS_AUTH_OAUTH_AUDIENCES"
+	bindplaneAgentsAuthOAuthRequiredClaimsEnvVar    = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_CLAIMS"
+	bindplaneAgentsAuthOAuthRequiredScopesEnvVar    = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_SCOPES"
+	bindplaneAgentsAuthOAuthCacheTTLEnvVar          = "BINDPLANE_AGENTS_AUTH_OAUTH_CACHE_TTL"
+	bindplaneAgentsHeartbeatIntervalEnvVar          = "BINDPLANE_AGENTS_HEARTBEAT_INTERVAL"
+	bindplaneAgentsHeartbeatTTLEnvVar               = "BINDPLANE_AGENTS_HEARTBEAT_TTL"
+	bindplaneAgentsHeartbeatExpiryIntervalEnvVar    = "BINDPLANE_AGENTS_HEARTBEAT_EXPIRY_INTERVAL"
+	bindplaneAgentsRebalanceIntervalEnvVar          = "BINDPLANE_AGENTS_REBALANCE_INTERVAL"
+	bindplaneAgentsRebalancePercentageEnvVar        = "BINDPLANE_AGENTS_REBALANCE_PERCENTAGE"
+	bindplaneAgentsRebalanceJitterEnvVar            = "BINDPLANE_AGENTS_REBALANCE_JITTER"
+	bindplaneAgentsMaxSimultaneousConnectionsEnvVar = "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS"
 )
 
 const (
 	// defaultPprofEndpoint is the default host:port for the pprof server (matches Bindplane)
 	defaultPprofEndpoint = "127.0.0.1:6060"
+	// defaultConcurrency is the default value for maxConcurrency and maxSimultaneousConnections.
+	defaultConcurrency = 10
 )
 
 // Common security and pod constants

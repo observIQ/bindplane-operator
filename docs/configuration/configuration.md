@@ -608,11 +608,16 @@ spec:
 
 ## Max concurrency
 
+`maxConcurrency` and `agents.maxSimultaneousConnections` both control the maximum number of goroutines
+servicing OpAMP connections concurrently. They generally use the same value and should only be changed
+when directed by Bindplane support.
+
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.maxConcurrency` | `BINDPLANE_MAX_CONCURRENCY` | `10` | No |
+| `spec.config.agents.maxSimultaneousConnections` | `BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS` | `10` | No |
 
-Do not change `maxConcurrency` unless directed by Bindplane support.
+Do not change these fields unless directed by Bindplane support.
 
 ## Audit trail
 
@@ -947,6 +952,14 @@ The `spec.config.agents` section configures how Bindplane communicates with agen
 | `spec.config.agents.rebalanceInterval` | `BINDPLANE_AGENTS_REBALANCE_INTERVAL` | `1h` | No |
 | `spec.config.agents.rebalancePercentage` | `BINDPLANE_AGENTS_REBALANCE_PERCENTAGE` | `0` | No |
 | `spec.config.agents.rebalanceJitter` | `BINDPLANE_AGENTS_REBALANCE_JITTER` | `0` | No |
+
+### Connections
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.agents.maxSimultaneousConnections` | `BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS` | `10` | No |
+
+See [Max concurrency](#max-concurrency) for details. Do not modify unless directed by Bindplane support.
 
 `rebalancePercentage` and `rebalanceJitter` are integers in the range 0–100. A value of 0 disables that feature.
 

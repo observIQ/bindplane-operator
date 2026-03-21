@@ -122,7 +122,9 @@ type BindplaneConfigSpec struct {
 	// +optional
 	Metrics *MetricsConfig `json:"metrics,omitempty"`
 
-	// MaxConcurrency is the maximum number of concurrent OpAMP operations. Do not modify unless directed by Bindplane support.
+	// MaxConcurrency is the maximum number of concurrent OpAMP operations.
+	// Generally set to the same value as spec.config.agents.maxSimultaneousConnections.
+	// Do not modify unless directed by Bindplane support.
 	// +optional
 	// +kubebuilder:default=10
 	MaxConcurrency int `json:"maxConcurrency,omitempty"`
@@ -213,6 +215,13 @@ type AgentsConfig struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	RebalanceJitter *int `json:"rebalanceJitter,omitempty"`
+
+	// MaxSimultaneousConnections is the maximum number of goroutines that will service
+	// OpAMP connections concurrently. Generally set to the same value as
+	// spec.config.maxConcurrency. Do not modify unless directed by Bindplane support.
+	// +optional
+	// +kubebuilder:default=10
+	MaxSimultaneousConnections int `json:"maxSimultaneousConnections,omitempty"`
 }
 
 // AgentsAuthConfig configures authentication for agent connections.

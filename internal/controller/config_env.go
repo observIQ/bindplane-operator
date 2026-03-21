@@ -324,14 +324,20 @@ func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.
 	return envVars
 }
 
-// getMiscConfigEnvVars returns env vars for maxConcurrency (default 10) and auditTrail.retentionDays (default 365).
+// getMiscConfigEnvVars returns env vars for maxConcurrency (default defaultConcurrency),
+// maxSimultaneousConnections (default defaultConcurrency), and auditTrail.retentionDays (default 365).
 func getMiscConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	envVars := make([]corev1.EnvVar, 0, 2)
+	envVars := make([]corev1.EnvVar, 0, 3)
 	maxConcurrency := config.MaxConcurrency
 	if maxConcurrency <= 0 {
-		maxConcurrency = 10
+		maxConcurrency = defaultConcurrency
 	}
 	envVars = append(envVars, corev1.EnvVar{Name: bindplaneMaxConcurrencyEnvVar, Value: strconv.Itoa(maxConcurrency)})
+	maxSimultaneousConnections := defaultConcurrency
+	if config.Agents != nil && config.Agents.MaxSimultaneousConnections > 0 {
+		maxSimultaneousConnections = config.Agents.MaxSimultaneousConnections
+	}
+	envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsMaxSimultaneousConnectionsEnvVar, Value: strconv.Itoa(maxSimultaneousConnections)})
 	retentionDays := 365
 	if config.AuditTrail != nil && config.AuditTrail.RetentionDays > 0 {
 		retentionDays = config.AuditTrail.RetentionDays

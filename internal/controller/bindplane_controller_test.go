@@ -1446,6 +1446,7 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		bindplane := baseBindplane()
 		envVars := getBindplaneConfigEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_MAX_CONCURRENCY")).To(Equal("10"))
+		Expect(envVarByName(envVars, "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS")).To(Equal("10"))
 		Expect(envVarByName(envVars, "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS")).To(Equal("365"))
 	})
 
@@ -1453,9 +1454,18 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.MaxConcurrency = 20
 		bindplane.Spec.Config.AuditTrail = &bindplanev1alpha1.AuditTrailConfig{RetentionDays: 180}
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{MaxSimultaneousConnections: 20}
 		envVars := getBindplaneConfigEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_MAX_CONCURRENCY")).To(Equal("20"))
+		Expect(envVarByName(envVars, "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS")).To(Equal("20"))
 		Expect(envVarByName(envVars, "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS")).To(Equal("180"))
+	})
+
+	It("defaults BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS to 10 when agents is nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = nil
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS")).To(Equal("10"))
 	})
 
 	It("sets network webURL and corsAllowedOrigins only when configured", func() {
