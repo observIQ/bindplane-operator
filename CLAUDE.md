@@ -306,6 +306,15 @@ The doc uses the following format for each section:
 
 The table of contents at the top of `configuration.md` must also be updated when adding new sections.
 
+## Security Docs Sync Rule
+
+When adding or modifying any authentication option (e.g. any field under `spec.config.auth`, agent auth, OAuth, OIDC, LDAP) or any TLS configuration (e.g. any field under `spec.config.network.tls`, `spec.config.store.postgres.tls`, `spec.config.nats.tls`, `spec.config.tsdb.tls`, `spec.tsdb.tls`, `spec.config.advanced.cache.redis.tls`, or LDAP TLS), you MUST also update `docs/configuration/security.md` to reflect the change.
+
+The doc covers:
+- The user-configurable TLS and secrets table (what the user sets, how the operator uses it)
+- The cert-manager section (which interfaces support cert-manager-issued certs)
+- The summary table at the bottom (every Secret/TLS area, whether it is user-configurable, env vars, where configured, and a link to docs)
+
 ## API Docs Generation Rule
 
 When making any changes to files under `api/` (i.e., any modification to CRD types, group/version info, or other API definitions), you MUST run `make generate-api-docs` after completing the changes to regenerate the API reference documentation.
