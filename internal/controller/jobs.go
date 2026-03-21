@@ -37,7 +37,7 @@ const (
 	// bindplaneJobsContainerName is the container name for Bindplane Jobs
 	bindplaneJobsContainerName = "server"
 	// bindplaneJobsImage is the default container image for Bindplane Jobs
-	bindplaneJobsImage = "ghcr.io/observiq/bindplane-ee:1.96.3"
+	bindplaneJobsImage = "ghcr.io/observiq/bindplane-ee:1.98.1"
 	// bindplaneJobsHTTPPort is the HTTP port for Bindplane Jobs
 	bindplaneJobsHTTPPort = int32(3001)
 	// bindplaneJobsHTTPPortName is the name of the HTTP port for Bindplane Jobs

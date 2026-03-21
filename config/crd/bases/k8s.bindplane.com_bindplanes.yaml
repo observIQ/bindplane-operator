@@ -27,6 +27,7 @@ spec:
           spec:
             properties:
               bindplane:
+                default: {}
                 properties:
                   podTemplate:
                     properties:
@@ -23535,7 +23536,6 @@ spec:
                     type: object
                 type: object
             required:
-            - bindplane
             - config
             type: object
           status:

@@ -413,7 +413,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `config` _[BindplaneConfigSpec](#bindplaneconfigspec)_ | Config contains Bindplane's configuration (license, auth, network, store, eventBus)<br />This config is shared by Node, Jobs, and Jobs Migrate |  |  |
-| `bindplane` _[BindplaneComponentSpec](#bindplanecomponentspec)_ | Bindplane configuration and pod specification |  |  |
+| `bindplane` _[BindplaneComponentSpec](#bindplanecomponentspec)_ | Bindplane configuration and pod specification | \{  \} | Optional: \{\} <br /> |
 | `bindplaneJobs` _[BindplaneJobsComponentSpec](#bindplanejobscomponentspec)_ | Bindplane Jobs pod specification |  | Optional: \{\} <br /> |
 | `bindplaneJobsMigrate` _[BindplaneJobsMigrateComponentSpec](#bindplanejobsmigratecomponentspec)_ | Bindplane Jobs Migrate pod specification |  | Optional: \{\} <br /> |
 | `transformAgent` _[TransformAgentComponentSpec](#transformagentcomponentspec)_ | Transform Agent pod specification | \{  \} | Optional: \{\} <br /> |

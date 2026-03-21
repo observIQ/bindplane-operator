@@ -31,7 +31,9 @@ type BindplaneSpec struct {
 	Config BindplaneConfigSpec `json:"config"`
 
 	// Bindplane configuration and pod specification
-	Bindplane BindplaneComponentSpec `json:"bindplane"`
+	// +optional
+	// +kubebuilder:default={}
+	Bindplane BindplaneComponentSpec `json:"bindplane,omitempty"`
 
 	// Bindplane Jobs pod specification
 	// +optional
