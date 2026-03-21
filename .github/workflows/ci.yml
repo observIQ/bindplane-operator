@@ -38,8 +38,16 @@ jobs:
           make test
 
   test-e2e:
-    name: Test E2E
+    name: Test E2E (${{ matrix.k8s-version || 'go.mod' }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s-version:
+          - ""       # go.mod / Kind default
+          - "1.33.0"
+          - "1.34.0"
+          - "1.35.0"
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
@@ -50,6 +58,8 @@ jobs:
           go-version-file: go.mod
 
       - name: Run e2e tests
+        env:
+          KIND_K8S_VERSION: ${{ matrix.k8s-version }}
         run: |
           go mod tidy
           make test-e2e
