@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -74,6 +75,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
+	terminationGracePeriod := nodeTerminationGracePeriodSeconds(bindplane)
 
 	maxSurge := intstr.FromInt32(1)
 	maxUnavailable := intstr.FromInt32(1)
@@ -182,7 +184,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								},
 							},
 						},
-						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),
+						TerminationGracePeriodSeconds: &terminationGracePeriod,
 					},
 				},
 				getNodePodTemplate(bindplane),
@@ -216,4 +218,25 @@ func getNodePodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alph
 
 func (r *BindplaneReconciler) nodeService(bindplane *bindplanev1alpha1.Bindplane) *corev1.Service {
 	return newService(bindplane, nodeComponent, WithPort(nodeHTTPPortName, nodeHTTPPort))
+}
+
+// nodeTerminationGracePeriodSeconds returns the termination grace period for the Node deployment.
+// When spec.config.advanced.server.opampShutdownGracePeriod is set, the grace period is 125% of
+// that value (rounded up to the next whole second) to ensure the pod outlives the OpAMP shutdown.
+// Falls back to defaultTerminationGracePeriodSeconds when the field is unset or unparseable.
+func nodeTerminationGracePeriodSeconds(bindplane *bindplanev1alpha1.Bindplane) int64 {
+	if bindplane.Spec.Config.Advanced == nil || bindplane.Spec.Config.Advanced.Server == nil {
+		return defaultTerminationGracePeriodSeconds
+	}
+	opampPeriod := bindplane.Spec.Config.Advanced.Server.OpAMPShutdownGracePeriod
+	if opampPeriod == "" {
+		return defaultTerminationGracePeriodSeconds
+	}
+	d, err := time.ParseDuration(opampPeriod)
+	if err != nil || d <= 0 {
+		return defaultTerminationGracePeriodSeconds
+	}
+	// 125% of d, rounded up to the next whole second using integer arithmetic.
+	ns := d.Nanoseconds() * 5 / 4
+	return (ns + int64(time.Second) - 1) / int64(time.Second)
 }

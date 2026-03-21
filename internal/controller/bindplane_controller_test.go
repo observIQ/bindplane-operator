@@ -1344,6 +1344,51 @@ var _ = Describe("workload Go runtime env vars", func() {
 	})
 })
 
+var _ = Describe("nodeTerminationGracePeriodSeconds", func() {
+	makeBindplane := func(opampPeriod string) *bindplanev1alpha1.Bindplane {
+		bp := &bindplanev1alpha1.Bindplane{}
+		if opampPeriod != "" {
+			bp.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
+				Server: &bindplanev1alpha1.AdvancedServerConfig{
+					OpAMPShutdownGracePeriod: opampPeriod,
+				},
+			}
+		}
+		return bp
+	}
+
+	It("returns default when OpAMPShutdownGracePeriod is not set", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane(""))).To(Equal(int64(60)))
+	})
+
+	It("returns 125% of 100s rounded up", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("100s"))).To(Equal(int64(125)))
+	})
+
+	It("returns 125% of 60s rounded up", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("60s"))).To(Equal(int64(75)))
+	})
+
+	It("returns 125% of 1m (60s) rounded up", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("1m"))).To(Equal(int64(75)))
+	})
+
+	It("rounds a fractional result up to the next whole second", func() {
+		// 4s * 1.25 = 5s exactly — no rounding needed
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("4s"))).To(Equal(int64(5)))
+		// 1s * 1.25 = 1.25s → ceil = 2s
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("1s"))).To(Equal(int64(2)))
+	})
+
+	It("falls back to default on an unparseable value", func() {
+		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("invalid"))).To(Equal(int64(60)))
+	})
+
+	It("falls back to default when Advanced is nil", func() {
+		Expect(nodeTerminationGracePeriodSeconds(&bindplanev1alpha1.Bindplane{})).To(Equal(int64(60)))
+	})
+})
+
 var _ = Describe("getBindplaneConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
