@@ -1,3 +1,13 @@
+<a href="https://bindplane.com">
+  <p align="center">
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="https://res.cloudinary.com/du4nxa27k/image/upload/v1734001913/bindplane-logo_czndai.svg" width="auto" height="50">
+      <source media="(prefers-color-scheme: dark)" srcset="https://res.cloudinary.com/du4nxa27k/image/upload/v1734001913/bindplane-logo-dark_lkmoxd.svg" width="auto" height="50">
+      <img alt="Bindplane Logo" src="https://res.cloudinary.com/du4nxa27k/image/upload/v1734001913/bindplane-logo_czndai.svg" width="auto" height="50">
+    </picture>
+  </p>
+</a>
+
 # Bindplane Operator
 
 A Kubernetes operator for managing [Bindplane](https://bindplane.com/) server deployments in Kubernetes clusters.
