@@ -299,6 +299,10 @@ const (
 	bindplaneAgentsRebalancePercentageEnvVar        = "BINDPLANE_AGENTS_REBALANCE_PERCENTAGE"
 	bindplaneAgentsRebalanceJitterEnvVar            = "BINDPLANE_AGENTS_REBALANCE_JITTER"
 	bindplaneAgentsMaxSimultaneousConnectionsEnvVar = "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS"
+
+	// AgentVersions configuration
+	bindplaneAgentVersionsSyncIntervalEnvVar = "BINDPLANE_AGENT_VERSIONS_SYNC_INTERVAL"
+	bindplaneAgentVersionsClientsEnvVar      = "BINDPLANE_AGENT_VERSIONS_CLIENTS"
 )
 
 const (

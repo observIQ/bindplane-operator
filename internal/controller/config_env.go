@@ -364,6 +364,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getMetricsConfigEnvVars(config.Metrics)...)
 	envVars = append(envVars, getMiscConfigEnvVars(config)...)
 	envVars = append(envVars, getAgentsConfigEnvVars(config.Agents)...)
+	envVars = append(envVars, getAgentVersionsConfigEnvVars(config.AgentVersions)...)
 	return envVars
 }
 
@@ -751,6 +752,22 @@ func getAgentsConfigEnvVars(agents *bindplanev1alpha1.AgentsConfig) []corev1.Env
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsRebalanceJitterEnvVar, Value: strconv.Itoa(*agents.RebalanceJitter)})
 	}
 
+	return envVars
+}
+
+// getAgentVersionsConfigEnvVars returns env vars for spec.config.agentVersions.
+// Returns nil when agentVersions is nil (Bindplane uses its own defaults).
+func getAgentVersionsConfigEnvVars(av *bindplanev1alpha1.AgentVersionsConfig) []corev1.EnvVar {
+	if av == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if av.SyncInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentVersionsSyncIntervalEnvVar, Value: av.SyncInterval})
+	}
+	if len(av.Clients) > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentVersionsClientsEnvVar, Value: strings.Join(av.Clients, ",")})
+	}
 	return envVars
 }
 

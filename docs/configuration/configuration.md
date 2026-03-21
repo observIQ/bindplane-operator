@@ -34,6 +34,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Authentication](#agents-authentication)
   - [Heartbeat](#heartbeat)
   - [Rebalance](#rebalance)
+- [Agent versions](#agent-versions)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -978,6 +979,30 @@ spec:
       heartbeatTTL: "2m"
       rebalanceInterval: "30m"
       rebalancePercentage: 50
+```
+
+## Agent versions
+
+The `spec.config.agentVersions` section configures how Bindplane syncs agent version metadata.
+When omitted, Bindplane uses its own defaults.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.agentVersions.syncInterval` | `BINDPLANE_AGENT_VERSIONS_SYNC_INTERVAL` | `1h` | No |
+| `spec.config.agentVersions.clients` | `BINDPLANE_AGENT_VERSIONS_CLIENTS` | — | No |
+
+`syncInterval` must be at least `1h` (enforced by Bindplane at runtime).
+`clients` is a deprecated field; version clients are now configured per-agent-type via AgentType resources.
+`clients` is a comma-separated list of version client identifiers (e.g. `"bdot,github"`).
+
+```yaml
+spec:
+  config:
+    agentVersions:
+      syncInterval: "2h"
+      clients:
+        - bdot
+        - github
 ```
 
 ## Scope

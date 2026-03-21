@@ -148,6 +148,23 @@ _Appears in:_
 | `batchChannelSize` _integer_ | BatchChannelSize is the buffer size for the batch channel between accept and save workers. |  | Optional: \{\} <br /> |
 
 
+#### AgentVersionsConfig
+
+
+
+AgentVersionsConfig configures how Bindplane syncs agent versions.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `syncInterval` _string_ | SyncInterval is the interval at which to sync agent versions (e.g. "2h").<br />Must be at least 1h. When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `clients` _string array_ | Clients is a deprecated list of version client types (e.g. ["bdot", "github"]).<br />Version clients are now configured per-agent-type via AgentType resources. |  | Optional: \{\} <br /> |
+
+
 #### AgentsAuthConfig
 
 
@@ -347,6 +364,7 @@ _Appears in:_
 | `logging` _[LoggingConfig](#loggingconfig)_ | Logging configures the Bindplane log level and output destination. |  | Optional: \{\} <br /> |
 | `advanced` _[AdvancedConfig](#advancedconfig)_ | Advanced configures advanced Bindplane options. These are typically used to<br />fine-tune behavior at scale and are not required for basic operation. |  | Optional: \{\} <br /> |
 | `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
+| `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 
 
 #### BindplaneJobsComponentSpec

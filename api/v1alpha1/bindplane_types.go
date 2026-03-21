@@ -174,6 +174,11 @@ type BindplaneConfigSpec struct {
 	// When omitted, Bindplane uses its own defaults.
 	// +optional
 	Agents *AgentsConfig `json:"agents,omitempty"`
+
+	// AgentVersions configures agent version sync behavior.
+	// When omitted, Bindplane uses its own defaults.
+	// +optional
+	AgentVersions *AgentVersionsConfig `json:"agentVersions,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.
@@ -222,6 +227,19 @@ type AgentsConfig struct {
 	// +optional
 	// +kubebuilder:default=10
 	MaxSimultaneousConnections int `json:"maxSimultaneousConnections,omitempty"`
+}
+
+// AgentVersionsConfig configures how Bindplane syncs agent versions.
+type AgentVersionsConfig struct {
+	// SyncInterval is the interval at which to sync agent versions (e.g. "2h").
+	// Must be at least 1h. When omitted, Bindplane uses its own default.
+	// +optional
+	SyncInterval string `json:"syncInterval,omitempty"`
+
+	// Clients is a deprecated list of version client types (e.g. ["bdot", "github"]).
+	// Version clients are now configured per-agent-type via AgentType resources.
+	// +optional
+	Clients []string `json:"clients,omitempty"`
 }
 
 // AgentsAuthConfig configures authentication for agent connections.

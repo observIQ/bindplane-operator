@@ -2925,3 +2925,45 @@ var _ = Describe("getAgentsConfigEnvVars", func() {
 		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(BeEmpty())
 	})
 })
+
+var _ = Describe("getAgentVersionsConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("does not set agentVersions env vars when agentVersions is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentVersionsClientsEnvVar)).To(BeEmpty())
+	})
+
+	It("sets agentVersions syncInterval and clients when configured", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.AgentVersions = &bindplanev1alpha1.AgentVersionsConfig{
+			SyncInterval: "2h",
+			Clients:      []string{"bdot", "github"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(Equal("2h"))
+		Expect(envVarByName(envVars, bindplaneAgentVersionsClientsEnvVar)).To(Equal("bdot,github"))
+	})
+
+	It("sets agentVersions syncInterval only when clients is omitted", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.AgentVersions = &bindplanev1alpha1.AgentVersionsConfig{
+			SyncInterval: "3h",
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(Equal("3h"))
+		Expect(envVarByName(envVars, bindplaneAgentVersionsClientsEnvVar)).To(BeEmpty())
+	})
+})

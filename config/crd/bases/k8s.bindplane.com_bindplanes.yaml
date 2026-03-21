@@ -11451,6 +11451,15 @@ spec:
                             type: object
                         type: object
                     type: object
+                  agentVersions:
+                    properties:
+                      clients:
+                        items:
+                          type: string
+                        type: array
+                      syncInterval:
+                        type: string
+                    type: object
                   agents:
                     properties:
                       auth:
