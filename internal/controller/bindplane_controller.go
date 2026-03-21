@@ -118,7 +118,10 @@ const (
 	bindplaneOIDCScopesEnvVar       = "BINDPLANE_OIDC_SCOPES"
 
 	// Store configuration
-	bindplaneStoreTypeEnvVar = "BINDPLANE_STORE_TYPE"
+	bindplaneStoreTypeEnvVar                       = "BINDPLANE_STORE_TYPE"
+	bindplaneStoreMaxEventsEnvVar                  = "BINDPLANE_STORE_MAX_EVENTS"
+	bindplaneStoreEventMergeWindowEnvVar           = "BINDPLANE_STORE_EVENT_MERGE_WINDOW"
+	bindplaneStoreSummaryRollupRetentionDaysEnvVar = "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS"
 
 	// Tracing configuration
 	bindplaneTracingTypeEnvVar         = "BINDPLANE_TRACING_TYPE"

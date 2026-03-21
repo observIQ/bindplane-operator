@@ -13,6 +13,158 @@ Package v1alpha1 contains API Schema definitions for the bindplane v1alpha1 API 
 
 
 
+#### AdvancedCacheConfig
+
+
+
+AdvancedCacheConfig configures the distributed cache.
+
+
+
+_Appears in:_
+- [AdvancedConfig](#advancedconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type is the cache backend to use. Currently only "redis" is supported. |  | Enum: [redis] <br />Optional: \{\} <br /> |
+| `redis` _[AdvancedCacheRedisConfig](#advancedcacheredisconfig)_ | Redis configures the Redis cache connection. |  | Optional: \{\} <br /> |
+
+
+#### AdvancedCacheRedisConfig
+
+
+
+AdvancedCacheRedisConfig configures a Redis cache backend.
+
+
+
+_Appears in:_
+- [AdvancedCacheConfig](#advancedcacheconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `address` _string_ | Address is the Redis server address in host:port form (e.g. "redis.default.svc:6379"). |  |  |
+| `password` _string_ | Password is the Redis password (plain text). Use PasswordSecretRef instead for sensitive values. |  | Optional: \{\} <br /> |
+| `passwordSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | PasswordSecretRef references a Kubernetes Secret containing the Redis password.<br />Takes precedence over Password when both are set. |  | Optional: \{\} <br /> |
+| `db` _integer_ | DB is the Redis database index. When omitted, defaults to 0. |  | Optional: \{\} <br /> |
+| `readTimeout` _string_ | ReadTimeout is the read timeout for Redis commands (e.g. "5s"). When omitted, the Redis client default is used. |  | Optional: \{\} <br /> |
+| `writeTimeout` _string_ | WriteTimeout is the write timeout for Redis commands (e.g. "5s"). When omitted, the Redis client default is used. |  | Optional: \{\} <br /> |
+| `enableTLS` _boolean_ | EnableTLS enables TLS for the Redis connection. |  | Optional: \{\} <br /> |
+| `tls` _[AdvancedCacheRedisTLSConfig](#advancedcacheredistlsconfig)_ | TLS configures TLS for the Redis connection. Only relevant when EnableTLS is true. |  | Optional: \{\} <br /> |
+
+
+#### AdvancedCacheRedisTLSConfig
+
+
+
+AdvancedCacheRedisTLSConfig configures TLS for Redis via a Kubernetes Secret.
+The operator mounts the Secret and sets file-path env vars automatically.
+
+
+
+_Appears in:_
+- [AdvancedCacheRedisConfig](#advancedcacheredisconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `secretName` _string_ | SecretName is the name of the Secret containing TLS assets. |  | Optional: \{\} <br /> |
+| `certKey` _string_ | CertKey is the key within SecretName for the TLS certificate file. |  | Optional: \{\} <br /> |
+| `keyKey` _string_ | KeyKey is the key within SecretName for the TLS private key file. |  | Optional: \{\} <br /> |
+| `caKey` _string_ | CAKey is the key within SecretName for the CA certificate file. |  | Optional: \{\} <br /> |
+| `skipVerify` _boolean_ | SkipVerify disables TLS certificate verification. |  | Optional: \{\} <br /> |
+| `minTLSVersion` _string_ | MinTLSVersion is the minimum TLS version. One of: 1.2, 1.3. |  | Enum: [1.2 1.3] <br />Optional: \{\} <br /> |
+
+
+#### AdvancedConfig
+
+
+
+AdvancedConfig defines advanced Bindplane configuration options.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `store` _[AdvancedStoreConfig](#advancedstoreconfig)_ | Store contains advanced store configuration options. |  | Optional: \{\} <br /> |
+| `server` _[AdvancedServerConfig](#advancedserverconfig)_ | Server contains advanced server configuration options. |  | Optional: \{\} <br /> |
+| `cache` _[AdvancedCacheConfig](#advancedcacheconfig)_ | Cache contains advanced cache configuration options. |  | Optional: \{\} <br /> |
+
+
+#### AdvancedServerConfig
+
+
+
+AdvancedServerConfig contains advanced HTTP/OpAMP server options.
+All fields are optional; when omitted Bindplane uses its own defaults.
+
+
+
+_Appears in:_
+- [AdvancedConfig](#advancedconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `maxRequestBytes` _integer_ | MaxRequestBytes is the maximum request body size the server accepts, excluding offline<br />agent uploads. When omitted, Bindplane defaults to 10485760 (10 MiB). |  | Optional: \{\} <br /> |
+| `opampShutdownGracePeriod` _string_ | OpAMPShutdownGracePeriod is how long the OpAMP server waits for agents to disconnect<br />during shutdown (e.g. "30s"). When omitted, Bindplane defaults to 30s. |  | Optional: \{\} <br /> |
+
+
+#### AdvancedStoreConfig
+
+
+
+AdvancedStoreConfig contains advanced store configuration options.
+
+
+
+_Appears in:_
+- [AdvancedConfig](#advancedconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `stats` _[AdvancedStoreStatsConfig](#advancedstorestatsconfig)_ | Stats configures advanced measurement storage tuning. |  | Optional: \{\} <br /> |
+
+
+#### AdvancedStoreStatsConfig
+
+
+
+AdvancedStoreStatsConfig tunes measurement pipeline performance.
+All fields are optional; when omitted Bindplane uses its own defaults.
+
+
+
+_Appears in:_
+- [AdvancedStoreConfig](#advancedstoreconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `batchFlushInterval` _string_ | BatchFlushInterval is the interval at which to flush measurement batches (e.g. "1s"). |  | Optional: \{\} <br /> |
+| `workerCount` _integer_ | WorkerCount is the number of workers saving measurements to the backend. |  | Optional: \{\} <br /> |
+| `enableSorting` _boolean_ | EnableSorting enables sorting of metrics by timestamp before saving. |  | Optional: \{\} <br /> |
+| `metricChannelSize` _integer_ | MetricChannelSize is the buffer size for the incoming metrics channel. |  | Optional: \{\} <br /> |
+| `batchChannelSize` _integer_ | BatchChannelSize is the buffer size for the batch channel between accept and save workers. |  | Optional: \{\} <br /> |
+
+
+#### AnalyticsConfig
+
+
+
+AnalyticsConfig configures Bindplane analytics reporting.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `disabled` _boolean_ | Disabled turns off analytics reporting. When false or omitted, analytics are enabled.<br />Free licenses do not support disabling analytics; this option is ignored for that license type. | false | Optional: \{\} <br /> |
+| `segmentWriteKey` _string_ | SegmentWriteKey overrides the default Segment write key used for analytics.<br />Do not set unless directed by Bindplane support. |  | Optional: \{\} <br /> |
+
+
 #### AuditTrailConfig
 
 
@@ -111,6 +263,12 @@ _Appears in:_
 | `auditTrail` _[AuditTrailConfig](#audittrailconfig)_ | AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365. |  | Optional: \{\} <br /> |
 | `tsdb` _[TSDBConfig](#tsdbconfig)_ | TSDB configures TLS and remote settings for Bindplane's TSDB integration. |  | Optional: \{\} <br /> |
 | `nats` _[NatsConfig](#natsconfig)_ | Nats configures TLS for the NATS event bus (client and server). Cert-manager only. |  | Optional: \{\} <br /> |
+| `profiling` _[ProfilingConfig](#profilingconfig)_ | Profiling configures Google Cloud Profiler for Bindplane. When omitted or disabled, profiling is off. |  | Optional: \{\} <br /> |
+| `pprof` _[PprofConfig](#pprofconfig)_ | Pprof configures the pprof HTTP server for Bindplane. When omitted or disabled, pprof is off. |  | Optional: \{\} <br /> |
+| `eventBus` _[EventBusConfig](#eventbusconfig)_ | EventBus configures the event bus (NATS) integration, including health checks. |  | Optional: \{\} <br /> |
+| `analytics` _[AnalyticsConfig](#analyticsconfig)_ | Analytics configures Bindplane analytics reporting. |  | Optional: \{\} <br /> |
+| `logging` _[LoggingConfig](#loggingconfig)_ | Logging configures the Bindplane log level and output destination. |  | Optional: \{\} <br /> |
+| `advanced` _[AdvancedConfig](#advancedconfig)_ | Advanced configures advanced Bindplane options. These are typically used to<br />fine-tune behavior at scale and are not required for basic operation. |  | Optional: \{\} <br /> |
 
 
 #### BindplaneJobsComponentSpec
@@ -189,6 +347,42 @@ _Appears in:_
 | `group` _string_ | Group is the API group of the issuer. Defaults to cert-manager.io. | cert-manager.io | Optional: \{\} <br /> |
 
 
+#### EventBusConfig
+
+
+
+EventBusConfig configures the Bindplane event bus (NATS) integration.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `health` _[EventBusHealthConfig](#eventbushealthconfig)_ | Health configures the event bus health check endpoints. |  | Optional: \{\} <br /> |
+
+
+#### EventBusHealthConfig
+
+
+
+EventBusHealthConfig configures the Bindplane event bus health check.
+The health check sends an event over NATS and waits for responses from other pods.
+Health check failures affect only the status page in the Bindplane web interface;
+they do not cause pod shutdown or failure.
+
+
+
+_Appears in:_
+- [EventBusConfig](#eventbusconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `requiredHosts` _integer_ | RequiredHosts is the minimum number of pods that must respond to the health check<br />event for the event bus to be considered healthy. When omitted, defaults to<br />floor(total / 2) + 1, where total is the sum of node, NATS, jobs, and<br />jobs-migrate replicas. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `interval` _string_ | Interval is how often the event bus health check is performed (e.g. 15s, 1m).<br />When omitted, the Bindplane server default is used. |  | Optional: \{\} <br /> |
+
+
 #### LDAPConfig
 
 
@@ -234,6 +428,42 @@ _Appears in:_
 | `certKey` _string_ | CertKey is the key in the Secret for the TLS certificate (for mutual TLS). |  | Optional: \{\} <br /> |
 | `keyKey` _string_ | KeyKey is the key in the Secret for the TLS private key (for mutual TLS). |  | Optional: \{\} <br /> |
 | `caKey` _string_ | CAKey is the key in the Secret for the CA certificate. Omit to use system CAs. |  | Optional: \{\} <br /> |
+
+
+#### LoggingConfig
+
+
+
+LoggingConfig defines logging configuration.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `level` _string_ | Level specifies the log level. One of: debug, info, warn, error. | info | Enum: [debug info warn error] <br />Optional: \{\} <br /> |
+| `type` _string_ | Type specifies the logging output destination.<br />Use "stdout" to write logs to standard output, "otlp" to export via OTLP,<br />or "stdout,otlp" to write to both simultaneously. | stdout | Pattern: `^(stdout\|otlp)(,(stdout\|otlp))?$` <br />Optional: \{\} <br /> |
+| `otlp` _[LoggingOTLPConfig](#loggingotlpconfig)_ | OTLP configures OTLP log export when Type includes otlp. |  | Optional: \{\} <br /> |
+
+
+#### LoggingOTLPConfig
+
+
+
+LoggingOTLPConfig defines OTLP logging configuration.
+
+
+
+_Appears in:_
+- [LoggingConfig](#loggingconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `endpoint` _string_ | Endpoint is the gRPC endpoint to send logs to (e.g. localhost:4317). |  | Optional: \{\} <br /> |
+| `insecure` _boolean_ | Insecure disables TLS verification for the OTLP connection. |  | Optional: \{\} <br /> |
+| `interval` _string_ | Interval is the interval at which to export logs (e.g. 60s).<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
 
 
 #### MetricsConfig
@@ -484,6 +714,47 @@ _Appears in:_
 | `keyKey` _string_ | KeyKey is the key in the Secret for the client private key (maps to sslKey). Set with CertKey for mutual TLS. |  | Optional: \{\} <br /> |
 
 
+#### PprofConfig
+
+
+
+PprofConfig configures the pprof HTTP server for Bindplane.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled turns on the pprof server. When false or omitted, pprof is disabled. | false | Optional: \{\} <br /> |
+| `endpoint` _string_ | Endpoint is the host:port the pprof server listens on. When unset, defaults to 127.0.0.1:6060. |  | Optional: \{\} <br /> |
+
+
+#### ProfilingConfig
+
+
+
+ProfilingConfig configures Google Cloud Profiler for Bindplane.
+
+
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled turns on Google Cloud Profiler. When false or omitted, profiling is disabled. | false | Optional: \{\} <br /> |
+| `projectID` _string_ | ProjectID is the GCP project ID. Required when enabled is true. |  | Optional: \{\} <br /> |
+| `noCPU` _boolean_ | NoCPU disables CPU profiling. | false | Optional: \{\} <br /> |
+| `noAlloc` _boolean_ | NoAlloc disables allocation profiling. | false | Optional: \{\} <br /> |
+| `noHeap` _boolean_ | NoHeap disables heap profiling. | false | Optional: \{\} <br /> |
+| `noGoroutine` _boolean_ | NoGoroutine disables goroutine profiling. | false | Optional: \{\} <br /> |
+| `mutex` _boolean_ | Mutex enables mutex profiling (disabled by default in Bindplane). | false | Optional: \{\} <br /> |
+
+
+
+
 #### StorageSpec
 
 
@@ -514,6 +785,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `postgres` _[PostgresConfig](#postgresconfig)_ | Postgres configuration |  |  |
+| `maxEvents` _integer_ | MaxEvents is the maximum number of events to merge into a single event.<br />When omitted, Bindplane defaults to 100. |  | Optional: \{\} <br /> |
+| `eventMergeWindow` _string_ | EventMergeWindow is the window during which events are merged (e.g. "100ms").<br />When omitted, Bindplane defaults to 100ms. |  | Optional: \{\} <br /> |
+| `summaryRollupRetentionDays` _integer_ | SummaryRollupRetentionDays is the number of days to retain daily rollup data.<br />0 means indefinite retention (rollups are never deleted).<br />When omitted, Bindplane defaults to 365. |  | Optional: \{\} <br /> |
 
 
 #### TSDBComponentSpec

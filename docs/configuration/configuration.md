@@ -321,6 +321,27 @@ spec:
 
 The store type is always `postgres`. `BINDPLANE_STORE_TYPE` is automatically set to `postgres` by the operator.
 
+The following store-level settings apply regardless of backend. When omitted, Bindplane uses its own defaults.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.store.maxEvents` | `BINDPLANE_STORE_MAX_EVENTS` | 100 | No |
+| `spec.config.store.eventMergeWindow` | `BINDPLANE_STORE_EVENT_MERGE_WINDOW` | `100ms` | No |
+| `spec.config.store.summaryRollupRetentionDays` | `BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS` | 365 | No |
+
+`summaryRollupRetentionDays: 0` means indefinite retention (rollups are never deleted).
+
+```yaml
+spec:
+  config:
+    store:
+      maxEvents: 200
+      eventMergeWindow: "200ms"
+      summaryRollupRetentionDays: 90
+      postgres:
+        host: postgres.default.svc
+```
+
 ### PostgreSQL
 
 Username and password can be set as direct values or via Secret references (`usernameSecretRef`, `passwordSecretRef`). Each uses `name` and `key` to reference a Secret. Secret references take precedence when both are set.

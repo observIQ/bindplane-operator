@@ -11821,6 +11821,10 @@ spec:
                       rule: '!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))'
                   store:
                     properties:
+                      eventMergeWindow:
+                        type: string
+                      maxEvents:
+                        type: integer
                       postgres:
                         properties:
                           connectTimeout:
@@ -11897,6 +11901,8 @@ spec:
                         required:
                         - host
                         type: object
+                      summaryRollupRetentionDays:
+                        type: integer
                     required:
                     - postgres
                     type: object

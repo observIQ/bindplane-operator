@@ -1668,6 +1668,79 @@ var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
 	})
 })
 
+var _ = Describe("getStoreConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+			},
+		}
+	}
+
+	It("does not set store tuning env vars when all fields are omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_MAX_EVENTS")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_EVENT_MERGE_WINDOW")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STORE_MAX_EVENTS when maxEvents > 0", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.MaxEvents = 200
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_MAX_EVENTS")).To(Equal("200"))
+	})
+
+	It("does not set BINDPLANE_STORE_MAX_EVENTS when maxEvents == 0", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.MaxEvents = 0
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_MAX_EVENTS")).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STORE_EVENT_MERGE_WINDOW when non-empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.EventMergeWindow = "200ms"
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_EVENT_MERGE_WINDOW")).To(Equal("200ms"))
+	})
+
+	It("does not set BINDPLANE_STORE_EVENT_MERGE_WINDOW when empty", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_EVENT_MERGE_WINDOW")).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS when non-nil with value > 0", func() {
+		bindplane := baseBindplane()
+		days := 90
+		bindplane.Spec.Config.Store.SummaryRollupRetentionDays = &days
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(Equal("90"))
+	})
+
+	It("sets BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS=0 when non-nil with value == 0 (indefinite retention)", func() {
+		bindplane := baseBindplane()
+		days := 0
+		bindplane.Spec.Config.Store.SummaryRollupRetentionDays = &days
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(Equal("0"))
+	})
+
+	It("does not set BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS when nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(BeEmpty())
+	})
+})
+
 var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{

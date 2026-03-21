@@ -305,3 +305,7 @@ The doc uses the following format for each section:
 - One or more YAML examples
 
 The table of contents at the top of `configuration.md` must also be updated when adding new sections.
+
+## API Docs Generation Rule
+
+When making any changes to files under `api/` (i.e., any modification to CRD types, group/version info, or other API definitions), you MUST run `make generate-api-docs` after completing the changes to regenerate the API reference documentation.

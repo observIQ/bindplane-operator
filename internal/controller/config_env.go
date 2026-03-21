@@ -177,6 +177,25 @@ func getNetworkConfigEnvVars(network *bindplanev1alpha1.NetworkConfig, bindplane
 	return envVars
 }
 
+// getStoreConfigEnvVars returns store-level (non-Postgres) env vars for spec.config.store.
+// Returns nil when no store-level fields are set.
+func getStoreConfigEnvVars(store *bindplanev1alpha1.StoreConfig) []corev1.EnvVar {
+	if store == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if store.MaxEvents > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneStoreMaxEventsEnvVar, Value: strconv.Itoa(store.MaxEvents)})
+	}
+	if store.EventMergeWindow != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneStoreEventMergeWindowEnvVar, Value: store.EventMergeWindow})
+	}
+	if store.SummaryRollupRetentionDays != nil {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneStoreSummaryRollupRetentionDaysEnvVar, Value: strconv.Itoa(*store.SummaryRollupRetentionDays)})
+	}
+	return envVars
+}
+
 // getPostgresConfigEnvVars returns env vars for spec.config.store.postgres.
 func getPostgresConfigEnvVars(pg *bindplanev1alpha1.PostgresConfig) []corev1.EnvVar {
 	if pg == nil {
@@ -334,6 +353,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getNetworkConfigEnvVars(config.Network, bindplane)...)
 	envVars = append(envVars, corev1.EnvVar{Name: bindplaneStoreTypeEnvVar, Value: "postgres"})
 	envVars = append(envVars, getPostgresConfigEnvVars(config.Store.Postgres)...)
+	envVars = append(envVars, getStoreConfigEnvVars(&config.Store)...)
 	envVars = append(envVars, getTracingConfigEnvVars(config.Tracing)...)
 	envVars = append(envVars, getMetricsConfigEnvVars(config.Metrics)...)
 	envVars = append(envVars, getMiscConfigEnvVars(config)...)

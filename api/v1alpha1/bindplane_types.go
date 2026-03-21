@@ -944,6 +944,22 @@ type NetworkConfig struct {
 type StoreConfig struct {
 	// Postgres configuration
 	Postgres *PostgresConfig `json:"postgres"`
+
+	// MaxEvents is the maximum number of events to merge into a single event.
+	// When omitted, Bindplane defaults to 100.
+	// +optional
+	MaxEvents int `json:"maxEvents,omitempty"`
+
+	// EventMergeWindow is the window during which events are merged (e.g. "100ms").
+	// When omitted, Bindplane defaults to 100ms.
+	// +optional
+	EventMergeWindow string `json:"eventMergeWindow,omitempty"`
+
+	// SummaryRollupRetentionDays is the number of days to retain daily rollup data.
+	// 0 means indefinite retention (rollups are never deleted).
+	// When omitted, Bindplane defaults to 365.
+	// +optional
+	SummaryRollupRetentionDays *int `json:"summaryRollupRetentionDays,omitempty"`
 }
 
 // PostgresConfig defines PostgreSQL store configuration
