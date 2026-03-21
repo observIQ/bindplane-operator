@@ -307,15 +307,27 @@ const (
 )
 
 const (
-	// defaultBindplaneVersion is the Bindplane release tag used for all default container images.
-	// Update this single constant to change all image defaults simultaneously.
-	// Transform Agent uses this version with a "-bindplane" suffix; Prometheus uses it directly.
-	defaultBindplaneVersion = "1.98.1"
 	// defaultPprofEndpoint is the default host:port for the pprof server (matches Bindplane)
 	defaultPprofEndpoint = "127.0.0.1:6060"
 	// defaultConcurrency is the default value for maxConcurrency and maxSimultaneousConnections.
 	defaultConcurrency = 10
 )
+
+// getBindplaneEEImage returns the Bindplane EE container image for the given Bindplane instance.
+// Used by Jobs, Jobs Migrate, NATS, and Node.
+func getBindplaneEEImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	return "ghcr.io/observiq/bindplane-ee:" + bindplane.Spec.Version
+}
+
+// getTransformAgentImage returns the Transform Agent container image for the given Bindplane instance.
+func getTransformAgentImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	return "ghcr.io/observiq/bindplane-transform-agent:" + bindplane.Spec.Version + "-bindplane"
+}
+
+// getTSDBImage returns the TSDB (Prometheus) container image for the given Bindplane instance.
+func getTSDBImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	return "ghcr.io/observiq/bindplane-prometheus:" + bindplane.Spec.Version
+}
 
 // Common security and pod constants
 const (

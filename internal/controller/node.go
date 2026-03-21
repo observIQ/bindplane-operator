@@ -34,8 +34,6 @@ const (
 	nodeComponent = "node"
 	// nodeContainerName is the container name for Bindplane Node
 	nodeContainerName = "server"
-	// nodeImage is the default container image for Bindplane Node (same as NATS)
-	nodeImage = natsImage
 	// nodeHTTPPort is the HTTP port for Bindplane Node
 	nodeHTTPPort = int32(3001)
 	// nodeHTTPPortName is the name of the HTTP port for Bindplane Node
@@ -115,7 +113,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 						Containers: []corev1.Container{
 							{
 								Name:         nodeContainerName,
-								Image:        nodeImage,
+								Image:        getBindplaneEEImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{

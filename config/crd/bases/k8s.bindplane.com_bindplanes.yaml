@@ -23535,6 +23535,9 @@ spec:
                         type: boolean
                     type: object
                 type: object
+              version:
+                default: 1.98.1
+                type: string
             required:
             - config
             type: object

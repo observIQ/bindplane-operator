@@ -34,8 +34,6 @@ const (
 	transformAgentComponent = "transform-agent"
 	// transformAgentContainerName is the container name for Transform Agent
 	transformAgentContainerName = "transform-agent"
-	// transformAgentImage is the default container image for Transform Agent
-	transformAgentImage = "ghcr.io/observiq/bindplane-transform-agent:" + defaultBindplaneVersion + "-bindplane"
 	// transformAgentHTTPPort is the HTTP port for Transform Agent
 	transformAgentHTTPPort = 4568
 	// transformAgentHTTPPortName is the name of the HTTP port for Transform Agent
@@ -111,7 +109,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 						Containers: []corev1.Container{
 							{
 								Name:  transformAgentContainerName,
-								Image: transformAgentImage,
+								Image: getTransformAgentImage(bindplane),
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          transformAgentHTTPPortName,

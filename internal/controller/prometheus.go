@@ -43,8 +43,6 @@ const (
 	tsdbComponent = "tsdb"
 	// tsdbContainerName is the container name for the TSDB StatefulSet
 	tsdbContainerName = "tsdb"
-	// tsdbImage is the default container image for Prometheus
-	tsdbImage = "ghcr.io/observiq/bindplane-prometheus:" + defaultBindplaneVersion
 	// tsdbDataVolumeSuffix is the suffix for TSDB data volume names
 	tsdbDataVolumeSuffix = "tsdb-data"
 	// tsdbHTTPPort is the HTTP port for Prometheus
@@ -429,7 +427,7 @@ func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindp
 						Containers: []corev1.Container{
 							{
 								Name:  tsdbContainerName,
-								Image: tsdbImage,
+								Image: getTSDBImage(bindplane),
 								Args:  []string{"--web.config.file=" + tsdbWebConfigMountPath + "/" + tsdbWebConfigFileName},
 								Ports: []corev1.ContainerPort{
 									{

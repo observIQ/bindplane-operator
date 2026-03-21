@@ -37,8 +37,6 @@ const (
 	natsComponent = "nats"
 	// natsContainerName is the container name for NATS
 	natsContainerName = "server"
-	// natsImage is the default container image for NATS (same as jobs)
-	natsImage = bindplaneJobsImage
 	// natsClientPort is the NATS client port
 	natsClientPort = int32(4222)
 	// natsClientPortName is the name of the NATS client port
@@ -124,7 +122,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 						Containers: []corev1.Container{
 							{
 								Name:         natsContainerName,
-								Image:        natsImage,
+								Image:        getBindplaneEEImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{

@@ -26,6 +26,13 @@ import (
 
 // BindplaneSpec defines the desired state of Bindplane.
 type BindplaneSpec struct {
+	// Version specifies the Bindplane release version used for all component container images.
+	// Changing this value triggers a rolling update of all Bindplane workloads and a new
+	// database migration Job before downstream workloads are updated.
+	// +optional
+	// +kubebuilder:default="1.98.1"
+	Version string `json:"version,omitempty"`
+
 	// Config contains Bindplane's configuration (license, auth, network, store, eventBus)
 	// This config is shared by Node, Jobs, and Jobs Migrate
 	Config BindplaneConfigSpec `json:"config"`

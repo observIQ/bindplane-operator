@@ -42,8 +42,6 @@ const (
 	bindplaneJobsComponent = "jobs"
 	// bindplaneJobsContainerName is the container name for Bindplane Jobs
 	bindplaneJobsContainerName = "server"
-	// bindplaneJobsImage is the default container image for Bindplane Jobs
-	bindplaneJobsImage = "ghcr.io/observiq/bindplane-ee:" + defaultBindplaneVersion
 	// bindplaneJobsHTTPPort is the HTTP port for Bindplane Jobs
 	bindplaneJobsHTTPPort = int32(3001)
 	// bindplaneJobsHTTPPortName is the name of the HTTP port for Bindplane Jobs
@@ -141,7 +139,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 						Containers: []corev1.Container{
 							{
 								Name:         bindplaneJobsContainerName,
-								Image:        bindplaneJobsImage,
+								Image:        getBindplaneEEImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{
@@ -248,7 +246,7 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 						Affinity: getBindplaneJobsMigrateAffinity(bindplane),
 						Containers: []corev1.Container{{
 							Name:         bindplaneJobsContainerName,
-							Image:        bindplaneJobsImage,
+							Image:        getBindplaneEEImage(bindplane),
 							Command:      []string{"/bindplane", "migrate", "-y"},
 							VolumeMounts: configMounts,
 							Env: combineEnvVars(
@@ -312,7 +310,7 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 		return false, nil // requeue; next reconcile will detect MigratedImage mismatch
 	}
 
-	desiredImage := bindplaneJobsImage
+	desiredImage := getBindplaneEEImage(bindplane)
 
 	// Already migrated for this image — skip.
 	if bindplane.Status.MigratedImage == desiredImage {
