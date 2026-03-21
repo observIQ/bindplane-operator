@@ -54,8 +54,8 @@ const (
 	forceMigrateAnnotation = "k8s.bindplane.com/force-migrate"
 	// migrateJobBackoffLimit is the backoff limit for the migrate Job
 	migrateJobBackoffLimit = int32(3)
-	// migrateJobTTLSeconds is the TTL for the migrate Job after completion
-	migrateJobTTLSeconds = int32(300)
+	// migrateJobTTLSeconds is the TTL for the migrate Job after completion (24 hours)
+	migrateJobTTLSeconds = int32(86400)
 )
 
 // reconcileBindplaneJobsRegular reconciles the Bindplane Jobs deployment
