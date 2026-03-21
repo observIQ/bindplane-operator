@@ -2070,10 +2070,10 @@ var _ = Describe("migrate Job helpers", func() {
 			Expect(*job.Spec.BackoffLimit).To(Equal(int32(3)))
 		})
 
-		It("sets TTLSecondsAfterFinished to 300", func() {
+		It("sets TTLSecondsAfterFinished to 86400 (24 hours)", func() {
 			job := r.bindplaneJobsMigrateJob(bindplane)
 			Expect(job.Spec.TTLSecondsAfterFinished).NotTo(BeNil())
-			Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(300)))
+			Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(86400)))
 		})
 
 		It("has no ports or probes", func() {
