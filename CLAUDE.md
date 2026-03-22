@@ -292,14 +292,30 @@ After making any code changes, always run the following in order and resolve all
 
 When only specific files changed, prefer the targeted form to save time. Resolve every finding; do not skip or suppress issues without a documented reason (`// #nosec GXX -- reason`).
 
+## Shared Validation Package
+
+Cross-field and semantic validation that cannot be expressed as CRD schema markers lives in `internal/validation/validate.go`. Both the controller and the validating webhook import this package so that constraints are defined exactly once.
+
+**When to update `internal/validation/validate.go`:**
+- Whenever a new field has a constraint that requires cross-field logic (e.g. "field A is required when field B is enabled", mutually exclusive fields, conditional required fields)
+- When a field requires format validation beyond what kubebuilder markers support (e.g. host:port, parseable duration with a minimum value, UUID format)
+- Simple enum/pattern/range constraints that are fully expressible as kubebuilder markers do NOT need a corresponding function here — the CRD schema handles those at the API server level
+
+**Adding a new validation:**
+1. Add an exported `Validate<Thing>` function to `internal/validation/validate.go`
+2. Call it from `ValidateBindplane()` in the same file (this is the top-level orchestrator used by both the webhook and controller)
+3. Add tests in `internal/validation/validate_test.go`
+4. No changes needed in the controller or webhook — they both call `ValidateBindplane`
+
 ## Important Notes
 
 1. **Always run `make manifests` after changing types** - This regenerates CRDs and RBAC
 2. **Always run `make generate` after changing types** - This regenerates deep copy code
 3. **Service separation** - Each service gets its own file in `internal/controller/`
 4. **Shared code** - Constants, helpers, and generic reconcile functions go in `bindplane_controller.go`
-5. **RBAC** - Use kubebuilder markers, don't edit `role.yaml` directly
-6. **Labels** - Use constants and helper functions, never hardcode label keys
+5. **Shared validation** - Cross-field and semantic validation goes in `internal/validation/validate.go`
+6. **RBAC** - Use kubebuilder markers, don't edit `role.yaml` directly
+7. **Labels** - Use constants and helper functions, never hardcode label keys
 
 ## Common Tasks
 
