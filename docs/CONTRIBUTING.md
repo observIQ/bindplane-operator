@@ -6,7 +6,7 @@ Please note Bindplane follows the [CNCF Code of Conduct](https://github.com/cncf
 
 ## Issue
 
-Please open an issue for your contribution if one does not already exists.
+Please open an issue for your contribution if one does not already exist.
 
 ## Pull Request Process
 
