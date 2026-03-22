@@ -1223,6 +1223,7 @@ type BindplaneStatus struct {
 // +kubebuilder:printcolumn:name="Node Ready",type="integer",JSONPath=".status.nodeReadyReplicas",description="Ready Node replicas"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:webhook:path=/validate-k8s-bindplane-com-v1alpha1-bindplane,mutating=false,failurePolicy=fail,sideEffects=None,groups=k8s.bindplane.com,resources=bindplanes,verbs=create;update,versions=v1alpha1,name=vbindplane.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-k8s-bindplane-com-v1alpha1-bindplane,mutating=true,failurePolicy=fail,sideEffects=None,groups=k8s.bindplane.com,resources=bindplanes,verbs=create;update,versions=v1alpha1,name=mbindplane.kb.io,admissionReviewVersions=v1
 
 // Bindplane is the Schema for the bindplanes API.
 type Bindplane struct {

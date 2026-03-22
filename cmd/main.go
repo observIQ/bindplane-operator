@@ -69,6 +69,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var enableValidatingWebhook bool
+	var enableDefaultingWebhook bool
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -89,6 +90,8 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.BoolVar(&enableValidatingWebhook, "enable-validating-webhook", true,
 		"If set, the validating admission webhook is registered. Requires cert-manager and a TLS certificate.")
+	flag.BoolVar(&enableDefaultingWebhook, "enable-defaulting-webhook", true,
+		"If set, the defaulting (mutating) admission webhook is registered. Requires cert-manager and a TLS certificate.")
 	opts := zap.Options{
 		Development: false,
 		TimeEncoder: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
@@ -119,7 +122,7 @@ func main() {
 	var metricsCertWatcher, webhookCertWatcher *certwatcher.CertWatcher
 
 	var webhookServer webhook.Server
-	if enableValidatingWebhook {
+	if enableValidatingWebhook || enableDefaultingWebhook {
 		// Initial webhook TLS options
 		webhookTLSOpts := tlsOpts
 
@@ -210,7 +213,7 @@ func main() {
 		// after the manager stops then its usage might be unsafe.
 		// LeaderElectionReleaseOnCancel: true,
 	}
-	if enableValidatingWebhook {
+	if enableValidatingWebhook || enableDefaultingWebhook {
 		mgrOptions.WebhookServer = webhookServer
 	}
 
@@ -226,6 +229,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Bindplane")
 		os.Exit(1)
+	}
+
+	if enableDefaultingWebhook {
+		if err := webhookv1alpha1.SetupBindplaneDefaulterWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Bindplane")
+			os.Exit(1)
+		}
 	}
 
 	if enableValidatingWebhook {
