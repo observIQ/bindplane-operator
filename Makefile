@@ -121,6 +121,8 @@ test: setup-envtest ## Run tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= bindplane-operator-test-e2e
 KIND_K8S_VERSION ?=
+E2E_GO_TEST_FLAGS ?= -v -ginkgo.v
+E2E_LABEL_FILTER ?=
 
 .PHONY: setup-test-e2e
 setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
@@ -134,10 +136,17 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 				$(KIND) create cluster --name $(KIND_CLUSTER)) ;; \
 	esac
 
+.PHONY: run-test-e2e
+run-test-e2e:
+	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ $(E2E_GO_TEST_FLAGS) $(if $(strip $(E2E_LABEL_FILTER)),-ginkgo.label-filter="$(E2E_LABEL_FILTER)")
+
 .PHONY: test-e2e
-test-e2e: setup-test-e2e ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
-	$(MAKE) cleanup-test-e2e
+test-e2e: setup-test-e2e ## Run smoke and webhook e2e tests in Kind.
+	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='!requires-license' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
+
+.PHONY: test-e2e-bindplane
+test-e2e-bindplane: setup-test-e2e ## Run license-backed Bindplane reconciliation e2e tests in Kind.
+	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='requires-license' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests

@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,15 +30,12 @@ import (
 var (
 	// Optional Environment Variables:
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
+	// - CERT_MANAGER_VERSION=latest|vX.Y.Z: Chooses which CertManager manifest to install.
 	// These variables are useful if CertManager is already installed, avoiding
 	// re-installation and conflicts.
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
-
-	// projectImage is the name of the image which will be build and loaded
-	// with the code source changes to be tested.
-	projectImage = "example.com/bindplane-operator:v0.0.1"
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
@@ -76,9 +74,25 @@ var _ = BeforeSuite(func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
 		}
 	}
+
+	By("setting up the operator test environment")
+	setupOperatorEnvironment()
 })
 
 var _ = AfterSuite(func() {
+	By("cleaning up any Bindplane custom resources")
+	cleanupBindplane(bindplaneName, bindplaneNamespace, 2*time.Minute)
+	cleanupBindplane(webhookBindplaneName, bindplaneNamespace, 2*time.Minute)
+
+	By("cleaning up static postgres resources")
+	cleanupPostgres()
+
+	By("cleaning up Bindplane license secret")
+	deleteBindplaneLicenseSecret(bindplaneNamespace)
+
+	By("tearing down the operator test environment")
+	teardownOperatorEnvironment()
+
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")

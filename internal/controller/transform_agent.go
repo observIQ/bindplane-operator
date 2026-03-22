@@ -112,12 +112,8 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 					},
 					Spec: corev1.PodSpec{
 						ServiceAccountName: getResourceName(bindplane, transformAgentComponent),
-						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    new(defaultRunAsGroup),
-							RunAsGroup: new(defaultRunAsGroup),
-							RunAsUser:  new(defaultRunAsUser),
-						},
-						Affinity: getTransformAgentAffinity(bindplane),
+						SecurityContext:    newPodSecurityContext(),
+						Affinity:           getTransformAgentAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
 								Name:  transformAgentContainerName,

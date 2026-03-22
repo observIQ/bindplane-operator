@@ -418,12 +418,8 @@ func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindp
 					Spec: corev1.PodSpec{
 						ServiceAccountName: serviceName,
 						Volumes:            volumes,
-						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    new(defaultRunAsGroup),
-							RunAsGroup: new(defaultRunAsGroup),
-							RunAsUser:  new(defaultRunAsUser),
-						},
-						Affinity: getTSDBAffinity(bindplane),
+						SecurityContext:    newPodSecurityContext(),
+						Affinity:           getTSDBAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
 								Name:  tsdbContainerName,

@@ -125,12 +125,8 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 					Spec: corev1.PodSpec{
 						Volumes:            configVols,
 						ServiceAccountName: serviceName,
-						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    new(defaultRunAsGroup),
-							RunAsGroup: new(defaultRunAsGroup),
-							RunAsUser:  new(defaultRunAsUser),
-						},
-						Affinity: getNatsAffinity(bindplane),
+						SecurityContext:    newPodSecurityContext(),
+						Affinity:           getNatsAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
 								Name:         natsContainerName,
