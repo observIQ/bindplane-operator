@@ -36,11 +36,8 @@ const (
 
 	bindplaneFinalizer            = "k8s.bindplane.com/finalizer"
 	pauseReconciliationAnnotation = "k8s.bindplane.com/pause-reconciliation"
-	forceMigrateAnnotation        = "k8s.bindplane.com/force-migrate"
 	bindplaneLicenseEnvVar        = "BINDPLANE_LICENSE"
-	bindplaneUpgradeVersionEnvVar = "BINDPLANE_E2E_UPGRADE_VERSION"
 	ginkgoLabelRequiresLicense    = "requires-license"
-	ginkgoLabelExtended           = "extended"
 )
 
 var (

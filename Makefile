@@ -142,15 +142,11 @@ run-test-e2e:
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e ## Run smoke and webhook e2e tests in Kind.
-	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='!requires-license && !extended' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
+	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='!requires-license' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
 
 .PHONY: test-e2e-bindplane
 test-e2e-bindplane: setup-test-e2e ## Run license-backed Bindplane reconciliation e2e tests in Kind.
-	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='requires-license && !extended' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
-
-.PHONY: test-e2e-extended
-test-e2e-extended: setup-test-e2e ## Run extended lifecycle Bindplane e2e tests in Kind.
-	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='requires-license && extended' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
+	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='requires-license' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests

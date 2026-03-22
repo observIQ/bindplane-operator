@@ -336,14 +336,7 @@ func waitForPodDisruptionBudgetExists(name, namespace string, timeout time.Durat
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
-func waitForPodDisruptionBudgetDeleted(name, namespace string, timeout time.Duration) {
-	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "get", "poddisruptionbudget", name))
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("NotFound"))
-	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
-}
-
+//nolint:unparam
 func waitForBindplaneFinalizer(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
 		bindplane, err := getBindplane(name, namespace)
@@ -387,6 +380,7 @@ func waitForBindplaneDeleted(name, namespace string, timeout time.Duration) {
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
+//nolint:unparam
 func cleanupBindplane(name, namespace string, timeout time.Duration) {
 	unpauseBindplaneForCleanup(name, namespace)
 	deleteBindplane(name, namespace)
@@ -416,29 +410,6 @@ func getDeployment(name, namespace string) (*appsv1.Deployment, error) {
 		return nil, err
 	}
 	return &deployment, nil
-}
-
-func getDeploymentImage(name, namespace string) (string, error) {
-	return runCmd(kubectl(
-		namespace,
-		"get",
-		"deployment",
-		name,
-		"-o",
-		"jsonpath={.spec.template.spec.containers[0].image}",
-	))
-}
-
-func getDeploymentTemplateAnnotation(name, namespace, key string) (string, error) {
-	goTemplate := fmt.Sprintf(`{{with .spec.template.metadata.annotations}}{{index . %q}}{{end}}`, key)
-	return runCmd(kubectl(
-		namespace,
-		"get",
-		"deployment",
-		name,
-		"-o",
-		"go-template="+goTemplate,
-	))
 }
 
 //nolint:unparam
@@ -507,25 +478,6 @@ func unpauseBindplaneForCleanup(name, namespace string) {
 		return
 	}
 	Expect(err).NotTo(HaveOccurred(), "Failed to clear pause annotation on Bindplane %s during cleanup", name)
-}
-
-//nolint:unparam
-func patchBindplane(name, namespace, patch string) {
-	_, err := runCmd(kubectl(namespace, "patch", "bindplane", name, "--type=merge", "-p", patch))
-	Expect(err).NotTo(HaveOccurred(), "Failed to patch Bindplane %s", name)
-}
-
-//nolint:unparam
-func annotateBindplane(name, namespace, key, value string) {
-	_, err := runCmd(kubectl(
-		namespace,
-		"annotate",
-		"bindplane",
-		name,
-		fmt.Sprintf("%s=%s", key, value),
-		"--overwrite",
-	))
-	Expect(err).NotTo(HaveOccurred(), "Failed to annotate Bindplane %s", name)
 }
 
 func currentControllerPodName() string {
