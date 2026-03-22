@@ -1183,6 +1183,9 @@ type BindplaneStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=bindplanes,singular=bindplane,scope=Namespaced
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version",description="Bindplane version"
+// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Reconciled\")].status",description="Whether all resources have been reconciled"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Bindplane is the Schema for the bindplanes API.
 type Bindplane struct {
