@@ -14,7 +14,19 @@ spec:
     singular: bindplane
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Bindplane version
+      jsonPath: .spec.version
+      name: Version
+      type: string
+    - description: Whether all resources have been reconciled
+      jsonPath: .status.conditions[?(@.type=="Reconciled")].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         properties:
