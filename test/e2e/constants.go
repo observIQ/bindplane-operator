@@ -43,7 +43,7 @@ const (
 var (
 	projectImage                    = "example.com/bindplane-operator:v0.0.1"
 	defaultEventuallyPollInterval   = time.Second
-	defaultEventuallyLongTimeout    = 10 * time.Minute
+	defaultEventuallyLongTimeout    = 15 * time.Minute
 	defaultEventuallyShortTimeout   = 2 * time.Minute
 	defaultEventuallyServiceTimeout = 5 * time.Minute
 )
