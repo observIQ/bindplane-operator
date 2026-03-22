@@ -17,7 +17,7 @@ Please open an issue for your contribution if one does not already exists.
 5. Create new pull request
 6. Link to the issue your pull request resolves.
 
-The pull request title should have one of the following prefixs:
+The pull request title should have one of the following prefixes:
 - `feat: `: Features.
 - `fix: `: Bug or other Fixes.
 - `deps: `: Dependency changes, such as Go modules, container images, Action versions.
