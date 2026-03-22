@@ -84,6 +84,51 @@ Enabling it turns on mTLS for the Bindplane → TSDB path: the operator creates 
 - If you use a user-managed remote TSDB (for example, VictoriaMetrics) via `spec.config.tsdb.remote.enable=true`, configure connectivity under `spec.config.tsdb.remote` and use TLS settings appropriate for that backend.
 - Certificate renewal and rotation are handled by cert-manager; the operator does not modify the Secret data after cert-manager writes it.
 
+## Validating Admission Webhook
+
+The operator includes a Kubernetes [validating admission webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) that enforces correctness on `Bindplane` custom resources at admission time — before they are persisted by the API server.
+
+### What it validates
+
+The webhook rejects `Bindplane` create and update requests that violate the following rules:
+
+| Rule | Field |
+|------|-------|
+| `spec.version` must not be empty | `spec.version` |
+| Node replicas must be >= 1 (when set) | `spec.bindplane.replicas` |
+| NATS replicas must be >= 1 (when set) | `spec.nats.replicas` |
+| Transform Agent replicas must be >= 1 (when set) | `spec.transformAgent.replicas` |
+
+Delete operations are always allowed. The failure policy is `Fail`: if the webhook is unreachable, admission is denied.
+
+### cert-manager requirement
+
+The webhook server runs on port 9443 inside the operator pod and requires a valid TLS certificate at startup. The default install path (`install.yaml`) uses [cert-manager](https://cert-manager.io/) to provision it:
+
+- A self-signed `Issuer` and a `Certificate` resource are created in the operator namespace.
+- cert-manager writes the certificate into the Secret `bindplane-operator-webhook-server-cert`.
+- The operator pod mounts that Secret at `/tmp/k8s-webhook-server/serving-certs`.
+- cert-manager injects the CA bundle into the `ValidatingWebhookConfiguration` so the Kubernetes API server can verify the operator's TLS certificate.
+
+**cert-manager must be installed before applying `install.yaml`.** See the [cert-manager installation guide](https://cert-manager.io/docs/installation/).
+
+### Deploying without the webhook
+
+If cert-manager is unavailable, use `install-no-webhook.yaml` instead:
+
+```bash
+kubectl apply \
+  --server-side \
+  -f https://github.com/observiq/bindplane-operator/releases/latest/download/install-no-webhook.yaml
+```
+
+This install path:
+
+- Does not create a `ValidatingWebhookConfiguration` or webhook `Service`.
+- Does not require cert-manager.
+- Starts the operator with `--enable-validating-webhook=false` (port 9443 is not opened).
+- Skips admission-time validation; invalid `Bindplane` specs are not rejected at create/update time.
+
 ## Summary
 
 | Secret / TLS | User-configurable? | Env vars (where applicable) | Where configured | Documentation |
@@ -98,3 +143,4 @@ Enabling it turns on mTLS for the Bindplane → TSDB path: the operator creates 
 | TSDB TLS / mTLS (cert-manager or user secret) | Yes (opt-in) | `BINDPLANE_PROMETHEUS_ENABLE_TLS`, `BINDPLANE_PROMETHEUS_TLS_*` (when enabled) | `spec.tsdb.tls`, `spec.config.tsdb.tls` | This document (cert-manager TLS); [Configuration – TSDB](configuration.md#tsdb) |
 | NATS TLS / mTLS (cert-manager only) | Yes (opt-in) | `BINDPLANE_NATS_ENABLE_TLS`, `BINDPLANE_NATS_TLS_*` | `spec.config.nats.tls.certManager` | This document (cert-manager TLS) |
 | Redis TLS | Yes | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_*` | `spec.config.advanced.cache.redis.tls` | [Configuration – Advanced](configuration.md#advanced) |
+| Validating admission webhook TLS (operator install) | No (operator infrastructure) | — | `config/default` (cert-manager required); use `config/overlays/no-webhook` / `install-no-webhook.yaml` to disable | This document |
