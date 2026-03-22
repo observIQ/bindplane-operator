@@ -31,6 +31,7 @@ var (
 	// Optional Environment Variables:
 	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
 	// - CERT_MANAGER_VERSION=latest|vX.Y.Z: Chooses which CertManager manifest to install.
+	// - E2E_ENABLE_TLS=true: Enables the TLS-focused Bindplane E2E path.
 	// These variables are useful if CertManager is already installed, avoiding
 	// re-installation and conflicts.
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
@@ -86,6 +87,9 @@ var _ = AfterSuite(func() {
 
 	By("cleaning up static postgres resources")
 	cleanupPostgres()
+
+	By("cleaning up TLS test resources")
+	cleanupTLSTestEnvironment()
 
 	By("cleaning up Bindplane license secret")
 	deleteBindplaneLicenseSecret(bindplaneNamespace)

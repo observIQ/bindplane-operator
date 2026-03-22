@@ -16,7 +16,10 @@ limitations under the License.
 
 package e2e
 
-import "time"
+import (
+	"os"
+	"time"
+)
 
 const (
 	operatorNamespace  = "bindplane-operator-system"
@@ -26,7 +29,25 @@ const (
 	bindplaneName        = "bindplane"
 	webhookBindplaneName = "bindplane-webhook"
 
-	bindplaneLicenseSecretName = "bindplane-license" // #nosec G101 -- Kubernetes Secret resource name, not a credential
+	// #nosec G101 -- Kubernetes Secret resource names, not credentials
+	bindplaneLicenseSecretName = "bindplane-license"
+	// #nosec G101 -- Kubernetes Secret resource names, not credentials
+	bindplanePostgresTLSSecretName = "bindplane-postgres-tls"
+	bindplaneTLSIssuerName         = "bindplane-internal-issuer"
+	bindplaneTLSCAName             = "bindplane-internal-ca"
+	// #nosec G101 -- Kubernetes Secret resource names, not credentials
+	postgresTLSServerSecretName = "postgres-server-tls"
+	// #nosec G101 -- Kubernetes Secret resource names, not credentials
+	postgresTLSClientSecretName = "bindplane-postgres-client"
+	postgresTLSIssuerName       = "postgres-ca-issuer"
+	// #nosec G101 -- Kubernetes Secret resource names, not credentials
+	postgresTLSCASecretName = "postgres-ca"
+
+	bindplaneFixtureName    = "bindplane-minimal-secret-license.yaml"
+	bindplaneTLSFixtureName = "bindplane-minimal-secret-license-tls.yaml"
+	postgresFixtureName     = "postgres.yaml"
+	postgresTLSFixtureName  = "postgres.tls.yaml"
+	tlsFixtureName          = "tls-cert-manager.yaml"
 
 	operatorMetricsServiceAccountName = "bindplane-operator-controller-manager"
 	operatorMetricsServiceName        = "bindplane-operator-controller-manager-metrics-service"
@@ -37,11 +58,13 @@ const (
 	bindplaneFinalizer            = "k8s.bindplane.com/finalizer"
 	pauseReconciliationAnnotation = "k8s.bindplane.com/pause-reconciliation"
 	bindplaneLicenseEnvVar        = "BINDPLANE_LICENSE"
+	e2eEnableTLSEnvVar            = "E2E_ENABLE_TLS"
 	ginkgoLabelRequiresLicense    = "requires-license"
 )
 
 var (
 	projectImage                    = "example.com/bindplane-operator:v0.0.1"
+	enableTLSE2E                    = os.Getenv(e2eEnableTLSEnvVar) == "true"
 	defaultEventuallyPollInterval   = time.Second
 	defaultEventuallyLongTimeout    = 15 * time.Minute
 	defaultEventuallyShortTimeout   = 2 * time.Minute

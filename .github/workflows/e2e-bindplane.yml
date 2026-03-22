@@ -28,3 +28,29 @@ jobs:
           fi
           go mod tidy
           make test-e2e-bindplane
+
+  test-e2e-bindplane-tls:
+    name: Test E2E Bindplane TLS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Bindplane TLS e2e tests
+        env:
+          KIND_K8S_VERSION: "1.34.0"
+          CERT_MANAGER_VERSION: latest
+          E2E_ENABLE_TLS: "true"
+          BINDPLANE_LICENSE: ${{ secrets.BINDPLANE_LICENSE }}
+        run: |
+          if [ -z "${BINDPLANE_LICENSE}" ]; then
+            echo "BINDPLANE_LICENSE is not configured."
+            exit 1
+          fi
+          go mod tidy
+          make test-e2e-bindplane-tls

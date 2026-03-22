@@ -119,6 +119,8 @@ test: setup-envtest ## Run tests.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
+# TLS-focused Bindplane coverage is opt-in:
+# - E2E_ENABLE_TLS=true
 KIND_CLUSTER ?= bindplane-operator-test-e2e
 KIND_K8S_VERSION ?=
 E2E_GO_TEST_FLAGS ?= -v -ginkgo.v
@@ -147,6 +149,10 @@ test-e2e: setup-test-e2e ## Run smoke and webhook e2e tests in Kind.
 .PHONY: test-e2e-bindplane
 test-e2e-bindplane: setup-test-e2e ## Run license-backed Bindplane reconciliation e2e tests in Kind.
 	@status=0; $(MAKE) run-test-e2e E2E_LABEL_FILTER='requires-license' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
+
+.PHONY: test-e2e-bindplane-tls
+test-e2e-bindplane-tls: setup-test-e2e ## Run license-backed Bindplane reconciliation e2e tests with TLS enabled in Kind.
+	@status=0; E2E_ENABLE_TLS=true $(MAKE) run-test-e2e E2E_LABEL_FILTER='requires-license' || status=$$?; $(MAKE) cleanup-test-e2e; exit $$status
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests

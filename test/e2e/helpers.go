@@ -119,6 +119,17 @@ func fixturePath(name string) string {
 	return filepath.Join(projectDir, "test", "e2e", "kubectl", name)
 }
 
+func tlsE2EEnabled() bool {
+	return enableTLSE2E
+}
+
+func selectedBindplaneFixture() string {
+	if tlsE2EEnabled() {
+		return bindplaneTLSFixtureName
+	}
+	return bindplaneFixtureName
+}
+
 func applyFixture(name, namespace string) (string, error) {
 	return runCmd(kubectl(namespace, "apply", "-f", fixturePath(name)))
 }
@@ -189,6 +200,22 @@ func setupOperatorEnvironment() {
 	)
 }
 
+func setupTLSTestEnvironment() {
+	if !tlsE2EEnabled() {
+		return
+	}
+
+	By("applying TLS cert-manager fixtures for Bindplane")
+	_, err := applyFixture(tlsFixtureName, "")
+	Expect(err).NotTo(HaveOccurred(), "Failed to apply TLS fixture")
+
+	By("waiting for the Bindplane TLS issuer to be ready")
+	waitForIssuerReady(bindplaneTLSIssuerName, bindplaneNamespace, defaultEventuallyLongTimeout)
+
+	By("waiting for the internal Bindplane CA certificate to be issued")
+	waitForCertificateReady(bindplaneTLSCAName, bindplaneNamespace, defaultEventuallyLongTimeout)
+}
+
 func teardownOperatorEnvironment() {
 	By("cleaning up operator metrics ClusterRoleBinding")
 	_, _ = runCmd(kubectl("", "delete", "clusterrolebinding", operatorMetricsRoleBindingName, "--ignore-not-found=true"))
@@ -220,10 +247,42 @@ func teardownOperatorEnvironment() {
 	_, _ = runCmd(kubectl("", "delete", "namespace", operatorNamespace, "--ignore-not-found=true"))
 }
 
+func cleanupTLSTestEnvironment() {
+	if !tlsE2EEnabled() {
+		return
+	}
+
+	By("cleaning up TLS fixtures for Bindplane")
+	deleteFixture(tlsFixtureName, "")
+	_, _ = runCmd(kubectl(
+		bindplaneNamespace,
+		"delete",
+		"secret",
+		bindplanePostgresTLSSecretName,
+		"--ignore-not-found=true",
+	))
+}
+
 func ensurePostgresReady() {
+	fixtureName := postgresFixtureName
+	if tlsE2EEnabled() {
+		fixtureName = postgresTLSFixtureName
+	}
+
 	By("deploying static postgres")
-	_, err := applyFixture("postgres.yaml", "")
+	_, err := applyFixture(fixtureName, "")
 	Expect(err).NotTo(HaveOccurred(), "Failed to apply postgres fixture")
+
+	if tlsE2EEnabled() {
+		By("waiting for the postgres TLS issuer and certificates to be ready")
+		waitForIssuerReady(postgresTLSIssuerName, postgresNamespace, defaultEventuallyLongTimeout)
+		waitForCertificateReady(postgresTLSCASecretName, postgresNamespace, defaultEventuallyLongTimeout)
+		waitForCertificateReady(postgresTLSServerSecretName, postgresNamespace, defaultEventuallyLongTimeout)
+		waitForCertificateReady(postgresTLSClientSecretName, postgresNamespace, defaultEventuallyLongTimeout)
+		waitForSecretExists(postgresTLSServerSecretName, postgresNamespace, defaultEventuallyShortTimeout)
+		waitForSecretExists(postgresTLSClientSecretName, postgresNamespace, defaultEventuallyShortTimeout)
+		recreatePostgresTLSSecret()
+	}
 
 	By("waiting for postgres statefulset to be ready")
 	waitForStatefulSetReady("postgres", postgresNamespace, defaultEventuallyServiceTimeout)
@@ -234,7 +293,8 @@ func ensurePostgresReady() {
 
 func cleanupPostgres() {
 	By("removing static postgres")
-	deleteFixture("postgres.yaml", "")
+	deleteFixture(postgresFixtureName, "")
+	deleteFixture(postgresTLSFixtureName, "")
 	_, _ = runCmd(kubectl("", "delete", "namespace", postgresNamespace, "--ignore-not-found=true"))
 }
 
@@ -306,6 +366,39 @@ func waitForServiceEndpoints(name, namespace, expectedPort string, timeout time.
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(output).To(ContainSubstring(expectedPort))
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
+}
+
+func waitForIssuerReady(name, namespace string, timeout time.Duration) {
+	Eventually(func(g Gomega) {
+		_, err := runCmd(kubectl(
+			namespace,
+			"wait",
+			"issuer/"+name,
+			"--for=condition=Ready",
+			"--timeout", timeout.String(),
+		))
+		g.Expect(err).NotTo(HaveOccurred())
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed(), "Issuer %s did not become ready", name)
+}
+
+func waitForCertificateReady(name, namespace string, timeout time.Duration) {
+	Eventually(func(g Gomega) {
+		_, err := runCmd(kubectl(
+			namespace,
+			"wait",
+			"certificate/"+name,
+			"--for=condition=Ready",
+			"--timeout", timeout.String(),
+		))
+		g.Expect(err).NotTo(HaveOccurred())
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed(), "Certificate %s did not become ready", name)
+}
+
+func waitForSecretExists(name, namespace string, timeout time.Duration) {
+	Eventually(func(g Gomega) {
+		_, err := runCmd(kubectl(namespace, "get", "secret", name))
+		g.Expect(err).NotTo(HaveOccurred())
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed(), "Secret %s did not become ready", name)
 }
 
 func waitForBindplaneWebhookReady(fixtureName, namespace string, timeout time.Duration) {
@@ -437,6 +530,18 @@ func getJob(name, namespace string) (*batchv1.Job, error) {
 	return &job, nil
 }
 
+func getSecret(name, namespace string) (*corev1.Secret, error) {
+	output, err := runCmd(kubectl(namespace, "get", "secret", name, "-o", "json"))
+	if err != nil {
+		return nil, err
+	}
+	var secret corev1.Secret
+	if err := json.Unmarshal([]byte(output), &secret); err != nil {
+		return nil, err
+	}
+	return &secret, nil
+}
+
 func hasJobCondition(job *batchv1.Job, conditionType batchv1.JobConditionType) bool {
 	for _, condition := range job.Status.Conditions {
 		if condition.Type == conditionType && condition.Status == corev1.ConditionTrue {
@@ -542,6 +647,52 @@ func getPodLogs(name, namespace string) string {
 	output, err := runCmd(kubectl(namespace, "logs", name))
 	Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from pod %s", name)
 	return output
+}
+
+func recreatePostgresTLSSecret() {
+	By("copying the postgres client TLS assets into the Bindplane namespace")
+	caSecret, err := getSecret(postgresTLSCASecretName, postgresNamespace)
+	Expect(err).NotTo(HaveOccurred(), "Failed to read postgres CA secret")
+	clientSecret, err := getSecret(postgresTLSClientSecretName, postgresNamespace)
+	Expect(err).NotTo(HaveOccurred(), "Failed to read postgres client TLS secret")
+
+	caBytes, ok := caSecret.Data["tls.crt"]
+	Expect(ok).To(BeTrue(), "Expected tls.crt in postgres CA secret")
+	Expect(caBytes).NotTo(BeEmpty(), "Expected postgres CA certificate data")
+
+	clientCertBytes, ok := clientSecret.Data["tls.crt"]
+	Expect(ok).To(BeTrue(), "Expected tls.crt in postgres client TLS secret")
+	clientKeyBytes, ok := clientSecret.Data["tls.key"]
+	Expect(ok).To(BeTrue(), "Expected tls.key in postgres client TLS secret")
+
+	caFile := filepath.Join(os.TempDir(), bindplanePostgresTLSSecretName+"-ca.crt")
+	clientCertFile := filepath.Join(os.TempDir(), bindplanePostgresTLSSecretName+"-tls.crt")
+	clientKeyFile := filepath.Join(os.TempDir(), bindplanePostgresTLSSecretName+"-tls.key")
+	err = os.WriteFile(caFile, caBytes, 0o600)
+	Expect(err).NotTo(HaveOccurred(), "Failed to write postgres CA certificate file")
+	err = os.WriteFile(clientCertFile, clientCertBytes, 0o600)
+	Expect(err).NotTo(HaveOccurred(), "Failed to write postgres client certificate file")
+	err = os.WriteFile(clientKeyFile, clientKeyBytes, 0o600)
+	Expect(err).NotTo(HaveOccurred(), "Failed to write postgres client key file")
+
+	_, _ = runCmd(kubectl(
+		bindplaneNamespace,
+		"delete",
+		"secret",
+		bindplanePostgresTLSSecretName,
+		"--ignore-not-found=true",
+	))
+	_, err = runCmd(kubectl(
+		bindplaneNamespace,
+		"create",
+		"secret",
+		"generic",
+		bindplanePostgresTLSSecretName,
+		fmt.Sprintf("--from-file=ca.crt=%s", caFile),
+		fmt.Sprintf("--from-file=tls.crt=%s", clientCertFile),
+		fmt.Sprintf("--from-file=tls.key=%s", clientKeyFile),
+	))
+	Expect(err).NotTo(HaveOccurred(), "Failed to create postgres TLS secret")
 }
 
 func getMetricsOutput() string {

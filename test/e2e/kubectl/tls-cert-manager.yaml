@@ -1,0 +1,33 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: bindplane-selfsigned-issuer
+  namespace: default
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bindplane-internal-ca
+  namespace: default
+spec:
+  isCA: true
+  commonName: bindplane-internal-ca
+  secretName: bindplane-internal-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: bindplane-selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: bindplane-internal-issuer
+  namespace: default
+spec:
+  ca:
+    secretName: bindplane-internal-ca-secret

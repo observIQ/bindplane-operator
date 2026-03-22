@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -36,6 +37,15 @@ func expectedTransformAgentImage(version string) string {
 
 func expectedTSDBImage(version string) string {
 	return "ghcr.io/observiq/bindplane-prometheus:" + version
+}
+
+func envVarValue(envVars []corev1.EnvVar, name string) string {
+	for _, envVar := range envVars {
+		if envVar.Name == name {
+			return envVar.Value
+		}
+	}
+	return ""
 }
 
 func waitForMinimalBindplaneBaseline() {
@@ -60,12 +70,13 @@ func waitForMinimalBindplaneBaseline() {
 var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicense), func() {
 	BeforeAll(func() {
 		requireBindplaneLicense()
+		setupTLSTestEnvironment()
 		ensurePostgresReady()
 		recreateBindplaneLicenseSecret(bindplaneNamespace)
 		cleanupBindplane(bindplaneName, bindplaneNamespace, 30*time.Second)
 
 		By("applying the minimal Bindplane custom resource")
-		_, err := applyFixture("bindplane-minimal-secret-license.yaml", bindplaneNamespace)
+		_, err := applyFixture(selectedBindplaneFixture(), bindplaneNamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("waiting for the minimal Bindplane baseline to reconcile")
@@ -160,26 +171,26 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 			"--image=curlimages/curl:latest",
 			"--overrides",
 			fmt.Sprintf(`{
-				"spec": {
-					"containers": [{
-						"name": "curl",
-						"image": "curlimages/curl:latest",
-						"command": ["/bin/sh", "-c"],
-						"args": ["curl -sv -o /dev/null http://%s.%s.svc.cluster.local:3001 2>&1 || true"],
-						"securityContext": {
-							"allowPrivilegeEscalation": false,
-							"capabilities": {
-								"drop": ["ALL"]
-							},
-							"runAsNonRoot": true,
-							"runAsUser": 1000,
-							"seccompProfile": {
-								"type": "RuntimeDefault"
-							}
+			"spec": {
+				"containers": [{
+					"name": "curl",
+					"image": "curlimages/curl:latest",
+					"command": ["/bin/sh", "-c"],
+					"args": ["curl -sv -o /dev/null http://%s.%s.svc.cluster.local:3001 2>&1 || true"],
+					"securityContext": {
+						"allowPrivilegeEscalation": false,
+						"capabilities": {
+							"drop": ["ALL"]
+						},
+						"runAsNonRoot": true,
+						"runAsUser": 1000,
+						"seccompProfile": {
+							"type": "RuntimeDefault"
 						}
-					}]
-				}
-			}`, bindplaneResourceName("node"), bindplaneNamespace))
+					}
+				}]
+			}
+		}`, bindplaneResourceName("node"), bindplaneNamespace))
 		_, err := runCmd(cmd)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -204,5 +215,68 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 			ContainSubstring("< HTTP/"),
 			ContainSubstring("Empty reply from server"),
 		))
+	})
+
+	It("configures TLS for supported Bindplane surfaces when TLS mode is enabled", func() {
+		if !tlsE2EEnabled() {
+			Skip(fmt.Sprintf("%s is not enabled", e2eEnableTLSEnvVar))
+		}
+
+		By("waiting for operator-managed cert-manager certificates to be ready")
+		waitForCertificateReady(
+			bindplaneResourceName("tsdb-remote-write-server"),
+			bindplaneNamespace,
+			defaultEventuallyLongTimeout,
+		)
+		waitForCertificateReady(bindplaneResourceName("tsdb-probe-client"), bindplaneNamespace, defaultEventuallyLongTimeout)
+		waitForCertificateReady(
+			bindplaneResourceName("tsdb-remote-write-client"),
+			bindplaneNamespace,
+			defaultEventuallyLongTimeout,
+		)
+		waitForCertificateReady(bindplaneResourceName("nats-tls"), bindplaneNamespace, defaultEventuallyLongTimeout)
+		waitForSecretExists(
+			bindplaneResourceName("tsdb-remote-write-server"),
+			bindplaneNamespace,
+			defaultEventuallyShortTimeout,
+		)
+		waitForSecretExists(bindplaneResourceName("tsdb-probe-client"), bindplaneNamespace, defaultEventuallyShortTimeout)
+		waitForSecretExists(
+			bindplaneResourceName("tsdb-remote-write-client"),
+			bindplaneNamespace,
+			defaultEventuallyShortTimeout,
+		)
+		waitForSecretExists(bindplaneResourceName("nats-tls"), bindplaneNamespace, defaultEventuallyShortTimeout)
+
+		By("checking the node deployment environment")
+		nodeDeployment, err := getDeployment(bindplaneResourceName("node"), bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		nodeEnv := nodeDeployment.Spec.Template.Spec.Containers[0].Env
+		Expect(envVarValue(nodeEnv, "BINDPLANE_TLS_CERT")).To(BeEmpty())
+		Expect(envVarValue(nodeEnv, "BINDPLANE_TLS_KEY")).To(BeEmpty())
+		Expect(envVarValue(nodeEnv, "BINDPLANE_POSTGRES_SSL_MODE")).To(Equal("verify-full"))
+		Expect(envVarValue(nodeEnv, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(Equal("/etc/bindplane/postgres-tls/ca.crt"))
+		Expect(envVarValue(nodeEnv, "BINDPLANE_POSTGRES_SSL_CERT")).To(Equal("/etc/bindplane/postgres-tls/tls.crt"))
+		Expect(envVarValue(nodeEnv, "BINDPLANE_POSTGRES_SSL_KEY")).To(Equal("/etc/bindplane/postgres-tls/tls.key"))
+		Expect(envVarValue(nodeEnv, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
+		Expect(envVarValue(nodeEnv, "BINDPLANE_PROMETHEUS_TLS_CA")).To(Equal("/etc/bindplane/tsdb-remote-write-tls/ca.crt"))
+		Expect(envVarValue(nodeEnv, "BINDPLANE_NATS_ENABLE_TLS")).To(Equal("true"))
+		Expect(envVarValue(nodeEnv, "BINDPLANE_NATS_TLS_CA")).To(Equal("/etc/bindplane/nats-tls/ca.crt"))
+
+		By("checking the jobs and NATS workloads inherited TLS settings")
+		jobsDeployment, err := getDeployment(bindplaneResourceName("jobs"), bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		jobsEnv := jobsDeployment.Spec.Template.Spec.Containers[0].Env
+		Expect(envVarValue(jobsEnv, "BINDPLANE_POSTGRES_SSL_MODE")).To(Equal("verify-full"))
+		Expect(envVarValue(jobsEnv, "BINDPLANE_POSTGRES_SSL_CERT")).To(Equal("/etc/bindplane/postgres-tls/tls.crt"))
+		Expect(envVarValue(jobsEnv, "BINDPLANE_POSTGRES_SSL_KEY")).To(Equal("/etc/bindplane/postgres-tls/tls.key"))
+		Expect(envVarValue(jobsEnv, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
+		Expect(envVarValue(jobsEnv, "BINDPLANE_NATS_ENABLE_TLS")).To(Equal("true"))
+
+		natsStatefulSet, err := getStatefulSet(bindplaneResourceName("nats"), bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		natsEnv := natsStatefulSet.Spec.Template.Spec.Containers[0].Env
+		Expect(envVarValue(natsEnv, "BINDPLANE_NATS_ENABLE_TLS")).To(Equal("true"))
+		Expect(envVarValue(natsEnv, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
 	})
 })

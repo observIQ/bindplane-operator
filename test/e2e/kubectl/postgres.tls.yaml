@@ -1,0 +1,205 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: postgres
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: postgres-selfsigned-issuer
+  namespace: postgres
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgres-ca
+  namespace: postgres
+spec:
+  isCA: true
+  commonName: postgres-ca
+  secretName: postgres-ca
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: postgres-selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: postgres-ca-issuer
+  namespace: postgres
+spec:
+  ca:
+    secretName: postgres-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgres-server-tls
+  namespace: postgres
+spec:
+  secretName: postgres-server-tls
+  dnsNames:
+    - postgres
+    - postgres.postgres
+    - postgres.postgres.svc
+    - postgres.postgres.svc.cluster.local
+  issuerRef:
+    name: postgres-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bindplane-postgres-client
+  namespace: postgres
+spec:
+  secretName: bindplane-postgres-client
+  commonName: bindplane-postgres-client
+  usages:
+    - client auth
+  issuerRef:
+    name: postgres-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: postgres
+data:
+  postgresql.conf: |
+    listen_addresses = '*'
+    port = 5432
+    ssl = on
+    ssl_cert_file = '/etc/postgres-tls/tls.crt'
+    ssl_key_file = '/etc/postgres-tls/tls.key'
+    ssl_ca_file = '/etc/postgres-tls/ca.crt'
+    hba_file = '/etc/postgres-config/pg_hba.conf'
+  pg_hba.conf: |
+    local   all             all                                     trust
+    hostssl all             all             all                     scram-sha-256 clientcert=verify-ca
+    host    all             all             all                     reject
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: postgres
+spec:
+  serviceName: postgres
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      initContainers:
+        - name: take-data-dir-ownership
+          image: alpine:3
+          command:
+            - chown
+            - -R
+            - 70:70
+            - /data
+          volumeMounts:
+            - name: database
+              mountPath: /data
+        - name: prepare-tls-assets
+          image: alpine:3
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /certs/tls.crt /workdir/tls.crt
+              cp /certs/tls.key /workdir/tls.key
+              cp /certs/ca.crt /workdir/ca.crt
+              chown 70:70 /workdir/tls.crt /workdir/tls.key /workdir/ca.crt
+              chmod 600 /workdir/tls.key
+              chmod 644 /workdir/tls.crt /workdir/ca.crt
+          volumeMounts:
+            - name: postgres-server-tls
+              mountPath: /certs
+              readOnly: true
+            - name: postgres-tls-workdir
+              mountPath: /workdir
+      containers:
+        - image: postgres:17
+          name: postgres
+          command:
+            - postgres
+          args:
+            - -c
+            - config_file=/etc/postgres-config/postgresql.conf
+          ports:
+            - containerPort: 5432
+              name: postgres
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              memory: 100Mi
+          env:
+            - name: POSTGRES_PASSWORD
+              value: password
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: database
+            - mountPath: /etc/postgres-tls
+              name: postgres-tls-workdir
+              readOnly: true
+            - mountPath: /etc/postgres-config
+              name: postgres-config
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: 5432
+      volumes:
+        - name: database
+          emptyDir: {}
+        - name: postgres-server-tls
+          secret:
+            secretName: postgres-server-tls
+        - name: postgres-tls-workdir
+          emptyDir: {}
+        - name: postgres-config
+          configMap:
+            name: postgres-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: postgres
+  name: postgres
+  namespace: postgres
+spec:
+  ports:
+    - port: 5432
+      protocol: TCP
+      targetPort: postgres
+      name: postgres
+  selector:
+    app: postgres
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: postgres
+type: Opaque
+data:
+  username: cG9zdGdyZXM=
+  password: cGFzc3dvcmQ=
