@@ -75,6 +75,11 @@ func (r *BindplaneReconciler) reconcileNode(ctx context.Context, bindplane *bind
 		}
 	}
 
+	// Reconcile HorizontalPodAutoscaler
+	if err := r.reconcileNodeHPA(ctx, bindplane, log); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -83,7 +88,16 @@ func (r *BindplaneReconciler) nodeServiceAccount(bindplane *bindplanev1alpha1.Bi
 }
 
 func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
-	replicas := *bindplane.Spec.Bindplane.Replicas
+	// When autoscaling is enabled, do not set Replicas on the Deployment so the
+	// HorizontalPodAutoscaler has exclusive control over the replica count.
+	// Setting Replicas to nil here means reconcileDeployment will write nil back to
+	// the live object, which is the correct behavior — the HPA then manages scale.
+	var replicaPtr *int32
+	if bindplane.Spec.Bindplane.Autoscaling == nil || !bindplane.Spec.Bindplane.Autoscaling.Enabled {
+		replicas := *bindplane.Spec.Bindplane.Replicas
+		replicaPtr = &replicas
+	}
+
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
@@ -99,7 +113,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: replicaPtr,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
