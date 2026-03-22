@@ -31,6 +31,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -416,6 +417,7 @@ type BindplaneReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=issuers;clusterissuers,verbs=get;list;watch
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -924,6 +926,44 @@ func (r *BindplaneReconciler) handleDeletion(ctx context.Context, bindplane *bin
 	// Future: add cleanup of any resources not covered by ownerReference GC here.
 	controllerutil.RemoveFinalizer(bindplane, bindplaneFinalizer)
 	return r.Update(ctx, bindplane)
+}
+
+// reconcilePodDisruptionBudget reconciles a PodDisruptionBudget resource.
+func (r *BindplaneReconciler) reconcilePodDisruptionBudget(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, pdb *policyv1.PodDisruptionBudget, log logr.Logger) error {
+	if err := controllerutil.SetControllerReference(bindplane, pdb, r.Scheme); err != nil {
+		return err
+	}
+
+	found := &policyv1.PodDisruptionBudget{}
+	err := r.Get(ctx, types.NamespacedName{Name: pdb.Name, Namespace: pdb.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating PodDisruptionBudget", "name", pdb.Name, "namespace", pdb.Namespace)
+		return r.Create(ctx, pdb)
+	} else if err != nil {
+		return err
+	}
+
+	found.Spec = pdb.Spec
+	found.Labels = pdb.Labels
+	return r.Update(ctx, found)
+}
+
+// newPodDisruptionBudget creates a PodDisruptionBudget for a component with minAvailable: 1.
+func newPodDisruptionBudget(bindplane *bindplanev1alpha1.Bindplane, component string) *policyv1.PodDisruptionBudget {
+	minAvailable := intstr.FromInt32(1)
+	return &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      getResourceName(bindplane, component),
+			Namespace: bindplane.Namespace,
+			Labels:    getLabels(bindplane, component),
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: &minAvailable,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: getSelectorLabels(bindplane, component),
+			},
+		},
+	}
 }
 
 // getKubernetesEnvVars returns the common Kubernetes environment variables

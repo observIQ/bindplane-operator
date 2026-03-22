@@ -63,6 +63,14 @@ func (r *BindplaneReconciler) reconcileNode(ctx context.Context, bindplane *bind
 		return err
 	}
 
+	// Reconcile PodDisruptionBudget
+	if !bindplane.Spec.Bindplane.DisablePodDisruptionBudget {
+		pdb := newPodDisruptionBudget(bindplane, nodeComponent)
+		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
