@@ -41,6 +41,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
+	"github.com/observiq/bindplane-operator/internal/defaults"
 	"github.com/observiq/bindplane-operator/internal/validation"
 )
 
@@ -475,6 +476,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		return ctrl.Result{}, nil
 	}
+
+	// Apply defaults in-memory. The mutating webhook persists these when enabled; this
+	// call is a safety net for clusters where the webhook is disabled or for objects
+	// that pre-date the webhook. No write-back is performed — defaults are applied
+	// only for the duration of this reconciliation loop.
+	defaults.ApplyDefaults(bindplane)
 
 	// Validate the Bindplane resource. The webhook enforces this at admission time; this
 	// block is a safety net for clusters where the webhook is disabled or bypassed.

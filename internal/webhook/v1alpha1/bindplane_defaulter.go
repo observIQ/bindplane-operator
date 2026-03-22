@@ -24,9 +24,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
+	"github.com/observiq/bindplane-operator/internal/defaults"
 )
-
-const defaultVersion = "1.98.1"
 
 var defaulterLog = logf.Log.WithName("bindplane-defaulter")
 
@@ -45,11 +44,6 @@ func SetupBindplaneDefaulterWithManager(mgr ctrl.Manager) error {
 // Default sets default values on the Bindplane resource.
 func (d *BindplaneDefaulter) Default(_ context.Context, bindplane *bindplanev1alpha1.Bindplane) error {
 	defaulterLog.Info("Default", "name", bindplane.Name)
-
-	if bindplane.Spec.Version == "" {
-		defaulterLog.Info("Defaulting spec.version", "version", defaultVersion)
-		bindplane.Spec.Version = defaultVersion
-	}
-
+	defaults.ApplyDefaults(bindplane)
 	return nil
 }
