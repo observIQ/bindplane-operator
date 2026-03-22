@@ -26,6 +26,10 @@ spec:
     metadata:
       annotations:
         kubectl.kubernetes.io/default-container: manager
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8443"
+        prometheus.io/path: "/metrics"
+        prometheus.io/scheme: "https"
       labels:
         control-plane: controller-manager
         app.kubernetes.io/name: bindplane-operator
