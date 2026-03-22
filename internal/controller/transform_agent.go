@@ -174,13 +174,15 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 	}
 }
 
-// getTransformAgentAffinity returns the affinity configuration for Transform Agent pods
-// This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
+// getTransformAgentAffinity returns the affinity for Transform Agent pods.
+// If the user provides podTemplate.spec.affinity, that takes precedence.
+// Otherwise returns the default pod anti-affinity (spread by hostname).
 func getTransformAgentAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
-	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.PodTemplate != nil {
+	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.PodTemplate != nil &&
+		bindplane.Spec.TransformAgent.PodTemplate.Spec.Affinity != nil {
 		return bindplane.Spec.TransformAgent.PodTemplate.Spec.Affinity
 	}
-	return nil
+	return defaultPodAntiAffinity(bindplane, transformAgentComponent)
 }
 
 // getTransformAgentPodTemplate returns the user-provided pod template spec for Transform Agent

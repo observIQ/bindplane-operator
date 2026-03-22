@@ -340,11 +340,11 @@ func getNatsClusterRoutes(bindplane *bindplanev1alpha1.Bindplane, headlessServic
 	return result.String()
 }
 
-// getNatsAffinity returns the affinity configuration for NATS pods
-// This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
+// getNatsAffinity returns the default pod anti-affinity for NATS pods.
+// Spreads pods across nodes by hostname (preferred, weight 100).
+// Overridden by the user's podTemplate.spec.affinity if provided.
 func getNatsAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
-	// NATS doesn't have a pod template in the spec, so return nil
-	return nil
+	return defaultPodAntiAffinity(bindplane, natsComponent)
 }
 
 // getNatsPodTemplate returns the user-provided pod template spec for NATS
