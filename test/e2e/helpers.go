@@ -27,9 +27,11 @@ import (
 )
 
 const (
-	certmanagerVersion  = "v1.16.3"
-	certmanagerURLTmpl  = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
-	projectDirE2ESuffix = "/test/e2e"
+	defaultCertManagerVersion = "latest"
+	certManagerVersionEnvVar  = "CERT_MANAGER_VERSION"
+	certManagerLatestURL      = "https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml"
+	certManagerVersionURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
+	projectDirE2ESuffix       = "/test/e2e"
 )
 
 func run(cmd *exec.Cmd) (string, error) {
@@ -115,8 +117,26 @@ func isCertManagerCRDsInstalled() bool {
 	return false
 }
 
+func getCertManagerVersion() string {
+	version := os.Getenv(certManagerVersionEnvVar)
+	if version == "" {
+		return defaultCertManagerVersion
+	}
+	return version
+}
+
+func getCertManagerURL() string {
+	version := getCertManagerVersion()
+	if version == defaultCertManagerVersion {
+		return certManagerLatestURL
+	}
+	return fmt.Sprintf(certManagerVersionURLTmpl, version)
+}
+
 func installCertManager() error {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+	version := getCertManagerVersion()
+	url := getCertManagerURL()
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager version %q from %s\n", version, url)
 	cmd := exec.Command("kubectl", "apply", "-f", url) // #nosec G204 -- test utility, args are version-pinned constants
 	if _, err := run(cmd); err != nil {
 		return err
@@ -154,7 +174,7 @@ func warnError(err error) {
 }
 
 func uninstallCertManager() {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
+	url := getCertManagerURL()
 	cmd := exec.Command("kubectl", "delete", "-f", url) // #nosec G204 -- test utility, args are version-pinned constants
 	if _, err := run(cmd); err != nil {
 		warnError(err)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 if [ -z "${BINDPLANE_LICENSE}" ]; then
   echo "BINDPLANE_LICENSE is not set. Set it in your shell and re-run." >&2
@@ -17,10 +17,12 @@ docker tag \
   ghcr.io/observiq/bindplane-operator:latest-${GOARCH} \
   bindplane-operator:local
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"${SCRIPT_DIR}/install-certmanager.sh"
+
 make install
 make deploy
 
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.4/cert-manager.yaml
 minikube addons enable ingress
 make install-postgres-operator
 
@@ -44,7 +46,6 @@ kubectl create secret generic bindplane-system-auth \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Apply Bindplane CR and cert-manager resources (CR references the secrets above)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kubectl apply -f "${SCRIPT_DIR}/../bindplane_v1alpha1_bindplane.yaml"
 
 # Create ingress for bindplane node service
