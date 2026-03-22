@@ -21,11 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"net"
-	"regexp"
 	"slices"
 	"time"
-	"unicode"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,6 +41,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
+	"github.com/observiq/bindplane-operator/internal/validation"
 )
 
 // Label key constants for Kubernetes standard labels
@@ -478,82 +476,14 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	// Validate that the Bindplane name produces valid Kubernetes resource names (DNS-1035).
-	// This avoids repeated reconciler errors when the name would create invalid Service/Resource names.
-	if err := validateBindplaneName(bindplane.Name); err != nil {
-		log.Error(err, "invalid Bindplane name: resource names must be DNS-1035 compliant")
+	// Validate the Bindplane resource. The webhook enforces this at admission time; this
+	// block is a safety net for clusters where the webhook is disabled or bypassed.
+	if err := validation.ValidateBindplane(bindplane); err != nil {
+		log.Error(err, "invalid Bindplane resource")
 		condition := metav1.Condition{
 			Type:               "Reconciled",
 			Status:             metav1.ConditionFalse,
-			Reason:             "InvalidName",
-			Message:            err.Error(),
-			ObservedGeneration: bindplane.Generation,
-			LastTransitionTime: metav1.Now(),
-		}
-		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
-		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
-			log.Error(statusErr, "failed to update Bindplane status")
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{}, nil
-	}
-	if err := validateLicenseConfig(&bindplane.Spec.Config); err != nil {
-		log.Error(err, "invalid Bindplane config: license must be set via license or licenseSecretRef")
-		condition := metav1.Condition{
-			Type:               "Reconciled",
-			Status:             metav1.ConditionFalse,
-			Reason:             "InvalidConfig",
-			Message:            err.Error(),
-			ObservedGeneration: bindplane.Generation,
-			LastTransitionTime: metav1.Now(),
-		}
-		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
-		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
-			log.Error(statusErr, "failed to update Bindplane status")
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{}, nil
-	}
-	if err := validateProfilingConfig(&bindplane.Spec.Config); err != nil {
-		log.Error(err, "invalid Bindplane config: profiling")
-		condition := metav1.Condition{
-			Type:               "Reconciled",
-			Status:             metav1.ConditionFalse,
-			Reason:             "InvalidConfig",
-			Message:            err.Error(),
-			ObservedGeneration: bindplane.Generation,
-			LastTransitionTime: metav1.Now(),
-		}
-		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
-		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
-			log.Error(statusErr, "failed to update Bindplane status")
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{}, nil
-	}
-	if err := validatePprofConfig(&bindplane.Spec.Config); err != nil {
-		log.Error(err, "invalid Bindplane config: pprof")
-		condition := metav1.Condition{
-			Type:               "Reconciled",
-			Status:             metav1.ConditionFalse,
-			Reason:             "InvalidConfig",
-			Message:            err.Error(),
-			ObservedGeneration: bindplane.Generation,
-			LastTransitionTime: metav1.Now(),
-		}
-		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
-		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
-			log.Error(statusErr, "failed to update Bindplane status")
-			return ctrl.Result{}, statusErr
-		}
-		return ctrl.Result{}, nil
-	}
-	if err := validateStatusConfig(&bindplane.Spec.Config); err != nil {
-		log.Error(err, "invalid Bindplane config: status")
-		condition := metav1.Condition{
-			Type:               "Reconciled",
-			Status:             metav1.ConditionFalse,
-			Reason:             "InvalidConfig",
+			Reason:             "Invalid",
 			Message:            err.Error(),
 			ObservedGeneration: bindplane.Generation,
 			LastTransitionTime: metav1.Now(),
@@ -711,94 +641,6 @@ func getSelectorLabels(bindplane *bindplanev1alpha1.Bindplane, component string)
 		labelKeyInstance:  bindplane.Name,
 		labelKeyComponent: component,
 	}
-}
-
-// maxResourceNamePrefixLen is the maximum length for the Bindplane name prefix so that
-// derived names (e.g. "<name>-transform-agent") stay within the DNS-1035 label limit of 63 characters.
-const maxResourceNamePrefixLen = 63 - 1 - len("transform-agent") // 47
-
-// validateBindplaneName returns an error if the Bindplane name would produce invalid
-// Kubernetes resource names. Resource names must be DNS-1035 compliant: start with a
-// lowercase letter, contain only lowercase letters, digits, or hyphens, and end with
-// a letter or digit (e.g. "my-name", "abc-123").
-func validateBindplaneName(name string) error {
-	if name == "" {
-		return fmt.Errorf("name must not be empty")
-	}
-	if len(name) > maxResourceNamePrefixLen {
-		return fmt.Errorf("name %q is too long: must be at most %d characters so that derived resource names (e.g. <name>-transform-agent) stay within the 63-character limit", name, maxResourceNamePrefixLen)
-	}
-	// Must start with a lowercase letter [a-z]
-	if r := rune(name[0]); !unicode.IsLetter(r) || !unicode.IsLower(r) {
-		return fmt.Errorf("name %q must start with a lowercase letter (a-z); Kubernetes resource names are DNS-1035 labels", name)
-	}
-	// Must end with a letter or digit [a-z0-9]
-	last := name[len(name)-1]
-	if last == '-' || ((last < 'a' || last > 'z') && (last < '0' || last > '9')) {
-		return fmt.Errorf("name %q must end with a lowercase letter or digit (a-z, 0-9)", name)
-	}
-	// All characters must be [a-z0-9-]
-	for i, c := range name {
-		if c != '-' && !unicode.IsLower(c) && !unicode.IsDigit(c) {
-			return fmt.Errorf("name %q contains invalid character %q at position %d: only lowercase letters (a-z), digits (0-9), and hyphens are allowed", name, string(c), i)
-		}
-	}
-	return nil
-}
-
-// validateLicenseConfig ensures exactly one license source is configured.
-func validateLicenseConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
-	if config == nil {
-		return fmt.Errorf("spec.config is required")
-	}
-	hasLicense := config.License != ""
-	hasLicenseSecretRef := config.LicenseSecretRef != nil
-	if hasLicense == hasLicenseSecretRef {
-		return fmt.Errorf("exactly one of spec.config.license or spec.config.licenseSecretRef must be set")
-	}
-	return nil
-}
-
-// validateProfilingConfig ensures projectID is set when profiling is enabled.
-func validateProfilingConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
-	if config == nil || config.Profiling == nil || !config.Profiling.Enabled {
-		return nil
-	}
-	if config.Profiling.ProjectID == "" {
-		return fmt.Errorf("projectID is required when profiling is enabled")
-	}
-	return nil
-}
-
-// uuidRegex matches standard UUID format (case-insensitive).
-var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
-// validateStatusConfig ensures status check keys are valid UUIDs when set inline.
-func validateStatusConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
-	if config == nil || config.Status == nil {
-		return nil
-	}
-	s := config.Status
-	if s.Enabled && len(s.Keys) == 0 && s.KeysSecretRef == nil {
-		return fmt.Errorf("at least one key must be configured when status is enabled")
-	}
-	for i, key := range s.Keys {
-		if !uuidRegex.MatchString(key) {
-			return fmt.Errorf("spec.config.status.keys[%d]: %q is not a valid UUID", i, key)
-		}
-	}
-	return nil
-}
-
-// validatePprofConfig ensures pprof endpoint is a valid host:port when set.
-func validatePprofConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
-	if config == nil || config.Pprof == nil || !config.Pprof.Enabled || config.Pprof.Endpoint == "" {
-		return nil
-	}
-	if _, _, err := net.SplitHostPort(config.Pprof.Endpoint); err != nil {
-		return fmt.Errorf("invalid pprof endpoint %q: %w", config.Pprof.Endpoint, err)
-	}
-	return nil
 }
 
 // getResourceName returns a standardized resource name for a component

@@ -18,13 +18,13 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
+	"github.com/observiq/bindplane-operator/internal/validation"
 )
 
 var webhookLog = logf.Log.WithName("bindplane-webhook")
@@ -60,21 +60,5 @@ func (v *BindplaneValidator) ValidateDelete(_ context.Context, _ *bindplanev1alp
 
 // validateBindplane performs common validation for create and update operations.
 func validateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
-	if bindplane.Spec.Version == "" {
-		return fmt.Errorf("spec.version must not be empty")
-	}
-
-	if bindplane.Spec.Bindplane.Replicas != nil && *bindplane.Spec.Bindplane.Replicas < 1 {
-		return fmt.Errorf("spec.bindplane.replicas must be >= 1, got %d", *bindplane.Spec.Bindplane.Replicas)
-	}
-
-	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil && *bindplane.Spec.Nats.Replicas < 1 {
-		return fmt.Errorf("spec.nats.replicas must be >= 1, got %d", *bindplane.Spec.Nats.Replicas)
-	}
-
-	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.Replicas != nil && *bindplane.Spec.TransformAgent.Replicas < 1 {
-		return fmt.Errorf("spec.transformAgent.replicas must be >= 1, got %d", *bindplane.Spec.TransformAgent.Replicas)
-	}
-
-	return nil
+	return validation.ValidateBindplane(bindplane)
 }
