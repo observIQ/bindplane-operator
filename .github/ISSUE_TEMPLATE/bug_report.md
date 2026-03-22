@@ -20,13 +20,13 @@ assignees: ''
 <!-- A clear and concise description of what you saw instead. -->
 
 **What version did you use?**
-<!-- Version: (e.g., `v0.4.0`, `1eb551b`, etc) -->
+<!-- Operator version: (e.g., `v1.2.0`), Bindplane version: (e.g., `v1.98.1`) -->
 
-**What config did you use?**
-<!-- Config: (e.g. the yaml config file) -->
+**What custom resource did you use?**
+<!-- Paste your Bindplane custom resource YAML here (redact any sensitive values) -->
 
 **Environment**
-<!-- OS: (e.g., "Ubuntu 20.04"), Compiler(if manually compiled): (e.g., "go 18.1") -->
+<!-- Kubernetes version: (e.g., "1.31"), Platform: (e.g., GKE, EKS, AKS, Rancher, OpenShift, kubeadm) -->
 
 **Additional context**
 <!-- Add any other context about the problem here. -->
