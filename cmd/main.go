@@ -42,6 +42,7 @@ import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 	"github.com/observiq/bindplane-operator/internal/controller"
+	webhookv1alpha1 "github.com/observiq/bindplane-operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -214,6 +215,11 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Bindplane")
+		os.Exit(1)
+	}
+
+	if err := webhookv1alpha1.SetupBindplaneWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Bindplane")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
 )
@@ -125,8 +126,27 @@ func installCertManager() error {
 		"--namespace", "cert-manager",
 		"--timeout", "5m",
 	)
-	_, err := run(cmd)
-	return err
+	if _, err := run(cmd); err != nil {
+		return err
+	}
+	// Wait for the cert-manager-webhook's CA bundle to be injected into its
+	// ValidatingWebhookConfiguration. Without this, cert-manager API requests
+	// fail with "x509: certificate signed by unknown authority" even after the
+	// webhook deployment shows as Available.
+	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for cert-manager webhook CA to be ready...\n")
+	deadline := time.Now().Add(5 * time.Minute)
+	for time.Now().Before(deadline) {
+		cmd = exec.Command("kubectl", "get", "validatingwebhookconfiguration", // #nosec G204 -- test utility
+			"cert-manager-webhook",
+			"-o", `jsonpath={.webhooks[0].clientConfig.caBundle}`,
+		)
+		out, err := cmd.CombinedOutput()
+		if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+			return nil
+		}
+		time.Sleep(5 * time.Second)
+	}
+	return fmt.Errorf("timed out waiting for cert-manager webhook CA bundle to be injected")
 }
 
 func warnError(err error) {
