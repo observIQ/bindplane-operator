@@ -385,6 +385,19 @@ var _ = Describe("newContainerSecurityContext", func() {
 	})
 })
 
+var _ = Describe("newPodSecurityContext", func() {
+	It("should create a pod security context with runtime default seccomp", func() {
+		sc := newPodSecurityContext()
+
+		Expect(sc).NotTo(BeNil())
+		Expect(sc.FSGroup).To(Equal(new(int64(65534))))
+		Expect(sc.RunAsGroup).To(Equal(new(int64(65534))))
+		Expect(sc.RunAsUser).To(Equal(new(int64(65534))))
+		Expect(sc.SeccompProfile).NotTo(BeNil())
+		Expect(sc.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+	})
+})
+
 var _ = Describe("mergePodTemplateSpec", func() {
 	var operatorManaged corev1.PodTemplateSpec
 
@@ -409,11 +422,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 					},
 				},
 				TerminationGracePeriodSeconds: new(int64(60)),
-				SecurityContext: &corev1.PodSecurityContext{
-					FSGroup:    new(int64(65534)),
-					RunAsGroup: new(int64(65534)),
-					RunAsUser:  new(int64(65534)),
-				},
+				SecurityContext:               newPodSecurityContext(),
 				Volumes: []corev1.Volume{
 					{
 						Name: "operator-volume",
@@ -776,12 +785,17 @@ var _ = Describe("mergePodTemplateSpec", func() {
 	Context("when merging securityContext", func() {
 		It("should merge user securityContext fields with operator securityContext", func() {
 			userFSGroup := new(int64(1000))
+			userSeccomp := &corev1.SeccompProfile{
+				Type:             corev1.SeccompProfileTypeLocalhost,
+				LocalhostProfile: new("profiles/custom.json"),
+			}
 			userProvided := &bindplanev1alpha1.PodTemplateSpec{
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:   userFSGroup,
-							RunAsUser: new(int64(1000)),
+							FSGroup:        userFSGroup,
+							RunAsUser:      new(int64(1000)),
+							SeccompProfile: userSeccomp,
 						},
 					},
 				},
@@ -794,6 +808,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			Expect(result.Spec.SecurityContext.RunAsUser).To(Equal(new(int64(1000))))
 			// Operator-managed fields should be preserved if not overridden
 			Expect(result.Spec.SecurityContext.RunAsGroup).To(Equal(new(int64(65534))))
+			Expect(result.Spec.SecurityContext.SeccompProfile).To(Equal(userSeccomp))
 		})
 
 		It("should handle nil securityContext in operator-managed template", func() {
@@ -1163,6 +1178,65 @@ var _ = Describe("workload Go runtime env vars", func() {
 
 		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
 		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2048Mi")))
+	})
+})
+
+var _ = Describe("workload pod security context defaults", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		nodeReplicas := int32(3)
+		natsReplicas := int32(2)
+		transformAgentReplicas := int32(2)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+						},
+					},
+				},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{
+					Replicas: &nodeReplicas,
+				},
+				Nats: &bindplanev1alpha1.NatsComponentSpec{
+					Replicas: &natsReplicas,
+				},
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					Replicas: &transformAgentReplicas,
+				},
+			},
+		}
+	}
+
+	assertRuntimeDefaultSeccomp := func(securityContext *corev1.PodSecurityContext) {
+		Expect(securityContext).NotTo(BeNil())
+		Expect(securityContext.SeccompProfile).NotTo(BeNil())
+		Expect(securityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+	}
+
+	It("sets runtime default seccomp on node deployments", func() {
+		bindplane := baseBindplane()
+		deployment := (&BindplaneReconciler{}).nodeDeployment(bindplane)
+
+		assertRuntimeDefaultSeccomp(deployment.Spec.Template.Spec.SecurityContext)
+	})
+
+	It("sets runtime default seccomp on TSDB statefulsets", func() {
+		bindplane := baseBindplane()
+		statefulSet := (&BindplaneReconciler{}).tsdbStatefulSet(bindplane)
+
+		assertRuntimeDefaultSeccomp(statefulSet.Spec.Template.Spec.SecurityContext)
+	})
+
+	It("sets runtime default seccomp on migrate jobs", func() {
+		bindplane := baseBindplane()
+		job := (&BindplaneReconciler{}).bindplaneJobsMigrateJob(bindplane)
+
+		assertRuntimeDefaultSeccomp(job.Spec.Template.Spec.SecurityContext)
 	})
 })
 

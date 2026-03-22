@@ -40,6 +40,8 @@ spec:
 
 The following example shows all default resource allocations explicitly. These values are applied automatically by the operator — you only need to specify them in your CR if you want to override them.
 
+Controller-managed workloads also default to a least-privilege pod security context. Pods run as non-root and use `seccompProfile.type: RuntimeDefault` by default. If you need to customize pod- or container-level security settings, use the relevant component `podTemplate.spec.securityContext` or `podTemplate.spec.containers[].securityContext` fields.
+
 ```yaml
 apiVersion: k8s.bindplane.com/v1alpha1
 kind: Bindplane

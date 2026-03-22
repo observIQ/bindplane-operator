@@ -130,12 +130,8 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 					Spec: corev1.PodSpec{
 						Volumes:            configVols,
 						ServiceAccountName: getResourceName(bindplane, bindplaneJobsComponent),
-						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    new(defaultRunAsGroup),
-							RunAsGroup: new(defaultRunAsGroup),
-							RunAsUser:  new(defaultRunAsUser),
-						},
-						Affinity: getBindplaneJobsAffinity(bindplane),
+						SecurityContext:    newPodSecurityContext(),
+						Affinity:           getBindplaneJobsAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
 								Name:         bindplaneJobsContainerName,
@@ -238,12 +234,8 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 						RestartPolicy:      corev1.RestartPolicyOnFailure,
 						ServiceAccountName: getResourceName(bindplane, bindplaneJobsMigrateComponent),
 						Volumes:            configVols,
-						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    new(defaultRunAsGroup),
-							RunAsGroup: new(defaultRunAsGroup),
-							RunAsUser:  new(defaultRunAsUser),
-						},
-						Affinity: getBindplaneJobsMigrateAffinity(bindplane),
+						SecurityContext:    newPodSecurityContext(),
+						Affinity:           getBindplaneJobsMigrateAffinity(bindplane),
 						Containers: []corev1.Container{{
 							Name:         bindplaneJobsContainerName,
 							Image:        getBindplaneEEImage(bindplane),

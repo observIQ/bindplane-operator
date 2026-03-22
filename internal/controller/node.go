@@ -118,12 +118,8 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 					Spec: corev1.PodSpec{
 						Volumes:            configVols,
 						ServiceAccountName: getResourceName(bindplane, nodeComponent),
-						SecurityContext: &corev1.PodSecurityContext{
-							FSGroup:    new(defaultRunAsGroup),
-							RunAsGroup: new(defaultRunAsGroup),
-							RunAsUser:  new(defaultRunAsUser),
-						},
-						Affinity: getNodeAffinity(bindplane),
+						SecurityContext:    newPodSecurityContext(),
+						Affinity:           getNodeAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
 								Name:         nodeContainerName,

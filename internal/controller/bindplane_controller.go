@@ -878,6 +878,18 @@ func WithRunAsUser(userID int64) securityContextOption {
 	}
 }
 
+// newPodSecurityContext creates the default pod security context for Bindplane workloads.
+func newPodSecurityContext() *corev1.PodSecurityContext {
+	return &corev1.PodSecurityContext{
+		FSGroup:    new(defaultRunAsGroup),
+		RunAsGroup: new(defaultRunAsGroup),
+		RunAsUser:  new(defaultRunAsUser),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
+
 // newContainerSecurityContext creates a secure container security context
 // It accepts variadic securityContextOption functions to configure overrides
 func newContainerSecurityContext(opts ...securityContextOption) *corev1.SecurityContext {
