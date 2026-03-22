@@ -981,6 +981,27 @@ func newService(bindplane *bindplanev1alpha1.Bindplane, component string, opts .
 	}
 }
 
+// defaultPodAntiAffinity returns a preferred pod anti-affinity rule that spreads pods
+// across nodes using the component selector labels. The preference is soft (weight 100)
+// so it does not block scheduling when cluster capacity is constrained.
+func defaultPodAntiAffinity(bindplane *bindplanev1alpha1.Bindplane, component string) *corev1.Affinity {
+	return &corev1.Affinity{
+		PodAntiAffinity: &corev1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: getSelectorLabels(bindplane, component),
+						},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+			},
+		},
+	}
+}
+
 // getLDAPTLSVolumeAndMount returns a Secret volume and mount for LDAP TLS when config.Auth.LDAP.TLS is set.
 // The Secret is mounted at ldapTLSMountPath; TLS env vars are set to the computed file paths (mountPath/key).
 // Returns (nil, nil) when LDAP TLS is not configured.

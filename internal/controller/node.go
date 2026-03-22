@@ -204,11 +204,11 @@ func getNodeEnvVars() []corev1.EnvVar {
 	}
 }
 
-// getNodeAffinity returns the affinity configuration for Node pods
-// This is a fallback for when user doesn't provide podTemplate - will be overridden by mergePodTemplateSpec
+// getNodeAffinity returns the default pod anti-affinity for Node pods.
+// Spreads pods across nodes by hostname (preferred, weight 100).
+// Overridden by the user's podTemplate.spec.affinity if provided.
 func getNodeAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
-	// Node doesn't have a pod template in the spec, so return nil
-	return nil
+	return defaultPodAntiAffinity(bindplane, nodeComponent)
 }
 
 // getNodePodTemplate returns the user-provided pod template spec for Node
