@@ -312,6 +312,11 @@ const (
 	defaultPprofEndpoint = "127.0.0.1:6060"
 	// defaultConcurrency is the default value for maxConcurrency and maxSimultaneousConnections.
 	defaultConcurrency = 10
+
+	// annotationPauseReconciliation is the annotation key used to pause operator reconciliation
+	// for a specific Bindplane CR. Set the value to "true" to pause.
+	// Example: kubectl annotate bindplane my-bindplane k8s.bindplane.com/pause-reconciliation=true
+	annotationPauseReconciliation = "k8s.bindplane.com/pause-reconciliation"
 )
 
 // getBindplaneEEImage returns the Bindplane EE container image for the given Bindplane instance.
@@ -425,6 +430,25 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		log.Error(err, "unable to fetch Bindplane")
 		return ctrl.Result{}, err
+	}
+
+	// Check for pause annotation — if set to "true", skip reconciliation entirely.
+	if bindplane.Annotations[annotationPauseReconciliation] == "true" {
+		log.Info("Reconciliation paused via annotation; skipping", "annotation", annotationPauseReconciliation)
+		condition := metav1.Condition{
+			Type:               "Reconciled",
+			Status:             metav1.ConditionFalse,
+			Reason:             "Paused",
+			Message:            fmt.Sprintf("Reconciliation paused. Remove annotation %s or set to false to resume.", annotationPauseReconciliation),
+			ObservedGeneration: bindplane.Generation,
+			LastTransitionTime: metav1.Now(),
+		}
+		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
+			log.Error(statusErr, "failed to update Bindplane status for pause")
+			return ctrl.Result{}, statusErr
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// Validate that the Bindplane name produces valid Kubernetes resource names (DNS-1035).
