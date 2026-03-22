@@ -26,8 +26,7 @@ import (
 
 var _ = Describe("Bindplane webhook", Ordered, func() {
 	AfterEach(func() {
-		deleteBindplane(webhookBindplaneName, bindplaneNamespace)
-		waitForBindplaneDeleted(webhookBindplaneName, bindplaneNamespace, 30*time.Second)
+		cleanupBindplane(webhookBindplaneName, bindplaneNamespace, 30*time.Second)
 	})
 
 	DescribeTable("rejects invalid manifests and still accepts the minimal valid manifest",
@@ -51,7 +50,7 @@ var _ = Describe("Bindplane webhook", Ordered, func() {
 		},
 		Entry("when license configuration is missing",
 			"bindplane-invalid-missing-license.yaml",
-			"exactly one of spec.config.license or spec.config.licenseSecretRef must be set",
+			"exactly one of license or licenseSecretRef must be set",
 		),
 		Entry("when postgres host is empty",
 			"bindplane-invalid-postgres-host.yaml",

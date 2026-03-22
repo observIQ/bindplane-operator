@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -46,6 +47,12 @@ const (
 
 var controllerPodName string
 
+var (
+	licenseLiteralPattern       = regexp.MustCompile(`--from-literal=license=[^\s]+`)
+	bearerTokenPattern          = regexp.MustCompile(`Authorization: Bearer [^'"\s]+`)
+	bindplaneLicenseFlagPattern = regexp.MustCompile(`(BINDPLANE_LICENSE=)[^\s]+`)
+)
+
 func run(cmd *exec.Cmd) (string, error) {
 	dir, _ := getProjectDir()
 	cmd.Dir = dir
@@ -55,7 +62,7 @@ func run(cmd *exec.Cmd) (string, error) {
 	}
 
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
-	command := strings.Join(cmd.Args, " ")
+	command := sanitizeCommand(strings.Join(cmd.Args, " "))
 	_, _ = fmt.Fprintf(GinkgoWriter, "running: %q\n", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -63,6 +70,13 @@ func run(cmd *exec.Cmd) (string, error) {
 	}
 
 	return string(output), nil
+}
+
+func sanitizeCommand(command string) string {
+	command = licenseLiteralPattern.ReplaceAllString(command, "--from-literal=license=REDACTED")
+	command = bearerTokenPattern.ReplaceAllString(command, "Authorization: Bearer REDACTED")
+	command = bindplaneLicenseFlagPattern.ReplaceAllString(command, "${1}REDACTED")
+	return command
 }
 
 func getProjectDir() (string, error) {
@@ -166,6 +180,13 @@ func setupOperatorEnvironment() {
 		"9443",
 		defaultEventuallyLongTimeout,
 	)
+
+	By("waiting for the validating webhook to accept Bindplane requests")
+	waitForBindplaneWebhookReady(
+		"bindplane-webhook-valid.yaml",
+		bindplaneNamespace,
+		defaultEventuallyLongTimeout,
+	)
 }
 
 func teardownOperatorEnvironment() {
@@ -240,17 +261,28 @@ func deleteBindplaneLicenseSecret(namespace string) {
 //nolint:unparam
 func waitForDeploymentAvailable(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "wait", "deployment/"+name,
-			"--for=condition=Available", "--timeout=10s"))
+		_, err := runCmd(kubectl(
+			namespace,
+			"wait",
+			"deployment/"+name,
+			"--for=condition=Available",
+			"--timeout", timeout.String(),
+		))
 		g.Expect(err).NotTo(HaveOccurred())
-	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed(), "Deployment %s did not become available", name)
 }
 
 func waitForStatefulSetReady(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "rollout", "status", "statefulset/"+name, "--timeout=10s"))
+		_, err := runCmd(kubectl(
+			namespace,
+			"rollout",
+			"status",
+			"statefulset/"+name,
+			"--timeout", timeout.String(),
+		))
 		g.Expect(err).NotTo(HaveOccurred())
-	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed(), "StatefulSet %s did not become ready", name)
 }
 
 func waitForJobComplete(name, namespace string, timeout time.Duration) {
@@ -273,6 +305,19 @@ func waitForServiceEndpoints(name, namespace, expectedPort string, timeout time.
 		output, err := runCmd(kubectl(namespace, "get", "endpoints", name))
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(output).To(ContainSubstring(expectedPort))
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
+}
+
+func waitForBindplaneWebhookReady(fixtureName, namespace string, timeout time.Duration) {
+	Eventually(func(g Gomega) {
+		output, err := runCmd(kubectl(
+			namespace,
+			"apply",
+			"--dry-run=server",
+			"-f",
+			fixturePath(fixtureName),
+		))
+		g.Expect(err).NotTo(HaveOccurred(), output)
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
@@ -342,6 +387,12 @@ func waitForBindplaneDeleted(name, namespace string, timeout time.Duration) {
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
+func cleanupBindplane(name, namespace string, timeout time.Duration) {
+	unpauseBindplaneForCleanup(name, namespace)
+	deleteBindplane(name, namespace)
+	waitForBindplaneDeleted(name, namespace, timeout)
+}
+
 func getBindplane(name, namespace string) (*bindplanev1alpha1.Bindplane, error) {
 	output, err := runCmd(kubectl(namespace, "get", "bindplane", name, "-o", "json"))
 	if err != nil {
@@ -365,6 +416,29 @@ func getDeployment(name, namespace string) (*appsv1.Deployment, error) {
 		return nil, err
 	}
 	return &deployment, nil
+}
+
+func getDeploymentImage(name, namespace string) (string, error) {
+	return runCmd(kubectl(
+		namespace,
+		"get",
+		"deployment",
+		name,
+		"-o",
+		"jsonpath={.spec.template.spec.containers[0].image}",
+	))
+}
+
+func getDeploymentTemplateAnnotation(name, namespace, key string) (string, error) {
+	goTemplate := fmt.Sprintf(`{{with .spec.template.metadata.annotations}}{{index . %q}}{{end}}`, key)
+	return runCmd(kubectl(
+		namespace,
+		"get",
+		"deployment",
+		name,
+		"-o",
+		"go-template="+goTemplate,
+	))
 }
 
 //nolint:unparam
@@ -409,7 +483,30 @@ func expectFixtureApplyFailure(name, namespace, message string) {
 
 //nolint:unparam
 func deleteBindplane(name, namespace string) {
-	_, _ = runCmd(kubectl(namespace, "delete", "bindplane", name, "--ignore-not-found=true"))
+	_, err := runCmd(kubectl(
+		namespace,
+		"delete",
+		"bindplane",
+		name,
+		"--ignore-not-found=true",
+		"--wait=false",
+	))
+	Expect(err).NotTo(HaveOccurred(), "Failed to issue delete for Bindplane %s", name)
+}
+
+func unpauseBindplaneForCleanup(name, namespace string) {
+	_, err := runCmd(kubectl(
+		namespace,
+		"annotate",
+		"bindplane",
+		name,
+		fmt.Sprintf("%s=false", pauseReconciliationAnnotation),
+		"--overwrite",
+	))
+	if err == nil || strings.Contains(err.Error(), "NotFound") {
+		return
+	}
+	Expect(err).NotTo(HaveOccurred(), "Failed to clear pause annotation on Bindplane %s during cleanup", name)
 }
 
 //nolint:unparam

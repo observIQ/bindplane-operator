@@ -81,9 +81,8 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("cleaning up any Bindplane custom resources")
-	deleteBindplane(bindplaneName, bindplaneNamespace)
-	deleteBindplane(webhookBindplaneName, bindplaneNamespace)
-	waitForBindplaneDeleted(bindplaneName, bindplaneNamespace, 30*time.Second)
+	cleanupBindplane(bindplaneName, bindplaneNamespace, 2*time.Minute)
+	cleanupBindplane(webhookBindplaneName, bindplaneNamespace, 2*time.Minute)
 
 	By("cleaning up static postgres resources")
 	cleanupPostgres()

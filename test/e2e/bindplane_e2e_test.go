@@ -40,21 +40,42 @@ func expectedTSDBImage(version string) string {
 	return "ghcr.io/observiq/bindplane-prometheus:" + version
 }
 
+func waitForMinimalBindplaneBaseline() {
+	waitForBindplaneFinalizer(bindplaneName, bindplaneNamespace, defaultEventuallyShortTimeout)
+	waitForJobComplete(bindplaneResourceName("migrate"), bindplaneNamespace, defaultEventuallyLongTimeout)
+	waitForStatefulSetReady(bindplaneResourceName("tsdb"), bindplaneNamespace, defaultEventuallyLongTimeout)
+	waitForStatefulSetReady(bindplaneResourceName("nats"), bindplaneNamespace, defaultEventuallyLongTimeout)
+	waitForDeploymentAvailable(bindplaneResourceName("transform-agent"), bindplaneNamespace, defaultEventuallyLongTimeout)
+	waitForDeploymentAvailable(bindplaneResourceName("jobs"), bindplaneNamespace, defaultEventuallyLongTimeout)
+	waitForDeploymentAvailable(bindplaneResourceName("node"), bindplaneNamespace, defaultEventuallyLongTimeout)
+	waitForBindplaneCondition(
+		bindplaneName,
+		bindplaneNamespace,
+		"Reconciled",
+		metav1.ConditionTrue,
+		"Reconciled",
+		defaultEventuallyLongTimeout,
+	)
+	waitForBindplanePhase(bindplaneName, bindplaneNamespace, "Ready", defaultEventuallyLongTimeout)
+}
+
 var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicense), func() {
 	BeforeAll(func() {
 		requireBindplaneLicense()
 		ensurePostgresReady()
 		recreateBindplaneLicenseSecret(bindplaneNamespace)
-		deleteBindplane(bindplaneName, bindplaneNamespace)
+		cleanupBindplane(bindplaneName, bindplaneNamespace, 30*time.Second)
 
 		By("applying the minimal Bindplane custom resource")
 		_, err := applyFixture("bindplane-minimal-secret-license.yaml", bindplaneNamespace)
 		Expect(err).NotTo(HaveOccurred())
+
+		By("waiting for the minimal Bindplane baseline to reconcile")
+		waitForMinimalBindplaneBaseline()
 	})
 
 	AfterAll(func() {
-		deleteBindplane(bindplaneName, bindplaneNamespace)
-		waitForBindplaneDeleted(bindplaneName, bindplaneNamespace, 2*time.Minute)
+		cleanupBindplane(bindplaneName, bindplaneNamespace, 2*time.Minute)
 		deleteBindplaneLicenseSecret(bindplaneNamespace)
 		cleanupPostgres()
 	})
@@ -243,9 +264,13 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 		patchBindplane(bindplaneName, bindplaneNamespace, pausedAnnotationPatch)
 
 		Consistently(func(g Gomega) {
-			deployment, err := getDeployment(bindplaneResourceName("node"), bindplaneNamespace)
+			annotation, err := getDeploymentTemplateAnnotation(
+				bindplaneResourceName("node"),
+				bindplaneNamespace,
+				"e2e.bindplane.com/paused",
+			)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(deployment.Spec.Template.Annotations["e2e.bindplane.com/paused"]).To(BeEmpty())
+			g.Expect(annotation).To(BeEmpty())
 		}, 20*time.Second, 2*time.Second).Should(Succeed())
 
 		annotateBindplane(bindplaneName, bindplaneNamespace, pauseReconciliationAnnotation, "false")
@@ -259,9 +284,13 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 		)
 
 		Eventually(func(g Gomega) {
-			deployment, err := getDeployment(bindplaneResourceName("node"), bindplaneNamespace)
+			annotation, err := getDeploymentTemplateAnnotation(
+				bindplaneResourceName("node"),
+				bindplaneNamespace,
+				"e2e.bindplane.com/paused",
+			)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(deployment.Spec.Template.Annotations["e2e.bindplane.com/paused"]).To(Equal("true"))
+			g.Expect(annotation).To(Equal("true"))
 		}, defaultEventuallyLongTimeout, defaultEventuallyPollInterval).Should(Succeed())
 	})
 
@@ -339,10 +368,10 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 		Consistently(func(g Gomega) {
 			bindplane, err := getBindplane(bindplaneName, bindplaneNamespace)
 			g.Expect(err).NotTo(HaveOccurred())
-			deployment, err := getDeployment(bindplaneResourceName("node"), bindplaneNamespace)
+			image, err := getDeploymentImage(bindplaneResourceName("node"), bindplaneNamespace)
 			g.Expect(err).NotTo(HaveOccurred())
 			if bindplane.Status.MigratedImage != expectedImage {
-				g.Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal(oldNodeImage))
+				g.Expect(image).To(Equal(oldNodeImage))
 			}
 		}, defaultEventuallyShortTimeout, 2*time.Second).Should(Succeed())
 
