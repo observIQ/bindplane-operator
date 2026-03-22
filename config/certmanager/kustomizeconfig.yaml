@@ -1,0 +1,9 @@
+# This config tells kustomize how to update name references for cert-manager resources
+# so that namePrefix is applied to Certificate.spec.issuerRef.name when the Issuer name changes.
+nameReference:
+- kind: Issuer
+  group: cert-manager.io
+  fieldSpecs:
+  - kind: Certificate
+    group: cert-manager.io
+    path: spec/issuerRef/name
