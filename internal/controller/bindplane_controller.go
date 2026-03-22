@@ -29,6 +29,7 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -582,6 +583,11 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bindplanev1alpha1.Bindplane{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.StatefulSet{}).
+		Owns(&batchv1.Job{}).
+		Owns(&corev1.Service{}).
+		Owns(&corev1.ServiceAccount{}).
 		Named("bindplane").
 		Complete(r)
 }
