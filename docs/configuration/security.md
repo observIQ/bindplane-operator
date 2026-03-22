@@ -86,26 +86,15 @@ Enabling it turns on mTLS for the Bindplane → TSDB path: the operator creates 
 
 ## Validating Admission Webhook
 
-The operator includes a Kubernetes [validating admission webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) that enforces correctness on `Bindplane` custom resources at admission time — before they are persisted by the API server.
-
-### What it validates
-
-The webhook rejects `Bindplane` create and update requests that violate the following rules:
-
-| Rule | Field |
-|------|-------|
-| `spec.version` must not be empty | `spec.version` |
-| Node replicas must be >= 1 (when set) | `spec.bindplane.replicas` |
-| NATS replicas must be >= 1 (when set) | `spec.nats.replicas` |
-| Transform Agent replicas must be >= 1 (when set) | `spec.transformAgent.replicas` |
-
-Delete operations are always allowed. The failure policy is `Fail`: if the webhook is unreachable, admission is denied.
+The operator includes a Kubernetes [validating admission webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
+that enforces correctness on `Bindplane` custom resources at admission time — before they are persisted by the API server.
 
 ### cert-manager requirement
 
-The webhook server runs on port 9443 inside the operator pod and requires a valid TLS certificate at startup. The default install path (`install.yaml`) uses [cert-manager](https://cert-manager.io/) to provision it:
+The webhook server runs on port 9443 inside the operator pod and requires a valid TLS certificate at startup. The default install path (`install.yaml`) uses
+[cert-manager](https://cert-manager.io/) to provision it:
 
-- A self-signed `Issuer` and a `Certificate` resource are created in the operator namespace.
+- A `Issuer` and a `Certificate` resource are created in the operator namespace.
 - cert-manager writes the certificate into the Secret `bindplane-operator-webhook-server-cert`.
 - The operator pod mounts that Secret at `/tmp/k8s-webhook-server/serving-certs`.
 - cert-manager injects the CA bundle into the `ValidatingWebhookConfiguration` so the Kubernetes API server can verify the operator's TLS certificate.
