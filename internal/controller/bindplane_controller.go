@@ -596,11 +596,61 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		LastTransitionTime: metav1.Now(),
 	}
 	meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+
+	// Populate per-component ready replica counts and overall phase.
+	r.updateReadyReplicaStatus(ctx, bindplane)
+
 	if err := r.Status().Update(ctx, bindplane); err != nil {
 		log.Error(err, "failed to update Bindplane status")
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
+}
+
+// updateReadyReplicaStatus queries the owned workloads for their current ready
+// replica counts and sets the Phase field accordingly.
+func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane) {
+	nodeReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, nodeComponent), bindplane.Namespace)
+	natsReady := r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, natsComponent), bindplane.Namespace)
+	taReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, transformAgentComponent), bindplane.Namespace)
+
+	bindplane.Status.NodeReadyReplicas = nodeReady
+	bindplane.Status.NatsReadyReplicas = natsReady
+	bindplane.Status.TransformAgentReadyReplicas = taReady
+
+	nodeDesired := *bindplane.Spec.Bindplane.Replicas
+	var natsDesired int32
+	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil {
+		natsDesired = *bindplane.Spec.Nats.Replicas
+	}
+	var taDesired int32
+	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.Replicas != nil {
+		taDesired = *bindplane.Spec.TransformAgent.Replicas
+	}
+
+	if nodeReady >= nodeDesired && (natsDesired == 0 || natsReady >= natsDesired) && (taDesired == 0 || taReady >= taDesired) {
+		bindplane.Status.Phase = "Ready"
+	} else {
+		bindplane.Status.Phase = "ApplyingChanges"
+	}
+}
+
+// deploymentReadyReplicas returns the ready replica count for a Deployment, or 0 if not found.
+func (r *BindplaneReconciler) deploymentReadyReplicas(ctx context.Context, name, namespace string) int32 {
+	dep := &appsv1.Deployment{}
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, dep); err != nil {
+		return 0
+	}
+	return dep.Status.ReadyReplicas
+}
+
+// statefulSetReadyReplicas returns the ready replica count for a StatefulSet, or 0 if not found.
+func (r *BindplaneReconciler) statefulSetReadyReplicas(ctx context.Context, name, namespace string) int32 {
+	ss := &appsv1.StatefulSet{}
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, ss); err != nil {
+		return 0
+	}
+	return ss.Status.ReadyReplicas
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -1178,13 +1178,31 @@ type BindplaneStatus struct {
 	// run before applying an image change to NATS, Jobs, and Node workloads.
 	// +optional
 	MigratedImage string `json:"migratedImage,omitempty"`
+
+	// Phase summarizes the overall deployment state.
+	// +optional
+	// +kubebuilder:validation:Enum=Pending;ApplyingChanges;Ready;Degraded
+	Phase string `json:"phase,omitempty"`
+
+	// NodeReadyReplicas is the number of Bindplane Node pods currently ready.
+	// +optional
+	NodeReadyReplicas int32 `json:"nodeReadyReplicas,omitempty"`
+
+	// NatsReadyReplicas is the number of NATS pods currently ready.
+	// +optional
+	NatsReadyReplicas int32 `json:"natsReadyReplicas,omitempty"`
+
+	// TransformAgentReadyReplicas is the number of Transform Agent pods currently ready.
+	// +optional
+	TransformAgentReadyReplicas int32 `json:"transformAgentReadyReplicas,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=bindplanes,singular=bindplane,scope=Namespaced
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version",description="Bindplane version"
-// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Reconciled\")].status",description="Whether all resources have been reconciled"
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Overall deployment phase"
+// +kubebuilder:printcolumn:name="Node Ready",type="integer",JSONPath=".status.nodeReadyReplicas",description="Ready Node replicas"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Bindplane is the Schema for the bindplanes API.
