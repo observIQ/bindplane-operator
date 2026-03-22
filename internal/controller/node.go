@@ -103,8 +103,26 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
 	terminationGracePeriod := nodeTerminationGracePeriodSeconds(bindplane)
 
+	// Default minReadySeconds to the termination grace period so that agents
+	// draining from the outgoing pod have time to reconnect to healthy nodes
+	// (including the new pod) before the next pod is taken out of service.
+	minReadySeconds := int32(terminationGracePeriod) // #nosec G115 -- grace period is always a small positive value
+	if bindplane.Spec.Bindplane.MinReadySeconds != nil {
+		minReadySeconds = *bindplane.Spec.Bindplane.MinReadySeconds
+	}
+
 	maxSurge := intstr.FromInt32(1)
-	maxUnavailable := intstr.FromInt32(1)
+	maxUnavailable := intstr.FromInt32(0)
+	strategy := appsv1.DeploymentStrategy{
+		Type: appsv1.RollingUpdateDeploymentStrategyType,
+		RollingUpdate: &appsv1.RollingUpdateDeployment{
+			MaxSurge:       &maxSurge,
+			MaxUnavailable: &maxUnavailable,
+		},
+	}
+	if bindplane.Spec.Bindplane.Strategy != nil {
+		strategy = *bindplane.Spec.Bindplane.Strategy
+	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -113,14 +131,9 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: replicaPtr,
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RollingUpdateDeploymentStrategyType,
-				RollingUpdate: &appsv1.RollingUpdateDeployment{
-					MaxSurge:       &maxSurge,
-					MaxUnavailable: &maxUnavailable,
-				},
-			},
+			Replicas:        replicaPtr,
+			MinReadySeconds: minReadySeconds,
+			Strategy:        strategy,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},

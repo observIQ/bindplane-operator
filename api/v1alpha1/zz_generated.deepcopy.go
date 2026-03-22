@@ -21,8 +21,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"k8s.io/api/apps/v1"
 	"k8s.io/api/autoscaling/v2"
-	"k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -52,7 +53,7 @@ func (in *AdvancedCacheRedisConfig) DeepCopyInto(out *AdvancedCacheRedisConfig) 
 	*out = *in
 	if in.PasswordSecretRef != nil {
 		in, out := &in.PasswordSecretRef, &out.PasswordSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.TLS != nil {
@@ -327,12 +328,12 @@ func (in *AuthConfig) DeepCopyInto(out *AuthConfig) {
 	*out = *in
 	if in.UsernameSecretRef != nil {
 		in, out := &in.UsernameSecretRef, &out.UsernameSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.PasswordSecretRef != nil {
 		in, out := &in.PasswordSecretRef, &out.PasswordSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.LDAP != nil {
@@ -397,6 +398,16 @@ func (in *BindplaneComponentSpec) DeepCopyInto(out *BindplaneComponentSpec) {
 		*out = new(PodTemplateSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.MinReadySeconds != nil {
+		in, out := &in.MinReadySeconds, &out.MinReadySeconds
+		*out = new(int32)
+		**out = **in
+	}
+	if in.Strategy != nil {
+		in, out := &in.Strategy, &out.Strategy
+		*out = new(v1.DeploymentStrategy)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Autoscaling != nil {
 		in, out := &in.Autoscaling, &out.Autoscaling
 		*out = new(NodeAutoscalingSpec)
@@ -419,7 +430,7 @@ func (in *BindplaneConfigSpec) DeepCopyInto(out *BindplaneConfigSpec) {
 	*out = *in
 	if in.LicenseSecretRef != nil {
 		in, out := &in.LicenseSecretRef, &out.LicenseSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.Auth != nil {
@@ -711,12 +722,12 @@ func (in *LDAPConfig) DeepCopyInto(out *LDAPConfig) {
 	*out = *in
 	if in.BindUserSecretRef != nil {
 		in, out := &in.BindUserSecretRef, &out.BindUserSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.BindPasswordSecretRef != nil {
 		in, out := &in.BindPasswordSecretRef, &out.BindPasswordSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.TLS != nil {
@@ -831,7 +842,7 @@ func (in *MetricsPrometheusConfig) DeepCopyInto(out *MetricsPrometheusConfig) {
 	*out = *in
 	if in.PasswordSecretRef != nil {
 		in, out := &in.PasswordSecretRef, &out.PasswordSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 }
@@ -988,12 +999,12 @@ func (in *OIDCConfig) DeepCopyInto(out *OIDCConfig) {
 	*out = *in
 	if in.ClientIDSecretRef != nil {
 		in, out := &in.ClientIDSecretRef, &out.ClientIDSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.ClientSecretSecretRef != nil {
 		in, out := &in.ClientSecretSecretRef, &out.ClientSecretSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.Scopes != nil {
@@ -1039,12 +1050,12 @@ func (in *PostgresConfig) DeepCopyInto(out *PostgresConfig) {
 	}
 	if in.UsernameSecretRef != nil {
 		in, out := &in.UsernameSecretRef, &out.UsernameSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.PasswordSecretRef != nil {
 		in, out := &in.PasswordSecretRef, &out.PasswordSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.MaxIdleConnections != nil {
@@ -1119,7 +1130,7 @@ func (in *StatusConfig) DeepCopyInto(out *StatusConfig) {
 	}
 	if in.KeysSecretRef != nil {
 		in, out := &in.KeysSecretRef, &out.KeysSecretRef
-		*out = new(v1.SecretKeySelector)
+		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 }
