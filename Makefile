@@ -110,6 +110,7 @@ generate-api-docs: ## Generate CRD API reference documentation at docs/configura
 		--config=docs/configuration/.crd-ref-docs-config.yaml \
 		--renderer=markdown \
 		--output-path=docs/configuration/api.md
+	@perl -i -0pe 's/\n{3,}/\n\n/g' docs/configuration/api.md
 
 .PHONY: test
 test: setup-envtest ## Run tests.

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -65,6 +66,44 @@ type BindplaneSpec struct {
 	Nats *NatsComponentSpec `json:"nats,omitempty"`
 }
 
+// NodeAutoscalingSpec configures horizontal pod autoscaling for Bindplane Node.
+// When enabled, the operator creates a HorizontalPodAutoscaler and the
+// spec.bindplane.replicas field is ignored — the HPA controls replica count.
+//
+// All fields are optional. Omitted fields use defaults tuned for Bindplane Node's
+// stateful WebSocket (OpAMP) workload.
+type NodeAutoscalingSpec struct {
+	// Enabled enables the HorizontalPodAutoscaler for Bindplane Node.
+	// When false (the default), static replica counts from spec.bindplane.replicas
+	// are used and no HPA is created.
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// MinReplicas is the lower replica bound for the autoscaler. Default: 2.
+	// +optional
+	// +kubebuilder:default=2
+	// +kubebuilder:validation:Minimum=1
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+
+	// MaxReplicas is the upper replica bound for the autoscaler. Default: 10.
+	// +optional
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=1
+	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
+
+	// Metrics contains the specifications for which metrics to use when calculating
+	// the desired replica count. When omitted, defaults to CPU at 50% target utilization.
+	// +optional
+	Metrics []autoscalingv2.MetricSpec `json:"metrics,omitempty"`
+
+	// Behavior configures the scaling behavior in both Up and Down directions.
+	// When omitted, the default scaleDown policy enforces slow scale-down
+	// (1 pod per 5 minutes) to prevent agent reconnection storms.
+	// +optional
+	Behavior *autoscalingv2.HorizontalPodAutoscalerBehavior `json:"behavior,omitempty"`
+}
+
 // BindplaneComponentSpec defines the Bindplane component pod specification
 type BindplaneComponentSpec struct {
 	// Replicas specifies the number of replicas for Bindplane Node deployment
@@ -83,6 +122,12 @@ type BindplaneComponentSpec struct {
 	// +optional
 	// +kubebuilder:default=false
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
+
+	// Autoscaling configures optional horizontal pod autoscaling for Bindplane Node.
+	// When autoscaling is enabled, spec.bindplane.replicas is ignored and the
+	// HorizontalPodAutoscaler controls the replica count.
+	// +optional
+	Autoscaling *NodeAutoscalingSpec `json:"autoscaling,omitempty"`
 }
 
 // BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification
