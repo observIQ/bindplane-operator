@@ -317,6 +317,10 @@ const (
 	// for a specific Bindplane CR. Set the value to "true" to pause.
 	// Example: kubectl annotate bindplane my-bindplane k8s.bindplane.com/pause-reconciliation=true
 	annotationPauseReconciliation = "k8s.bindplane.com/pause-reconciliation"
+
+	// bindplaneFinalizer is the finalizer added to Bindplane CRs to ensure the operator
+	// can perform cleanup before the CR is removed from etcd.
+	bindplaneFinalizer = "k8s.bindplane.com/finalizer"
 )
 
 // getBindplaneEEImage returns the Bindplane EE container image for the given Bindplane instance.
@@ -430,6 +434,27 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		log.Error(err, "unable to fetch Bindplane")
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion: if the object is being deleted and has our finalizer, run cleanup.
+	if !bindplane.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(bindplane, bindplaneFinalizer) {
+			if err := r.handleDeletion(ctx, bindplane, log); err != nil {
+				log.Error(err, "failed to handle deletion")
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if not present.
+	if !controllerutil.ContainsFinalizer(bindplane, bindplaneFinalizer) {
+		controllerutil.AddFinalizer(bindplane, bindplaneFinalizer)
+		if err := r.Update(ctx, bindplane); err != nil {
+			log.Error(err, "failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// Check for pause annotation — if set to "true", skip reconciliation entirely.
@@ -887,6 +912,18 @@ func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *b
 		return err
 	}
 	return nil
+}
+
+// handleDeletion performs cleanup when a Bindplane CR is being deleted.
+// Currently this is a no-op beyond removing the finalizer, since ownerReference
+// garbage collection handles all namespaced owned resources. This function exists
+// as a hook for future cleanup of resources not covered by ownerReference GC
+// (e.g., cluster-scoped resources or resources in other namespaces).
+func (r *BindplaneReconciler) handleDeletion(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	log.Info("handling deletion, running cleanup before removing finalizer")
+	// Future: add cleanup of any resources not covered by ownerReference GC here.
+	controllerutil.RemoveFinalizer(bindplane, bindplaneFinalizer)
+	return r.Update(ctx, bindplane)
 }
 
 // getKubernetesEnvVars returns the common Kubernetes environment variables
