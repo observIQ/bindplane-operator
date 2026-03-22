@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you find something suspicious and want to report it, we'd really appreciate!
+If you find something suspicious and want to report it, we'd really appreciate it!
 
 ### Ways to Report
 
