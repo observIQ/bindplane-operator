@@ -331,6 +331,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `replicas` _integer_ | Replicas specifies the number of replicas for Bindplane Node deployment | 3 | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Bindplane Node |  | Type: object <br />Optional: \{\} <br /> |
+| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
 
 
 #### BindplaneConfigSpec
@@ -635,6 +636,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `replicas` _integer_ | Replicas specifies the number of replicas for NATS StatefulSet | 2 | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for NATS |  | Type: object <br />Optional: \{\} <br /> |
+| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
 
 
 #### NatsConfig
@@ -1036,6 +1038,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `replicas` _integer_ | Replicas specifies the number of replicas for Transform Agent deployment | 2 | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Transform Agent |  | Type: object <br />Optional: \{\} <br /> |
+| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
 
 
 #### VolumeClaimTemplate

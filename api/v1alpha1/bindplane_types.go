@@ -77,6 +77,12 @@ type BindplaneComponentSpec struct {
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.
+	// When false (default), the operator creates a PDB with minAvailable: 1.
+	// +optional
+	// +kubebuilder:default=false
+	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 }
 
 // BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification
@@ -787,6 +793,12 @@ type TransformAgentComponentSpec struct {
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.
+	// When false (default), the operator creates a PDB with minAvailable: 1.
+	// +optional
+	// +kubebuilder:default=false
+	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 }
 
 // TSDBComponentSpec defines the TSDB component pod specification.
@@ -820,6 +832,12 @@ type NatsComponentSpec struct {
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.
+	// When false (default), the operator creates a PDB with minAvailable: 1.
+	// +optional
+	// +kubebuilder:default=false
+	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 }
 
 // StorageSpec defines persistent storage configuration

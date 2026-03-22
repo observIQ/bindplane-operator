@@ -45,6 +45,9 @@ spec:
               bindplane:
                 default: {}
                 properties:
+                  disablePodDisruptionBudget:
+                    default: false
+                    type: boolean
                   podTemplate:
                     properties:
                       metadata:
@@ -12128,6 +12131,9 @@ spec:
               nats:
                 default: {}
                 properties:
+                  disablePodDisruptionBudget:
+                    default: false
+                    type: boolean
                   podTemplate:
                     properties:
                       metadata:
@@ -15928,6 +15934,9 @@ spec:
               transformAgent:
                 default: {}
                 properties:
+                  disablePodDisruptionBudget:
+                    default: false
+                    type: boolean
                   podTemplate:
                     properties:
                       metadata:
