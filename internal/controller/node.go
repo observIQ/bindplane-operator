@@ -69,6 +69,10 @@ func (r *BindplaneReconciler) reconcileNode(ctx context.Context, bindplane *bind
 		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
 			return err
 		}
+	} else {
+		if err := r.deletePodDisruptionBudgetIfExists(ctx, bindplane, nodeComponent, log); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -928,6 +928,21 @@ func (r *BindplaneReconciler) handleDeletion(ctx context.Context, bindplane *bin
 	return r.Update(ctx, bindplane)
 }
 
+// deletePodDisruptionBudgetIfExists deletes the PDB for a component if it exists.
+// Called when disablePodDisruptionBudget is set to true to clean up a previously-created PDB.
+func (r *BindplaneReconciler) deletePodDisruptionBudgetIfExists(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, component string, log logr.Logger) error {
+	pdb := &policyv1.PodDisruptionBudget{}
+	err := r.Get(ctx, types.NamespacedName{Name: getResourceName(bindplane, component), Namespace: bindplane.Namespace}, pdb)
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	log.Info("Deleting PodDisruptionBudget", "name", pdb.Name)
+	return r.Delete(ctx, pdb)
+}
+
 // reconcilePodDisruptionBudget reconciles a PodDisruptionBudget resource.
 func (r *BindplaneReconciler) reconcilePodDisruptionBudget(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, pdb *policyv1.PodDisruptionBudget, log logr.Logger) error {
 	if err := controllerutil.SetControllerReference(bindplane, pdb, r.Scheme); err != nil {

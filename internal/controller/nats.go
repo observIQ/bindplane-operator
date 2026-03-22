@@ -83,6 +83,10 @@ func (r *BindplaneReconciler) reconcileNats(ctx context.Context, bindplane *bind
 		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
 			return err
 		}
+	} else {
+		if err := r.deletePodDisruptionBudgetIfExists(ctx, bindplane, natsComponent, log); err != nil {
+			return err
+		}
 	}
 
 	return nil

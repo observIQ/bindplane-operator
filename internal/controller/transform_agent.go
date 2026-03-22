@@ -66,6 +66,10 @@ func (r *BindplaneReconciler) reconcileTransformAgent(ctx context.Context, bindp
 		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
 			return err
 		}
+	} else {
+		if err := r.deletePodDisruptionBudgetIfExists(ctx, bindplane, transformAgentComponent, log); err != nil {
+			return err
+		}
 	}
 
 	return nil
