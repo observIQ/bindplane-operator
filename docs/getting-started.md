@@ -7,6 +7,7 @@ Before following this guide, ensure you have the following:
 - A running Kubernetes cluster with `kubectl` configured to access it
 - A Bindplane license key
 - Sufficient cluster permissions to install CRDs and deploy workloads
+- [cert-manager](https://cert-manager.io/) installed in your cluster (required for the default install, which includes the validating admission webhook — see [Validating Admission Webhook](configuration/security.md#validating-admission-webhook) to deploy without it)
 
 ## Install Postgres
 

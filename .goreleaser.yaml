@@ -4,6 +4,7 @@ before:
   hooks:
     - make manifests generate
     - make build-installer-release IMG=ghcr.io/observiq/bindplane-operator:{{ .Version }}
+    - make build-installer-no-webhook IMG=ghcr.io/observiq/bindplane-operator:{{ .Version }}
 
 builds:
   - main: ./cmd/main.go
@@ -61,9 +62,18 @@ release:
     name: bindplane-operator
   extra_files:
     - glob: tmp/install.yaml
+    - glob: tmp/install-no-webhook.yaml
   header: |
     ## Installation
 
+    **Default install (includes validating admission webhook — requires [cert-manager](https://cert-manager.io/docs/installation/)):**
+
     ```bash
     kubectl apply --server-side -f https://github.com/observiq/bindplane-operator/releases/download/{{ .Tag }}/install.yaml
+    ```
+
+    **Without the validating webhook (no cert-manager required):**
+
+    ```bash
+    kubectl apply --server-side -f https://github.com/observiq/bindplane-operator/releases/download/{{ .Tag }}/install-no-webhook.yaml
     ```

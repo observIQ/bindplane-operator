@@ -189,6 +189,12 @@ build-installer-release: manifests generate ## Generate install manifest for rel
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/overlays/release > tmp/install.yaml
 
+.PHONY: build-installer-no-webhook
+build-installer-no-webhook: manifests generate ## Generate install manifest without the validating webhook (no cert-manager required).
+	mkdir -p tmp
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/overlays/no-webhook > tmp/install-no-webhook.yaml
+
 ##@ Deployment
 
 ifndef ignore-not-found
@@ -213,6 +219,11 @@ deploy: manifests ## Deploy controller to the K8s cluster specified in ~/.kube/c
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+
+.PHONY: deploy-no-webhook
+deploy-no-webhook: manifests ## Deploy controller without the validating webhook (no cert-manager required).
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/overlays/no-webhook | $(KUBECTL) apply --server-side --force-conflicts -f -
 
 .PHONY: install-postgres-operator
 install-postgres-operator: ## Install CloudNativePG operator and deploy a test PostgreSQL cluster in the postgres namespace.
