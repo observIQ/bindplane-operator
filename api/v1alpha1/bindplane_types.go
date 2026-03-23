@@ -23,7 +23,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // BindplaneSpec defines the desired state of Bindplane.
@@ -1264,6 +1263,13 @@ type BindplaneStatus struct {
 	// +kubebuilder:validation:Enum=Pending;ApplyingChanges;Ready;Degraded
 	Phase string `json:"phase,omitempty"`
 
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// It corresponds to the Bindplane's generation, which is updated on mutation
+	// by the API Server. This field is used by GitOps tools (Argo CD, Flux) and
+	// kubectl wait to determine whether the controller has processed the latest spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// NodeReadyReplicas is the number of Bindplane Node pods currently ready.
 	// +optional
 	NodeReadyReplicas int32 `json:"nodeReadyReplicas,omitempty"`
@@ -1275,6 +1281,14 @@ type BindplaneStatus struct {
 	// TransformAgentReadyReplicas is the number of Transform Agent pods currently ready.
 	// +optional
 	TransformAgentReadyReplicas int32 `json:"transformAgentReadyReplicas,omitempty"`
+
+	// TSDBReadyReplicas is the number of TSDB (Prometheus) pods currently ready.
+	// +optional
+	TSDBReadyReplicas int32 `json:"tsdbReadyReplicas,omitempty"`
+
+	// BindplaneJobsReadyReplicas is the number of Bindplane Jobs pods currently ready.
+	// +optional
+	BindplaneJobsReadyReplicas int32 `json:"bindplaneJobsReadyReplicas,omitempty"`
 }
 
 // +kubebuilder:object:root=true

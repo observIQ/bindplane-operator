@@ -24037,6 +24037,9 @@ spec:
             type: object
           status:
             properties:
+              bindplaneJobsReadyReplicas:
+                format: int32
+                type: integer
               conditions:
                 items:
                   properties:
@@ -24081,6 +24084,9 @@ spec:
               nodeReadyReplicas:
                 format: int32
                 type: integer
+              observedGeneration:
+                format: int64
+                type: integer
               phase:
                 enum:
                 - Pending
@@ -24089,6 +24095,9 @@ spec:
                 - Degraded
                 type: string
               transformAgentReadyReplicas:
+                format: int32
+                type: integer
+              tsdbReadyReplicas:
                 format: int32
                 type: integer
             type: object
