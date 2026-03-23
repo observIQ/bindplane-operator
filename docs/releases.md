@@ -3,9 +3,9 @@
 ## Versioning
 
 Releases follow [Semantic Versioning](https://semver.org/) and are tagged
-**without** a `v` prefix. For example, version `0.0.18` corresponds to
-git tag `0.0.18` and container image tag
-`ghcr.io/observiq/bindplane-operator:0.0.18`.
+**without** a `v` prefix. For example, version `0.0.19` corresponds to
+git tag `0.0.19` and container image tag
+`ghcr.io/observiq/bindplane-operator:0.0.19`.
 
 ## Container Image Signing
 
@@ -24,7 +24,7 @@ been tampered with.
 cosign verify \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/observiq/bindplane-operator/' \
-  ghcr.io/observiq/bindplane-operator:0.0.18
+  ghcr.io/observiq/bindplane-operator:0.0.19
 ```
 
 A successful verification prints the signing certificate details and
@@ -53,7 +53,7 @@ and inspect them with any SPDX-compatible tool:
 
 ```bash
 # Download the SBOM for a specific release
-gh release download 0.0.18 \
+gh release download 0.0.19 \
   --repo observiq/bindplane-operator \
   --pattern 'manager_linux_amd64.sbom.json'
 
@@ -76,7 +76,7 @@ cosign verify-attestation \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/observiq/bindplane-operator/' \
   --type spdxjson \
-  ghcr.io/observiq/bindplane-operator:0.0.18
+  ghcr.io/observiq/bindplane-operator:0.0.19
 ```
 
 #### Extracting the SBOM from the attestation
@@ -86,7 +86,7 @@ cosign verify-attestation \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/observiq/bindplane-operator/' \
   --type spdxjson \
-  ghcr.io/observiq/bindplane-operator:0.0.18 \
+  ghcr.io/observiq/bindplane-operator:0.0.19 \
   | jq -r '.payload' | base64 -d | jq '.predicate'
 ```
 
@@ -96,5 +96,5 @@ To see all supply chain artifacts (signatures and attestations) attached to
 an image:
 
 ```bash
-cosign tree ghcr.io/observiq/bindplane-operator:0.0.18
+cosign tree ghcr.io/observiq/bindplane-operator:0.0.19
 ```
