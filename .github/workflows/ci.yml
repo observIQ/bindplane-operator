@@ -237,3 +237,13 @@ jobs:
 
       - name: Run deadcode
         run: make deadcode
+
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Run shellcheck
+        run: shellcheck .github/workflows/scripts/*.sh

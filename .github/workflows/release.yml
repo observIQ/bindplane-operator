@@ -53,31 +53,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sign container images and attach SBOM attestations
-        run: |
-          set -euo pipefail
-
-          TAG="${GITHUB_REF_NAME}"
-          IMAGES=(
-            "ghcr.io/observiq/bindplane-operator:${TAG}"
-            "ghcr.io/observiq/bindplane-operator:latest"
-          )
-          for IMAGE in "${IMAGES[@]}"; do
-            DIGEST=$(docker manifest inspect "${IMAGE}" -v | jq -r 'if type == "array" then .[0].Descriptor.digest else .Descriptor.digest end')
-            if [ -z "${DIGEST}" ] || [ "${DIGEST}" = "null" ]; then
-              echo "ERROR: failed to resolve digest for ${IMAGE}"
-              exit 1
-            fi
-
-            IMAGE_REF="ghcr.io/observiq/bindplane-operator@${DIGEST}"
-
-            echo "Signing ${IMAGE_REF}"
-            cosign sign --yes "${IMAGE_REF}"
-
-            echo "Generating SBOM for ${IMAGE_REF}"
-            syft "${IMAGE_REF}" -o spdx-json > sbom.spdx.json
-
-            echo "Attaching SBOM attestation to ${IMAGE_REF}"
-            cosign attest --yes --predicate sbom.spdx.json --type spdxjson "${IMAGE_REF}"
-
-            rm -f sbom.spdx.json
-          done
+        run: .github/workflows/scripts/sign-and-attest.sh
