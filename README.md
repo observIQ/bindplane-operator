@@ -10,6 +10,8 @@
 
 # Bindplane Operator
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 A Kubernetes operator for managing [Bindplane](https://bindplane.com/) server deployments in Kubernetes clusters.
 
 ## About
@@ -28,8 +30,24 @@ See **[Getting Started](docs/getting-started.md)** for instructions on deploying
 - **[Architecture](docs/architecture.md)** — Operator design and components
 - **[Configuration](docs/configuration/configuration.md)** — Bindplane configuration (license, auth, store, etc.)
 - **[API Reference (CRD)](docs/configuration/api.md)** — Full list of Bindplane custom resource options
+- **[Security](docs/configuration/security.md)** — TLS, Secrets, cert-manager, and webhook configuration
+- **[Autoscaling](docs/configuration/autoscaling.md)** — Node HPA behavior and recommendations
 - **[Deployment](docs/deployment.md)** — Deployment sizing guidance
-- **[Minikube Development](docs/development/minikube.md)** — Running the operator on Minikube
+- **[Monitoring](docs/monitoring.md)** — Operator metrics and Prometheus integration
+
+## Contributing
+
+Please read the [Contributing Guide](docs/CONTRIBUTING.md) before submitting a pull request.
+
+This project follows the [CNCF Code of Conduct](docs/CODE_OF_CONDUCT.md).
+
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
 
 ## Learn More
 
