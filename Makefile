@@ -169,6 +169,18 @@ lint-config: ## Verify golangci-lint linter configuration
 gosec: ## Run gosec security scanner
 	$(GOSEC) ./...
 
+.PHONY: govulncheck
+govulncheck: ## Run govulncheck vulnerability scanner
+	$(GOVULNCHECK) ./...
+
+.PHONY: deadcode
+deadcode: ## Find unreachable functions; exits non-zero if any are found
+	@output=$$($(DEADCODE) -test ./...); \
+	if [ -n "$$output" ]; then \
+		echo "$$output"; \
+		exit 1; \
+	fi
+
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
@@ -259,6 +271,8 @@ ENVTEST = go tool -modfile=$(TOOLS_MOD) sigs.k8s.io/controller-runtime/tools/set
 CRD_REF_DOCS = go tool -modfile=$(TOOLS_MOD) github.com/elastic/crd-ref-docs
 GOLANGCI_LINT = go tool -modfile=$(TOOLS_MOD) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOSEC = go tool -modfile=$(TOOLS_MOD) github.com/securego/gosec/v2/cmd/gosec
+GOVULNCHECK = go tool -modfile=$(TOOLS_MOD) golang.org/x/vuln/cmd/govulncheck
+DEADCODE = go tool -modfile=$(TOOLS_MOD) golang.org/x/tools/cmd/deadcode
 
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')

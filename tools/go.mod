@@ -1,11 +1,13 @@
 module github.com/observiq/bindplane-operator/tools
 
-go 1.26.0
+go 1.26.1
 
 tool (
 	github.com/elastic/crd-ref-docs
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	github.com/securego/gosec/v2/cmd/gosec
+	golang.org/x/tools/cmd/deadcode
+	golang.org/x/vuln/cmd/govulncheck
 	sigs.k8s.io/controller-runtime/tools/setup-envtest
 	sigs.k8s.io/controller-tools/cmd/controller-gen
 	sigs.k8s.io/kind/cmd/kind
@@ -258,9 +260,11 @@ require (
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260109210033-bd525da824e2 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
+	golang.org/x/vuln v1.1.4 // indirect
 	google.golang.org/api v0.256.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
