@@ -1,3 +1,5 @@
+//lint:file-ignore ST1001 Ginkgo and Gomega require dot imports by convention
+
 /*
 Copyright 2025.
 

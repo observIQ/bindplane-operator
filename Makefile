@@ -169,6 +169,10 @@ lint-config: ## Verify golangci-lint linter configuration
 gosec: ## Run gosec security scanner
 	$(GOSEC) ./...
 
+.PHONY: staticcheck
+staticcheck: ## Run staticcheck static analysis
+	$(STATICCHECK) ./...
+
 .PHONY: govulncheck
 govulncheck: ## Run govulncheck vulnerability scanner
 	$(GOVULNCHECK) ./...
@@ -273,6 +277,7 @@ GOLANGCI_LINT = go tool -modfile=$(TOOLS_MOD) github.com/golangci/golangci-lint/
 GOSEC = go tool -modfile=$(TOOLS_MOD) github.com/securego/gosec/v2/cmd/gosec
 GOVULNCHECK = go tool -modfile=$(TOOLS_MOD) golang.org/x/vuln/cmd/govulncheck
 DEADCODE = go tool -modfile=$(TOOLS_MOD) golang.org/x/tools/cmd/deadcode
+STATICCHECK = go tool -modfile=$(TOOLS_MOD) honnef.co/go/tools/cmd/staticcheck
 
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')

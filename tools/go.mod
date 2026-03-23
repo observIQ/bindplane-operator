@@ -8,6 +8,7 @@ tool (
 	github.com/securego/gosec/v2/cmd/gosec
 	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
+	honnef.co/go/tools/cmd/staticcheck
 	sigs.k8s.io/controller-runtime/tools/setup-envtest
 	sigs.k8s.io/controller-tools/cmd/controller-gen
 	sigs.k8s.io/kind/cmd/kind

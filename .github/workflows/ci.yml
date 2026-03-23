@@ -154,6 +154,21 @@ jobs:
             exit 1
           )
 
+  staticcheck:
+    name: Staticcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run staticcheck
+        run: make staticcheck
+
   govulncheck:
     name: Govulncheck
     runs-on: ubuntu-latest
