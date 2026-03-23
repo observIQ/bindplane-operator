@@ -407,6 +407,8 @@ func setMigrateFailureCondition(bindplane *bindplanev1alpha1.Bindplane) {
 		ObservedGeneration: bindplane.Generation,
 		LastTransitionTime: metav1.Now(),
 	})
+	bindplane.Status.Phase = "Degraded"
+	bindplane.Status.ObservedGeneration = bindplane.Generation
 }
 
 // getBindplaneJobsAffinity returns the affinity configuration for Bindplane Jobs pods

@@ -26,6 +26,7 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -437,6 +438,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Set phase to Pending on the first reconcile (before any resources exist).
+	// Subsequent reconcile paths will overwrite this with the appropriate phase.
+	if bindplane.Status.Phase == "" {
+		bindplane.Status.Phase = "Pending"
+	}
+
 	// Handle deletion: if the object is being deleted and has our finalizer, run cleanup.
 	if !bindplane.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(bindplane, bindplaneFinalizer) {
@@ -470,6 +477,7 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			LastTransitionTime: metav1.Now(),
 		}
 		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+		bindplane.Status.ObservedGeneration = bindplane.Generation
 		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
 			log.Error(statusErr, "failed to update Bindplane status for pause")
 			return ctrl.Result{}, statusErr
@@ -490,6 +498,8 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			LastTransitionTime: metav1.Now(),
 		}
 		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+		bindplane.Status.Phase = "Degraded"
+		bindplane.Status.ObservedGeneration = bindplane.Generation
 		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
 			log.Error(statusErr, "failed to update Bindplane status")
 			return ctrl.Result{}, statusErr
@@ -557,6 +567,7 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Populate per-component ready replica counts and overall phase.
 	r.updateReadyReplicaStatus(ctx, bindplane)
+	bindplane.Status.ObservedGeneration = bindplane.Generation
 
 	if err := r.Status().Update(ctx, bindplane); err != nil {
 		log.Error(err, "failed to update Bindplane status")
@@ -571,10 +582,14 @@ func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bind
 	nodeReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, nodeComponent), bindplane.Namespace)
 	natsReady := r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, natsComponent), bindplane.Namespace)
 	taReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, transformAgentComponent), bindplane.Namespace)
+	tsdbReady := r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, tsdbComponent), bindplane.Namespace)
+	jobsReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, bindplaneJobsComponent), bindplane.Namespace)
 
 	bindplane.Status.NodeReadyReplicas = nodeReady
 	bindplane.Status.NatsReadyReplicas = natsReady
 	bindplane.Status.TransformAgentReadyReplicas = taReady
+	bindplane.Status.TSDBReadyReplicas = tsdbReady
+	bindplane.Status.BindplaneJobsReadyReplicas = jobsReady
 
 	nodeDesired := *bindplane.Spec.Bindplane.Replicas
 	var natsDesired int32
@@ -620,6 +635,8 @@ func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Named("bindplane").
 		Complete(r)
 }
