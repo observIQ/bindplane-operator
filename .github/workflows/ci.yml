@@ -131,7 +131,7 @@ jobs:
       - name: Run Goreleaser build
         uses: goreleaser/goreleaser-action@v6
         with:
-          args: release --snapshot --clean --skip=docker_manifests
+          args: release --snapshot --clean --skip=publish
           version: v2.14.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
