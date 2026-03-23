@@ -185,6 +185,14 @@ deadcode: ## Find unreachable functions; exits non-zero if any are found
 		exit 1; \
 	fi
 
+ALLOWED_LICENSES := MIT,Apache-2.0,BSD-3-Clause,BSD-2-Clause,BSD-2-Clause-FreeBSD,Zlib,ISC,MPL-2.0
+
+.PHONY: license-check
+license-check: ## Check dependency licenses against allowlist
+	$(GO_LICENSES) check ./... \
+		--allowed_licenses=$(ALLOWED_LICENSES) \
+		--ignore=github.com/observiq/bindplane-operator
+
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
@@ -278,6 +286,7 @@ GOSEC = go tool -modfile=$(TOOLS_MOD) github.com/securego/gosec/v2/cmd/gosec
 GOVULNCHECK = go tool -modfile=$(TOOLS_MOD) golang.org/x/vuln/cmd/govulncheck
 DEADCODE = go tool -modfile=$(TOOLS_MOD) golang.org/x/tools/cmd/deadcode
 STATICCHECK = go tool -modfile=$(TOOLS_MOD) honnef.co/go/tools/cmd/staticcheck
+GO_LICENSES = go tool -modfile=$(TOOLS_MOD) github.com/google/go-licenses/v2
 
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')

@@ -5,6 +5,7 @@ go 1.26.1
 tool (
 	github.com/elastic/crd-ref-docs
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	github.com/google/go-licenses/v2
 	github.com/securego/gosec/v2/cmd/gosec
 	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
@@ -106,6 +107,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golangci/dupl v0.0.0-20250308024227-f665c8d69b32 // indirect
 	github.com/golangci/go-printf-func-name v0.1.0 // indirect
 	github.com/golangci/gofmt v0.0.0-20250106114630-d62b90e6713d // indirect
@@ -118,6 +120,8 @@ require (
 	github.com/google/generative-ai-go v0.19.0 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/go-licenses/v2 v2.0.1 // indirect
+	github.com/google/licenseclassifier/v2 v2.0.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/safetext v0.0.0-20220905092116-b49f7bc46da2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
@@ -182,6 +186,7 @@ require (
 	github.com/nishanths/predeclared v0.2.2 // indirect
 	github.com/nunnatsa/ginkgolinter v0.19.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
+	github.com/otiai10/copy v1.14.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -243,6 +248,7 @@ require (
 	gitlab.com/bosi/decorder v0.4.2 // indirect
 	go-simpler.org/musttag v0.13.0 // indirect
 	go-simpler.org/sloglint v0.11.0 // indirect
+	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect

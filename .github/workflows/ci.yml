@@ -96,6 +96,21 @@ jobs:
       - name: Run gosec security scanner
         run: make gosec
 
+  license-check:
+    name: License check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check dependency licenses
+        run: make license-check
+
   build:
     name: Build
     runs-on: ubuntu-latest
