@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -122,6 +123,22 @@ type BindplaneComponentSpec struct {
 	// +optional
 	// +kubebuilder:default=false
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
+
+	// MinReadySeconds is the minimum number of seconds a newly created Node pod must be
+	// ready (passing its readiness probe) before it is considered available. During a
+	// rolling update the next pod is not replaced until this window elapses. When omitted,
+	// the operator defaults this to the pod's termination grace period, giving agents
+	// that were connected to the outgoing pod enough time to reconnect to healthy nodes
+	// (including the new pod) before another pod is taken out of service.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinReadySeconds *int32 `json:"minReadySeconds,omitempty"`
+
+	// Strategy defines the rollout strategy for the Bindplane Node Deployment.
+	// When omitted, defaults to RollingUpdate with maxSurge=1 and maxUnavailable=0,
+	// ensuring a replacement pod is running before the old pod is removed.
+	// +optional
+	Strategy *appsv1.DeploymentStrategy `json:"strategy,omitempty"`
 
 	// Autoscaling configures optional horizontal pod autoscaling for Bindplane Node.
 	// When autoscaling is enabled, spec.bindplane.replicas is ignored and the

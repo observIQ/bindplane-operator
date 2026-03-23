@@ -15,6 +15,7 @@ Autoscaling is **disabled by default**.
   - [Enable with all defaults](#enable-with-all-defaults)
   - [Increase the replica ceiling](#increase-the-replica-ceiling)
   - [Full custom configuration](#full-custom-configuration)
+- [Rolling update configuration](#rolling-update-configuration)
 - [Interaction with other settings](#interaction-with-other-settings)
 - [Recommendations](#recommendations)
 
@@ -146,6 +147,40 @@ spec:
             - type: Pods
               value: 1
               periodSeconds: 600
+```
+
+---
+
+## Rolling update configuration
+
+Two `spec.bindplane` fields control how the Node Deployment rolls out updates. They work together to pace rolling updates safely for a stateful WebSocket workload.
+
+| CRD Field | Type | Default | Description |
+|---|---|---|---|
+| `spec.bindplane.minReadySeconds` | `integer` | Termination grace period | Minimum seconds a new pod must be continuously ready before it is considered available and the next pod is replaced. |
+| `spec.bindplane.strategy` | [`DeploymentStrategy`](https://pkg.go.dev/k8s.io/api/apps/v1#DeploymentStrategy) | RollingUpdate maxSurge=1 / maxUnavailable=0 | Rollout strategy for the Node Deployment. |
+
+### `minReadySeconds`
+
+By default, `minReadySeconds` is set to the same value as the pod's termination grace period (see `spec.config.advanced.server.opampShutdownGracePeriod`). This pacing is intentional: when a Node pod is removed, the agents that were connected to it begin reconnecting. By holding off on replacing the next pod until `minReadySeconds` has elapsed on the new pod, the operator ensures the new pod has been accepting connections for at least as long as the previous pod took to drain. This gives reconnecting agents time to establish new connections across the healthy pool before another pod is taken out of service. Without this delay, a second pod could start terminating while agents from the first pod are still mid-reconnect, amplifying the reconnection storm.
+
+Set `spec.bindplane.minReadySeconds: 0` to disable this pacing entirely (not recommended for production).
+
+### `strategy`
+
+The default strategy is `RollingUpdate` with `maxSurge: 1` and `maxUnavailable: 0`. This means the Deployment always brings up one new pod before removing any old pod, ensuring the desired replica count is never dipped below during an update. Override with any valid [`DeploymentStrategy`](https://pkg.go.dev/k8s.io/api/apps/v1#DeploymentStrategy).
+
+### Example
+
+```yaml
+spec:
+  bindplane:
+    minReadySeconds: 30
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
 ```
 
 ---

@@ -399,6 +399,10 @@ spec:
                   disablePodDisruptionBudget:
                     default: false
                     type: boolean
+                  minReadySeconds:
+                    format: int32
+                    minimum: 0
+                    type: integer
                   podTemplate:
                     properties:
                       metadata:
@@ -4195,6 +4199,24 @@ spec:
                     default: 3
                     format: int32
                     type: integer
+                  strategy:
+                    properties:
+                      rollingUpdate:
+                        properties:
+                          maxSurge:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                        type: object
+                      type:
+                        type: string
+                    type: object
                 type: object
               bindplaneJobs:
                 properties:
