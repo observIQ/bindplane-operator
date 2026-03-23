@@ -14,7 +14,7 @@
 #   - syft     (anchore/sbom-action/download-syft)
 #
 # Environment:
-#   GITHUB_REF_NAME  – the git tag pushed (e.g. "0.0.19"), set automatically
+#   GITHUB_REF_NAME  – the git tag pushed (e.g. "0.0.20"), set automatically
 #                      by GitHub Actions.
 
 set -euo pipefail
