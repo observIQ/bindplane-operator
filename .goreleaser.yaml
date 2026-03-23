@@ -53,6 +53,11 @@ docker_manifests:
       - "ghcr.io/observiq/bindplane-operator:latest-amd64"
       - "ghcr.io/observiq/bindplane-operator:latest-arm64"
 
+sboms:
+  - artifacts: binary
+    documents:
+      - "{{ .Binary }}_{{ .Os }}_{{ .Arch }}.sbom.json"
+
 archives:
   - format: binary
 

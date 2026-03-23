@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write  # Required for cosign keyless signing via Sigstore
 
 jobs:
   release:
@@ -30,6 +31,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
@@ -41,5 +45,48 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           args: release
+          version: v2.14.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign container images with cosign
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          IMAGES=(
+            "ghcr.io/observiq/bindplane-operator:${TAG}"
+            "ghcr.io/observiq/bindplane-operator:latest"
+          )
+          for IMAGE in "${IMAGES[@]}"; do
+            DIGEST=$(docker manifest inspect "${IMAGE}" -v | jq -r 'if type == "array" then .[0].Descriptor.digest else .Descriptor.digest end')
+            if [ -n "${DIGEST}" ] && [ "${DIGEST}" != "null" ]; then
+              cosign sign --yes "ghcr.io/observiq/bindplane-operator@${DIGEST}"
+            fi
+          done
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ghcr.io/observiq/bindplane-operator:${{ github.ref_name }}
+          format: spdx-json
+          output-file: sbom-bindplane-operator.spdx.json
+
+      - name: Attach SBOM to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sbom-bindplane-operator.spdx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan released image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/observiq/bindplane-operator:${{ github.ref_name }}
+          format: sarif
+          output: trivy-release-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-release-results.sarif
+        if: always()
