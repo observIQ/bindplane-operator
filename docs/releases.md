@@ -23,7 +23,7 @@ been tampered with.
 ```bash
 cosign verify \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/observiq/bindplane-operator/' \
+  --certificate-identity-regexp '^https://github\.com/observIQ/bindplane-operator/' \
   ghcr.io/observiq/bindplane-operator:0.0.19
 ```
 
@@ -74,7 +74,7 @@ a single workflow.
 ```bash
 cosign verify-attestation \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/observiq/bindplane-operator/' \
+  --certificate-identity-regexp '^https://github\.com/observIQ/bindplane-operator/' \
   --type spdxjson \
   ghcr.io/observiq/bindplane-operator:0.0.19
 ```
@@ -84,7 +84,7 @@ cosign verify-attestation \
 ```bash
 cosign verify-attestation \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/observiq/bindplane-operator/' \
+  --certificate-identity-regexp '^https://github\.com/observIQ/bindplane-operator/' \
   --type spdxjson \
   ghcr.io/observiq/bindplane-operator:0.0.19 \
   | jq -r '.payload' | base64 -d | jq '.predicate'
