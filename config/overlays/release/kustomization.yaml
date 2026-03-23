@@ -1,0 +1,10 @@
+# Release overlay: same as default but sets imagePullPolicy: Always for the manager
+# so released install.yaml pulls images from the registry instead of using local images.
+resources:
+  - ../../default
+
+patches:
+  - path: image_pull_policy_patch.yaml
+    target:
+      kind: Deployment
+      name: controller-manager

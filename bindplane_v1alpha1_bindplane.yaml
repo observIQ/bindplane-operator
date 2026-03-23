@@ -1,0 +1,177 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+# CA certificate used by bindplane-internal-issuer to sign internal mTLS certs (e.g. Bindplane's TSDB, implemented by Prometheus by default).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bindplane-internal-ca
+spec:
+  isCA: true
+  commonName: bindplane-internal-ca
+  secretName: bindplane-internal-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+# Issuer for internal certificates (TSDB remote write mTLS, NATS TLS, etc.). Uses the CA above.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: bindplane-internal-issuer
+spec:
+  ca:
+    secretName: bindplane-internal-ca-secret
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bindplane-status-keys
+stringData:
+  keys: "550e8400-e29b-41d4-a716-446655440000"
+---
+apiVersion: k8s.bindplane.com/v1alpha1
+kind: Bindplane
+metadata:
+  labels:
+    app.kubernetes.io/name: bindplane-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: bindplane-sample
+spec:
+  config:
+    licenseSecretRef:
+      name: bindplane-license
+      key: license
+    auth:
+      type: system
+      usernameSecretRef:
+        name: bindplane-system-auth
+        key: username
+      passwordSecretRef:
+        name: bindplane-system-auth
+        key: password
+    network:
+      remoteURL: "http://localhost:3001"
+    store:
+      postgres:
+        host: test-postgres-rw.postgres.svc.cluster.local
+        port: "5432"
+        database: testdb
+        username: testuser
+        password: testpass
+    # TSDB client mTLS: Bindplane services use a cert-manager-issued client cert when connecting to Bindplane's TSDB remote write.
+    tsdb:
+      tls:
+        certManager:
+          name: bindplane-internal-issuer
+          kind: Issuer
+          group: cert-manager.io
+    # NATS TLS (cert-manager only): operator issues one cert (client + cluster + HTTP) when nats.tls.certManager is set.
+    nats:
+      tls:
+        certManager:
+          name: bindplane-internal-issuer
+          kind: Issuer
+          group: cert-manager.io
+    analytics:
+      disabled: true
+    logging:
+      type: "stdout,otlp"
+      otlp:
+        endpoint: "bindplane-gateway-agent.bindplane-agent.svc.cluster.local:4317"
+        insecure: true
+        interval: "30s"
+    eventBus:
+      health:
+        requiredHosts: 3
+        interval: 5s
+    status:
+      enabled: true
+      keysSecretRef:
+        name: bindplane-status-keys
+        key: keys
+  bindplane:
+    replicas: 1
+    podTemplate:
+      spec:
+        containers:
+          - name: server
+            resources:
+              requests:
+                cpu: 500m
+                memory: 512Mi
+              limits:
+                memory: 512Mi
+  bindplaneJobs:
+    podTemplate:
+      spec:
+        containers:
+          - name: server
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 512Mi
+  bindplaneJobsMigrate:
+    podTemplate:
+      spec:
+        containers:
+          - name: server
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 512Mi
+  transformAgent:
+    replicas: 1
+    podTemplate:
+      spec:
+        containers:
+          - name: transform-agent
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 512Mi
+  nats:
+    replicas: 1
+    podTemplate:
+      spec:
+        containers:
+          - name: server
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 256Mi
+  # TSDB server mTLS: StatefulSet serves remote write over TLS; operator issues server + probe client certs from this issuer.
+  # Together with config.tsdb.tls above, this enables full mTLS (server cert on TSDB, client cert on Bindplane).
+  tsdb:
+    tls:
+      certManager:
+        name: bindplane-internal-issuer
+        kind: Issuer
+        group: cert-manager.io
+    podTemplate:
+      spec:
+        containers:
+          - name: tsdb
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 256Mi

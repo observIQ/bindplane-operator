@@ -27,6 +27,28 @@ go.work.sum
 # env file
 .env
 
+# Operator SDK / Kubebuilder
+bin/
+*.bin
+
+# Build artifacts
+dist/
+_build/
+build/
+
+# Kubernetes / Operator manifests (generated)
+# Uncomment if you want to ignore generated manifests
+# config/manifests/
+
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
