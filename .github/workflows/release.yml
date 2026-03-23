@@ -63,20 +63,6 @@ jobs:
             fi
           done
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: ghcr.io/observiq/bindplane-operator:${{ github.ref_name }}
-          format: spdx-json
-          output-file: sbom-bindplane-operator.spdx.json
-
-      - name: Attach SBOM to release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: sbom-bindplane-operator.spdx.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Scan released image for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
