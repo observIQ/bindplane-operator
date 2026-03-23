@@ -17,7 +17,6 @@ linters:
     - nakedret
     - prealloc
     - revive
-    - staticcheck
     - unconvert
     - unparam
     - unused

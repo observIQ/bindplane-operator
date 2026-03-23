@@ -1,3 +1,5 @@
+//lint:file-ignore ST1001 Ginkgo and Gomega require dot imports by convention
+
 /*
 Copyright 2025.
 
@@ -26,8 +28,8 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
-	. "github.com/onsi/gomega"    // nolint:revive,staticcheck
+	. "github.com/onsi/ginkgo/v2" // nolint:revive
+	. "github.com/onsi/gomega"    // nolint:revive
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
