@@ -22,78 +22,922 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
-var _ = Describe("Bindplane Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+// conditionTypeReconciled is the condition type used by the controller to report reconcile status.
+const conditionTypeReconciled = "Reconciled"
 
-		ctx := context.Background()
+// newTestBindplane returns a minimal valid Bindplane CR for integration tests.
+func newTestBindplane(name, namespace string) *bindplanev1alpha1.Bindplane {
+	return &bindplanev1alpha1.Bindplane{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: bindplanev1alpha1.BindplaneSpec{
+			Version: "1.98.0",
+			Config: bindplanev1alpha1.BindplaneConfigSpec{
+				License: "test-license",
+				Store: bindplanev1alpha1.StoreConfig{
+					Postgres: &bindplanev1alpha1.PostgresConfig{
+						Host: "postgres.postgres.svc.cluster.local",
+					},
+				},
+			},
+		},
+	}
+}
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+// newReconciler returns a BindplaneReconciler wired to the envtest k8sClient.
+func newReconciler() *BindplaneReconciler {
+	return &BindplaneReconciler{
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
+	}
+}
+
+// createTestNamespace creates a namespace with a generated name and returns the name.
+func createTestNamespace(ctx context.Context, prefix string) string {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: prefix + "-",
+		},
+	}
+	Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+	return ns.Name
+}
+
+// reconcileRequest builds a reconcile.Request for the given name and namespace.
+func reconcileRequest(name, namespace string) reconcile.Request {
+	return reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}}
+}
+
+// markJobComplete patches the migrate Job's status so it appears succeeded.
+// Kubernetes 1.35+ requires startTime, completionTime, and SuccessCriteriaMet
+// to be set alongside the Complete condition.
+func markJobComplete(ctx context.Context, jobName, namespace string) {
+	job := &batchv1.Job{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: namespace}, job)).To(Succeed())
+	now := metav1.Now()
+	job.Status.StartTime = &now
+	job.Status.CompletionTime = &now
+	job.Status.Conditions = append(job.Status.Conditions,
+		batchv1.JobCondition{
+			Type:               batchv1.JobSuccessCriteriaMet,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+		batchv1.JobCondition{
+			Type:               batchv1.JobComplete,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+	)
+	Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+}
+
+// markJobFailed patches the migrate Job's status so it appears failed.
+// Kubernetes 1.35+ requires FailureTarget=true before Failed=true.
+func markJobFailed(ctx context.Context, jobName, namespace string) {
+	job := &batchv1.Job{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: namespace}, job)).To(Succeed())
+	now := metav1.Now()
+	job.Status.StartTime = &now
+	job.Status.Conditions = append(job.Status.Conditions,
+		batchv1.JobCondition{
+			Type:               batchv1.JobFailureTarget,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+		batchv1.JobCondition{
+			Type:               batchv1.JobFailed,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+	)
+	Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+}
+
+// reconcileUntilMigration performs the reconciles needed to create the migrate Job
+// (finalizer reconcile + full reconcile) and returns the Job name.
+func reconcileUntilMigration(ctx context.Context, r *BindplaneReconciler, bpName, namespace string) string {
+	// Reconcile 1: add finalizer
+	_, err := r.Reconcile(ctx, reconcileRequest(bpName, namespace))
+	Expect(err).NotTo(HaveOccurred())
+	// Reconcile 2: full path, creates resources up to migrate job
+	result, err := r.Reconcile(ctx, reconcileRequest(bpName, namespace))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(result.RequeueAfter).NotTo(BeZero(), "expected RequeueAfter while awaiting migration")
+	return bpName + "-migrate"
+}
+
+// reconcilePastMigration performs the reconciles to get past the migrate Job gate.
+func reconcilePastMigration(ctx context.Context, r *BindplaneReconciler, bpName, namespace string) {
+	jobName := reconcileUntilMigration(ctx, r, bpName, namespace)
+	markJobComplete(ctx, jobName, namespace)
+	_, err := r.Reconcile(ctx, reconcileRequest(bpName, namespace))
+	Expect(err).NotTo(HaveOccurred())
+}
+
+var _ = Describe("Reconcile - finalizer lifecycle", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-finalizer")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("adds finalizer on first reconcile", func() {
+		name := "bp-finalizer"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Finalizers).To(ContainElement("k8s.bindplane.com/finalizer"))
+	})
+
+	It("removes finalizer on deletion", func() {
+		name := "bp-finalizer-del"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// First reconcile: adds finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Delete the CR — sets DeletionTimestamp (finalizer prevents immediate deletion)
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(k8sClient.Delete(testCtx, updated)).To(Succeed())
+
+		// Second reconcile: removes finalizer, allowing GC to delete the object
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		final := &bindplanev1alpha1.Bindplane{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, final)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("Reconcile - pause annotation", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-pause")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("pauses reconciliation and sets Reconciled=False/Paused", func() {
+		name := "bp-pause"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": "true"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile 1: finalizer added (pause check happens after finalizer)
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Reconcile 2: hits pause path
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
 		}
-		bindplane := &bindplanev1alpha1.Bindplane{}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciledCond.Reason).To(Equal("Paused"))
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind Bindplane")
-			err := k8sClient.Get(ctx, typeNamespacedName, bindplane)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &bindplanev1alpha1.Bindplane{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					Spec: bindplanev1alpha1.BindplaneSpec{
-						Config: bindplanev1alpha1.BindplaneConfigSpec{
-							License: "test-license",
-							Store: bindplanev1alpha1.StoreConfig{
-								Postgres: &bindplanev1alpha1.PostgresConfig{
-									Host: "postgres-host",
-								},
-							},
-						},
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		// Verify no workloads were created
+		depList := &appsv1.DeploymentList{}
+		Expect(k8sClient.List(testCtx, depList, client.InNamespace(testNamespace))).To(Succeed())
+		Expect(depList.Items).To(BeEmpty())
+
+		ssList := &appsv1.StatefulSetList{}
+		Expect(k8sClient.List(testCtx, ssList, client.InNamespace(testNamespace))).To(Succeed())
+		Expect(ssList.Items).To(BeEmpty())
+	})
+
+	It("resumes when annotation removed", func() {
+		name := "bp-resume"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": "true"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Add finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		// Hit pause
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Remove pause annotation
+		paused := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, paused)).To(Succeed())
+		paused.Annotations = map[string]string{}
+		Expect(k8sClient.Update(testCtx, paused)).To(Succeed())
+
+		// Reconcile: should proceed past pause and start creating resources
+		// (will block at migrate Job, but TA/TSDB resources are created)
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Transform agent ServiceAccount must now exist (proving reconciliation resumed)
+		sa := &corev1.ServiceAccount{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, sa)
+		Expect(err).NotTo(HaveOccurred())
+	})
+})
+
+var _ = Describe("Reconcile - validation failure", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-invalid")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("sets Reconciled=False/Invalid for invalid status key (non-UUID)", func() {
+		// CRD enforces license and postgres presence, so we test a controller-only
+		// validation: status.keys entries must be valid UUIDs.
+		name := "bp-invalid-uuid"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"not-a-valid-uuid"},
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile 1: add finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		// Reconcile 2: validation fails
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
 			}
-		})
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciledCond.Reason).To(Equal("Invalid"))
+		Expect(reconciledCond.Message).NotTo(BeEmpty())
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &bindplanev1alpha1.Bindplane{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+		// No workloads created
+		depList := &appsv1.DeploymentList{}
+		Expect(k8sClient.List(testCtx, depList, client.InNamespace(testNamespace))).To(Succeed())
+		Expect(depList.Items).To(BeEmpty())
+	})
 
-			By("Cleanup the specific resource instance Bindplane")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &BindplaneReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+	It("sets Reconciled=False/Invalid for empty postgres host", func() {
+		// Postgres field must be present (CRD enforces this), but host can be empty —
+		// the controller rejects empty host via ValidatePostgresConfig.
+		name := "bp-invalid-pghost"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Store.Postgres = &bindplanev1alpha1.PostgresConfig{Host: ""}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
 			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciledCond.Reason).To(Equal("Invalid"))
+	})
+})
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
-		})
+var _ = Describe("Reconcile - Transform Agent", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-ta")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, Deployment, Service, PDB", func() {
+		name := "bp-ta"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile 1: finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		// Reconcile 2: full (blocks at migration)
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		saName := name + "-transform-agent"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-transform-agent:1.98.0-bindplane"))
+
+		svc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, svc)).To(Succeed())
+		var foundPort bool
+		for _, p := range svc.Spec.Ports {
+			if p.Port == 4568 {
+				foundPort = true
+				break
+			}
+		}
+		Expect(foundPort).To(BeTrue(), "expected service port 4568")
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, pdb)).To(Succeed())
+		Expect(pdb.Spec.MinAvailable).NotTo(BeNil())
+	})
+
+	It("uses custom replicas when set", func() {
+		name := "bp-ta-replicas"
+		bp := newTestBindplane(name, testNamespace)
+		customReplicas := int32(3)
+		bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{Replicas: &customReplicas}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Replicas).NotTo(BeNil())
+		Expect(*dep.Spec.Replicas).To(Equal(int32(3)))
+	})
+
+	It("skips PDB when disablePodDisruptionBudget is true", func() {
+		name := "bp-ta-nopdb"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
+			DisablePodDisruptionBudget: true,
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, pdb)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("Reconcile - TSDB", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-tsdb")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, StatefulSet, Service, basic-auth Secret", func() {
+		name := "bp-tsdb"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		tsdbName := name + "-tsdb"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: tsdbName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: tsdbName, Namespace: testNamespace}, ss)).To(Succeed())
+		Expect(ss.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(ss.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-prometheus:1.98.0"))
+
+		svc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: tsdbName, Namespace: testNamespace}, svc)).To(Succeed())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb-basic-auth", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey("username"))
+		Expect(secret.Data).To(HaveKey("password"))
+		Expect(secret.Data).To(HaveKey("web-config"))
+	})
+
+	It("StatefulSet has correct volume claims", func() {
+		name := "bp-tsdb-pvc"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb", Namespace: testNamespace}, ss)).To(Succeed())
+
+		// VolumeClaimTemplate name is <bindplane-name>-tsdb-data (from getResourceName)
+		expectedVCTName := name + "-tsdb-data"
+		var foundPVC bool
+		for _, vct := range ss.Spec.VolumeClaimTemplates {
+			if vct.Name == expectedVCTName {
+				foundPVC = true
+				break
+			}
+		}
+		Expect(foundPVC).To(BeTrue(), "expected VolumeClaimTemplate named %s", expectedVCTName)
+	})
+})
+
+var _ = Describe("Reconcile - Jobs Migrate", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-migrate")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates migrate Job and returns RequeueAfter when Job is pending", func() {
+		name := "bp-migrate"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).NotTo(BeZero())
+
+		job := &batchv1.Job{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-migrate", Namespace: testNamespace}, job)).To(Succeed())
+
+		// Jobs and Node Deployments should not exist yet
+		dep := &appsv1.Deployment{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("proceeds past migration when Job is manually marked Complete", func() {
+		name := "bp-migrate-done"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		markJobComplete(testCtx, name+"-migrate", testNamespace)
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		// Jobs Deployment should now exist
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)).To(Succeed())
+
+		// Node Deployment should now exist
+		nodeDep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, nodeDep)).To(Succeed())
+
+		// NATS StatefulSet should now exist
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-nats", Namespace: testNamespace}, ss)).To(Succeed())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("sets MigrationFailed condition when Job fails", func() {
+		name := "bp-migrate-fail"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		markJobFailed(testCtx, name+"-migrate", testNamespace)
+
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciledCond.Reason).To(Equal("MigrationFailed"))
+
+		dep := &appsv1.Deployment{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("Reconcile - NATS", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-nats")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, StatefulSet, client Service, cluster Service, PDB", func() {
+		name := "bp-nats"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		natsName := name + "-nats"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName, Namespace: testNamespace}, ss)).To(Succeed())
+		Expect(ss.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(ss.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-ee:1.98.0"))
+
+		clientSvc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName + "-client", Namespace: testNamespace}, clientSvc)).To(Succeed())
+
+		clusterSvc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName + "-cluster", Namespace: testNamespace}, clusterSvc)).To(Succeed())
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName, Namespace: testNamespace}, pdb)).To(Succeed())
+	})
+
+	It("uses custom replicas", func() {
+		name := "bp-nats-replicas"
+		bp := newTestBindplane(name, testNamespace)
+		customReplicas := int32(5)
+		bp.Spec.Nats = &bindplanev1alpha1.NatsComponentSpec{Replicas: &customReplicas}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-nats", Namespace: testNamespace}, ss)).To(Succeed())
+		Expect(ss.Spec.Replicas).NotTo(BeNil())
+		Expect(*ss.Spec.Replicas).To(Equal(int32(5)))
+	})
+})
+
+var _ = Describe("Reconcile - Node", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-node")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, Deployment, Service, PDB", func() {
+		name := "bp-node"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		nodeName := name + "-node"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-ee:1.98.0"))
+
+		svc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, svc)).To(Succeed())
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, pdb)).To(Succeed())
+	})
+
+	It("creates HPA when autoscaling is enabled", func() {
+		name := "bp-node-hpa"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		hpa := &autoscalingv2.HorizontalPodAutoscaler{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, hpa)).To(Succeed())
+		Expect(hpa.Spec.ScaleTargetRef.Name).To(Equal(name + "-node"))
+		Expect(hpa.Spec.MinReplicas).NotTo(BeNil())
+		Expect(*hpa.Spec.MinReplicas).To(Equal(int32(2)))
+		Expect(hpa.Spec.MaxReplicas).To(Equal(int32(10)))
+	})
+
+	It("deletes HPA when autoscaling is disabled", func() {
+		name := "bp-node-hpa-del"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Verify HPA exists
+		hpa := &autoscalingv2.HorizontalPodAutoscaler{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, hpa)).To(Succeed())
+
+		// Disable autoscaling
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		updated.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: false}
+		Expect(k8sClient.Update(testCtx, updated)).To(Succeed())
+
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		hpaAfter := &autoscalingv2.HorizontalPodAutoscaler{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, hpaAfter)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("Reconcile - status", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-status")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("sets phase to ApplyingChanges when replicas are not ready", func() {
+		name := "bp-status-phase"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		// In envtest, no pods run, so ready replicas are 0 => ApplyingChanges
+		Expect(updated.Status.Phase).To(Equal("ApplyingChanges"))
+		Expect(updated.Status.NodeReadyReplicas).To(BeNumerically("==", 0))
+	})
+
+	It("sets Reconciled=True on successful reconcile", func() {
+		name := "bp-status-reconciled"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(reconciledCond.Reason).To(Equal("Reconciled"))
+		Expect(reconciledCond.ObservedGeneration).To(Equal(updated.Generation))
+	})
+})
+
+var _ = Describe("Reconcile - idempotency", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-idempotent")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("second reconcile does not error and does not duplicate resources", func() {
+		name := "bp-idempotent"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Count resources before second reconcile
+		depsBefore := &appsv1.DeploymentList{}
+		Expect(k8sClient.List(testCtx, depsBefore, client.InNamespace(testNamespace))).To(Succeed())
+		countBefore := len(depsBefore.Items)
+
+		// Second full reconcile
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		depsAfter := &appsv1.DeploymentList{}
+		Expect(k8sClient.List(testCtx, depsAfter, client.InNamespace(testNamespace))).To(Succeed())
+		Expect(depsAfter.Items).To(HaveLen(countBefore))
+	})
+})
+
+var _ = Describe("Reconcile - Bindplane Jobs", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-jobs")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount and Deployment", func() {
+		name := "bp-jobs"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		jobsName := name + "-jobs"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobsName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobsName, Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-ee:1.98.0"))
 	})
 })
 
