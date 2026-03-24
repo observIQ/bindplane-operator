@@ -75,7 +75,7 @@ kubectl wait --for=condition=Ready --timeout=600s cluster/test-postgres -n "${NA
 CLUSTER_NAME="test-postgres"
 SERVICE_NAME="${CLUSTER_NAME}-rw"
 echo "Waiting for PostgreSQL service to be ready..."
-for i in {1..30}; do
+for _ in {1..30}; do
 	if kubectl get service "${SERVICE_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
 		break
 	fi

@@ -9,12 +9,12 @@ fi
 
 minikube delete
 minikube start
-eval $(minikube docker-env)
+eval "$(minikube docker-env)"
 
 goreleaser release --snapshot --clean
 GOARCH=$(go env GOARCH)
 docker tag \
-  ghcr.io/observiq/bindplane-operator:latest-${GOARCH} \
+  "ghcr.io/observiq/bindplane-operator:latest-${GOARCH}" \
   bindplane-operator:local
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
