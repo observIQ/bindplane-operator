@@ -203,7 +203,6 @@ type BindplaneConfigSpec struct {
 	// Generally set to the same value as spec.config.agents.maxSimultaneousConnections.
 	// Do not modify unless directed by Bindplane support.
 	// +optional
-	// +kubebuilder:default=10
 	MaxConcurrency int `json:"maxConcurrency,omitempty"`
 
 	// AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365.
@@ -858,7 +857,6 @@ type TransformAgentComponentSpec struct {
 	// DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.
 	// When false (default), the operator creates a PDB with minAvailable: 1.
 	// +optional
-	// +kubebuilder:default=false
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 }
 
@@ -897,7 +895,6 @@ type NatsComponentSpec struct {
 	// DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.
 	// When false (default), the operator creates a PDB with minAvailable: 1.
 	// +optional
-	// +kubebuilder:default=false
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 }
 

@@ -12160,7 +12160,6 @@ spec:
                         type: string
                     type: object
                   maxConcurrency:
-                    default: 10
                     type: integer
                   metrics:
                     properties:
@@ -12505,7 +12504,6 @@ spec:
                 default: {}
                 properties:
                   disablePodDisruptionBudget:
-                    default: false
                     type: boolean
                   podTemplate:
                     properties:
@@ -16308,7 +16306,6 @@ spec:
                 default: {}
                 properties:
                   disablePodDisruptionBudget:
-                    default: false
                     type: boolean
                   podTemplate:
                     properties:
