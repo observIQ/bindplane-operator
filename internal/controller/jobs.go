@@ -98,6 +98,9 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 			corev1.ResourceMemory: resource.MustParse("1024Mi"),
 		},
 	}
+	if bindplane.Spec.BindplaneJobs != nil && bindplane.Spec.BindplaneJobs.Resources != nil {
+		resources = *bindplane.Spec.BindplaneJobs.Resources
+	}
 
 	replicas := int32(1)
 	labels := getLabels(bindplane, bindplaneJobsComponent)
@@ -218,6 +221,19 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 	backoffLimit := migrateJobBackoffLimit
 	ttl := migrateJobTTLSeconds
 
+	migrateResources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+	}
+	if bindplane.Spec.BindplaneJobsMigrate != nil && bindplane.Spec.BindplaneJobsMigrate.Resources != nil {
+		migrateResources = *bindplane.Spec.BindplaneJobsMigrate.Resources
+	}
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, bindplaneJobsMigrateComponent),
@@ -246,15 +262,7 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 								[]corev1.EnvVar{{Name: bindplaneModeEnvVar, Value: bindplaneJobsMigrateModeValue}},
 								getBindplaneCommonEnvVars(bindplane, bindplaneJobsMigrateComponent),
 							),
-							Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceMemory: resource.MustParse("2048Mi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("100m"),
-									corev1.ResourceMemory: resource.MustParse("2048Mi"),
-								},
-							},
+							Resources:       migrateResources,
 							SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 							ImagePullPolicy: corev1.PullIfNotPresent,
 						}},

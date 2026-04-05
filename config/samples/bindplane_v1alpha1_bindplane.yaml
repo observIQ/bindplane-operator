@@ -6,6 +6,53 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: bindplane-sample
 spec:
+  # Component resource requests and limits can be set directly on each component spec.
+  # If both resources and podTemplate.spec.containers[].resources are set,
+  # the podTemplate value takes precedence.
+  #
+  # bindplane:
+  #   resources:
+  #     requests:
+  #       cpu: 2000m
+  #       memory: 2048Mi
+  #     limits:
+  #       memory: 2048Mi
+  # nats:
+  #   resources:
+  #     requests:
+  #       cpu: 250m
+  #       memory: 500Mi
+  #     limits:
+  #       cpu: 500m
+  #       memory: 500Mi
+  # tsdb:
+  #   resources:
+  #     requests:
+  #       cpu: 1000m
+  #       memory: 2048Mi
+  #     limits:
+  #       memory: 2048Mi
+  # transformAgent:
+  #   resources:
+  #     requests:
+  #       cpu: 250m
+  #       memory: 512Mi
+  #     limits:
+  #       memory: 512Mi
+  # bindplaneJobs:
+  #   resources:
+  #     requests:
+  #       cpu: 1000m
+  #       memory: 1024Mi
+  #     limits:
+  #       memory: 1024Mi
+  # bindplaneJobsMigrate:
+  #   resources:
+  #     requests:
+  #       cpu: 100m
+  #       memory: 2048Mi
+  #     limits:
+  #       memory: 2048Mi
   config:
     license: "your-license-key-here"
     auth:
@@ -33,78 +80,3 @@ spec:
       otlp:
         endpoint: otel-collector.observability.svc:4317
         interval: "5s"
-  bindplane:
-    # podTemplate: # Optional - pod template for bindplane node containers
-    # replicas: 3  # Optional - number of replicas for bindplane node (default: 3)
-  transformAgent:
-    # podTemplate: # Optional - arbitrary pod template fields (affinity, tolerations, nodeSelector, etc.)
-    #   metadata:
-    #     labels:
-    #       custom-label: "value"
-    #     annotations:
-    #       custom-annotation: "value"
-    #   spec:
-    #     affinity:
-    #       podAntiAffinity:
-    #         preferredDuringSchedulingIgnoredDuringExecution:
-    #           - weight: 100
-    #             podAffinityTerm:
-    #               labelSelector:
-    #                 matchExpressions:
-    #                   - key: app.kubernetes.io/component
-    #                     operator: In
-    #                     values:
-    #                       - transform-agent
-    #               topologyKey: kubernetes.io/hostname
-    #     tolerations:
-    #       - key: "key1"
-    #         operator: "Equal"
-    #         value: "value1"
-    #         effect: "NoSchedule"
-    #     nodeSelector:
-    #       disktype: ssd
-    #     priorityClassName: high-priority
-  tsdb:
-    # podTemplate: # Optional - arbitrary pod template fields (affinity, tolerations, nodeSelector, etc.)
-    #   metadata:
-    #     labels:
-    #       custom-label: "value"
-    #     annotations:
-    #       custom-annotation: "value"
-    #   spec:
-    #     affinity:
-    #       podAntiAffinity:
-    #         requiredDuringSchedulingIgnoredDuringExecution:
-    #           - labelSelector:
-    #               matchExpressions:
-    #                 - key: app.kubernetes.io/component
-    #                   operator: In
-    #                   values:
-    #                     - tsdb
-    #             topologyKey: kubernetes.io/hostname
-    #     tolerations:
-    #       - key: "key1"
-    #         operator: "Equal"
-    #         value: "value1"
-    #         effect: "NoSchedule"
-    #     nodeSelector:
-    #       disktype: ssd
-    #     priorityClassName: high-priority
-    #     initContainers:
-    #       - name: init-container
-    #         image: busybox:latest
-    #         command: ["sh", "-c", "echo init"]
-    # storage: # Optional - persistent volume configuration
-    #   volumeClaimTemplate:
-    #     metadata:
-    #       labels:
-    #         custom-pvc-label: "value"
-    #       annotations:
-    #         custom-pvc-annotation: "value"
-    #     spec:
-    #       accessModes:
-    #         - ReadWriteOnce
-    #       storageClassName: fast-ssd  # Optional - uses default storage class if not specified
-    #       resources:
-    #         requests:
-    #           storage: 120Gi  # Default is 60Gi if not specified

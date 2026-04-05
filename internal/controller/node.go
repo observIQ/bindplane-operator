@@ -124,6 +124,19 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 		strategy = *bindplane.Spec.Bindplane.Strategy
 	}
 
+	nodeResources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("2000m"),
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+	}
+	if bindplane.Spec.Bindplane.Resources != nil {
+		nodeResources = *bindplane.Spec.Bindplane.Resources
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, nodeComponent),
@@ -165,15 +178,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 									getBindplaneCommonEnvVars(bindplane, nodeComponent),
 									getNatsClientEnvVars(bindplane, true),
 								),
-								Resources: corev1.ResourceRequirements{
-									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("2048Mi"),
-									},
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("2000m"),
-										corev1.ResourceMemory: resource.MustParse("2048Mi"),
-									},
-								},
+								Resources: nodeResources,
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										TCPSocket: &corev1.TCPSocketAction{

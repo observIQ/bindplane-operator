@@ -2025,6 +2025,206 @@ var _ = Describe("workload Go runtime env vars", func() {
 	})
 })
 
+var _ = Describe("component-level resources field", func() {
+	natsReplicas := int32(2)
+	taReplicas := int32(2)
+
+	newBindplane := func() *bindplanev1alpha1.Bindplane {
+		replicas := int32(3)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &replicas},
+				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					Replicas: &taReplicas,
+				},
+			},
+		}
+	}
+
+	customResources := func() *corev1.ResourceRequirements {
+		return &corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("100Mi"),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("50m"),
+				corev1.ResourceMemory: resource.MustParse("50Mi"),
+			},
+		}
+	}
+
+	assertResources := func(got corev1.ResourceRequirements, want *corev1.ResourceRequirements) {
+		Expect(got.Requests.Cpu().MilliValue()).To(Equal(want.Requests.Cpu().MilliValue()))
+		Expect(got.Requests.Memory().Value()).To(Equal(want.Requests.Memory().Value()))
+		Expect(got.Limits.Cpu().MilliValue()).To(Equal(want.Limits.Cpu().MilliValue()))
+		Expect(got.Limits.Memory().Value()).To(Equal(want.Limits.Memory().Value()))
+	}
+
+	Describe("spec.bindplane.resources", func() {
+		It("applies top-level resources to the node container", func() {
+			bp := newBindplane()
+			bp.Spec.Bindplane.Resources = customResources()
+			container := (&BindplaneReconciler{}).nodeDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when resources is not set", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).nodeDeployment(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("2048Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+
+		It("podTemplate.resources takes precedence over top-level resources for specified fields", func() {
+			podTemplateResources := &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+			}
+			bp := newBindplane()
+			bp.Spec.Bindplane.Resources = customResources()
+			bp.Spec.Bindplane.PodTemplate = &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: nodeContainerName, Resources: *podTemplateResources},
+						},
+					},
+				},
+			}
+			container := (&BindplaneReconciler{}).nodeDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, podTemplateResources)
+		})
+	})
+
+	Describe("spec.nats.resources", func() {
+		It("applies top-level resources to the NATS container", func() {
+			bp := newBindplane()
+			bp.Spec.Nats.Resources = customResources()
+			container := (&BindplaneReconciler{}).natsStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when resources is not set", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).natsStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("500Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(250)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+
+	Describe("spec.tsdb.resources", func() {
+		It("applies top-level resources to the TSDB container", func() {
+			bp := newBindplane()
+			bp.Spec.TSDB = &bindplanev1alpha1.TSDBComponentSpec{Resources: customResources()}
+			container := (&BindplaneReconciler{}).tsdbStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when TSDB spec is nil", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).tsdbStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("2048Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+
+		It("podTemplate.resources takes precedence over top-level resources for specified fields", func() {
+			podTemplateResources := &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+			}
+			bp := newBindplane()
+			bp.Spec.TSDB = &bindplanev1alpha1.TSDBComponentSpec{
+				Resources: customResources(),
+				PodTemplate: &bindplanev1alpha1.PodTemplateSpec{
+					PodTemplateSpec: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: tsdbContainerName, Resources: *podTemplateResources},
+							},
+						},
+					},
+				},
+			}
+			container := (&BindplaneReconciler{}).tsdbStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, podTemplateResources)
+		})
+	})
+
+	Describe("spec.transformAgent.resources", func() {
+		It("applies top-level resources to the transform agent container", func() {
+			bp := newBindplane()
+			bp.Spec.TransformAgent.Resources = customResources()
+			container := (&BindplaneReconciler{}).transformAgentDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when resources is not set", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).transformAgentDeployment(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("512Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(250)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+
+	Describe("spec.bindplaneJobs.resources", func() {
+		It("applies top-level resources to the jobs container", func() {
+			bp := newBindplane()
+			bp.Spec.BindplaneJobs = &bindplanev1alpha1.BindplaneJobsComponentSpec{Resources: customResources()}
+			container := (&BindplaneReconciler{}).bindplaneJobsDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when bindplaneJobs spec is nil", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).bindplaneJobsDeployment(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("1024Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+
+	Describe("spec.bindplaneJobsMigrate.resources", func() {
+		It("applies top-level resources to the jobs migrate container", func() {
+			bp := newBindplane()
+			bp.Spec.BindplaneJobsMigrate = &bindplanev1alpha1.BindplaneJobsMigrateComponentSpec{Resources: customResources()}
+			container := (&BindplaneReconciler{}).bindplaneJobsMigrateJob(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when bindplaneJobsMigrate spec is nil", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).bindplaneJobsMigrateJob(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("2048Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(100)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+})
+
 var _ = Describe("workload pod security context defaults", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		nodeReplicas := int32(3)

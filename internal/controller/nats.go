@@ -104,6 +104,20 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 	headlessServiceName := getNatsClusterServiceName(bindplane)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
 
+	natsResources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("500m"),
+			corev1.ResourceMemory: resource.MustParse("500Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("500Mi"),
+		},
+	}
+	if bindplane.Spec.Nats.Resources != nil {
+		natsResources = *bindplane.Spec.Nats.Resources
+	}
+
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
@@ -154,16 +168,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 									getNatsEnvVars(bindplane, headlessServiceName, replicas),
 									getBindplaneCommonEnvVars(bindplane, natsComponent),
 								),
-								Resources: corev1.ResourceRequirements{
-									Limits: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("500m"),
-										corev1.ResourceMemory: resource.MustParse("500Mi"),
-									},
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("250m"),
-										corev1.ResourceMemory: resource.MustParse("500Mi"),
-									},
-								},
+								Resources: natsResources,
 								// TODO(jsirianni): When NATS TLS is enabled the HTTP port serves TLS; Kubernetes HTTPGet does not support TLS. Use TCPSocket for now; add Bindplane CLI healthchecks that support exec probes for proper TLS healthcheck when available.
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{

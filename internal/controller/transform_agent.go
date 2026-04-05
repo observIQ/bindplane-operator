@@ -87,6 +87,19 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 	maxSurge := intstr.FromInt32(1)
 	maxUnavailable := intstr.FromInt32(1)
 
+	taResources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+	}
+	if bindplane.Spec.TransformAgent.Resources != nil {
+		taResources = *bindplane.Spec.TransformAgent.Resources
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, transformAgentComponent),
@@ -125,16 +138,8 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: getKubernetesEnvVars(transformAgentContainerName),
-								Resources: corev1.ResourceRequirements{
-									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("512Mi"),
-									},
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("250m"),
-										corev1.ResourceMemory: resource.MustParse("512Mi"),
-									},
-								},
+								Env:       getKubernetesEnvVars(transformAgentContainerName),
+								Resources: taResources,
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
 										TCPSocket: &corev1.TCPSocketAction{

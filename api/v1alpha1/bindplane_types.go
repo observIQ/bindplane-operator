@@ -111,6 +111,12 @@ type BindplaneComponentSpec struct {
 	// +kubebuilder:default=3
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// Resources defines compute resource requests and limits for the Bindplane Node primary container.
+	// If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes
+	// precedence because it is more specific.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// PodTemplate defines pod template specification for Bindplane Node
 	// +optional
 	// +kubebuilder:validation:Type=object
@@ -148,6 +154,12 @@ type BindplaneComponentSpec struct {
 
 // BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification
 type BindplaneJobsComponentSpec struct {
+	// Resources defines compute resource requests and limits for the Bindplane Jobs primary container.
+	// If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes
+	// precedence because it is more specific.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// PodTemplate defines pod template specification for Bindplane Jobs
 	// Note: Jobs are restricted to 1 replica and cannot be scaled
 	// +optional
@@ -160,6 +172,12 @@ type BindplaneJobsComponentSpec struct {
 // Jobs Migrate runs as a Kubernetes batch/v1 Job that performs database migrations at install time
 // and whenever the Bindplane image version changes.
 type BindplaneJobsMigrateComponentSpec struct {
+	// Resources defines compute resource requests and limits for the Bindplane Jobs Migrate primary container.
+	// If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes
+	// precedence because it is more specific.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// PodTemplate defines pod template specification for the Bindplane Jobs Migrate batch/v1 Job
 	// +optional
 	// +kubebuilder:validation:Type=object
@@ -848,6 +866,12 @@ type TransformAgentComponentSpec struct {
 	// +kubebuilder:default=2
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// Resources defines compute resource requests and limits for the Transform Agent primary container.
+	// If podTemplate.spec.containers[transform-agent].resources is also set, the podTemplate value takes
+	// precedence because it is more specific.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// PodTemplate defines pod template specification for Transform Agent
 	// +optional
 	// +kubebuilder:validation:Type=object
@@ -863,6 +887,12 @@ type TransformAgentComponentSpec struct {
 // TSDBComponentSpec defines the TSDB component pod specification.
 // By default, this deploys a Prometheus StatefulSet managed by the operator.
 type TSDBComponentSpec struct {
+	// Resources defines compute resource requests and limits for the TSDB primary container.
+	// If podTemplate.spec.containers[tsdb].resources is also set, the podTemplate value takes
+	// precedence because it is more specific.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
 	// PodTemplate defines pod template specification for the TSDB component
 	// +optional
 	// +kubebuilder:validation:Type=object
@@ -885,6 +915,12 @@ type NatsComponentSpec struct {
 	// +optional
 	// +kubebuilder:default=2
 	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Resources defines compute resource requests and limits for the NATS primary container.
+	// If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes
+	// precedence because it is more specific.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// PodTemplate defines pod template specification for NATS
 	// +optional

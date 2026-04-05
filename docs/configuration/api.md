@@ -241,6 +241,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `replicas` _integer_ | Replicas specifies the number of replicas for Bindplane Node deployment | 3 | Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the Bindplane Node primary container.<br />If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes<br />precedence because it is more specific. |  | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Bindplane Node |  | Type: object <br />Optional: \{\} <br /> |
 | `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
 | `minReadySeconds` _integer_ | MinReadySeconds is the minimum number of seconds a newly created Node pod must be<br />ready (passing its readiness probe) before it is considered available. During a<br />rolling update the next pod is not replaced until this window elapses. When omitted,<br />the operator defaults this to the pod's termination grace period, giving agents<br />that were connected to the outgoing pod enough time to reconnect to healthy nodes<br />(including the new pod) before another pod is taken out of service. |  | Minimum: 0 <br />Optional: \{\} <br /> |
@@ -263,7 +264,7 @@ _Appears in:_
 | `store` _[StoreConfig](#storeconfig)_ | Store configuration for Bindplane |  |  |
 | `tracing` _[TracingConfig](#tracingconfig)_ | Tracing configuration for Bindplane. When omitted or type empty, tracing is disabled. |  | Optional: \{\} <br /> |
 | `metrics` _[MetricsConfig](#metricsconfig)_ | Metrics configuration for Bindplane. When omitted, defaults to prometheus type with interval 60s and endpoint /metrics. |  | Optional: \{\} <br /> |
-| `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations.<br />Generally set to the same value as spec.config.agents.maxSimultaneousConnections.<br />Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
+| `maxConcurrency` _integer_ | MaxConcurrency is the maximum number of concurrent OpAMP operations.<br />Generally set to the same value as spec.config.agents.maxSimultaneousConnections.<br />Do not modify unless directed by Bindplane support. |  | Optional: \{\} <br /> |
 | `auditTrail` _[AuditTrailConfig](#audittrailconfig)_ | AuditTrail configures audit trail retention. When omitted, retentionDays defaults to 365. |  | Optional: \{\} <br /> |
 | `tsdb` _[TSDBConfig](#tsdbconfig)_ | TSDB configures TLS and remote settings for Bindplane's TSDB integration. |  | Optional: \{\} <br /> |
 | `nats` _[NatsConfig](#natsconfig)_ | Nats configures TLS for the NATS event bus (client and server). Cert-manager only. |  | Optional: \{\} <br /> |
@@ -285,6 +286,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the Bindplane Jobs primary container.<br />If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes<br />precedence because it is more specific. |  | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Bindplane Jobs<br />Note: Jobs are restricted to 1 replica and cannot be scaled |  | Type: object <br />Optional: \{\} <br /> |
 
 #### BindplaneJobsMigrateComponentSpec
@@ -298,6 +300,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the Bindplane Jobs Migrate primary container.<br />If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes<br />precedence because it is more specific. |  | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for the Bindplane Jobs Migrate batch/v1 Job |  | Type: object <br />Optional: \{\} <br /> |
 
 #### BindplaneSpec
@@ -472,8 +475,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `replicas` _integer_ | Replicas specifies the number of replicas for NATS StatefulSet | 2 | Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the NATS primary container.<br />If podTemplate.spec.containers[server].resources is also set, the podTemplate value takes<br />precedence because it is more specific. |  | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for NATS |  | Type: object <br />Optional: \{\} <br /> |
-| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
+| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. |  | Optional: \{\} <br /> |
 
 #### NatsConfig
 
@@ -695,6 +699,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the TSDB primary container.<br />If podTemplate.spec.containers[tsdb].resources is also set, the podTemplate value takes<br />precedence because it is more specific. |  | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for the TSDB component |  | Type: object <br />Optional: \{\} <br /> |
 | `storage` _[StorageSpec](#storagespec)_ | Storage defines the persistent storage configuration for the TSDB component |  | Optional: \{\} <br /> |
 | `tls` _[TSDBTLSConfig](#tsdbtlsconfig)_ | TLS configures TLS for the TSDB server (StatefulSet). Use either secretName (user-defined Secret)<br />or certManager (cert-manager Issuer/ClusterIssuer), not both. When set, the TSDB serves remote write over TLS. |  | Optional: \{\} <br /> |
@@ -792,8 +797,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `replicas` _integer_ | Replicas specifies the number of replicas for Transform Agent deployment | 2 | Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the Transform Agent primary container.<br />If podTemplate.spec.containers[transform-agent].resources is also set, the podTemplate value takes<br />precedence because it is more specific. |  | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Transform Agent |  | Type: object <br />Optional: \{\} <br /> |
-| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
+| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. |  | Optional: \{\} <br /> |
 
 #### VolumeClaimTemplate
 

@@ -397,6 +397,19 @@ func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindp
 	volumes := getTSDBVolumes(bindplane)
 	volumeMounts := getTSDBVolumeMounts(bindplane)
 
+	tsdbResources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1000m"),
+			corev1.ResourceMemory: resource.MustParse("2048Mi"),
+		},
+	}
+	if bindplane.Spec.TSDB != nil && bindplane.Spec.TSDB.Resources != nil {
+		tsdbResources = *bindplane.Spec.TSDB.Resources
+	}
+
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
@@ -432,16 +445,8 @@ func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: getKubernetesEnvVars(tsdbContainerName),
-								Resources: corev1.ResourceRequirements{
-									Limits: corev1.ResourceList{
-										corev1.ResourceMemory: resource.MustParse("2048Mi"),
-									},
-									Requests: corev1.ResourceList{
-										corev1.ResourceCPU:    resource.MustParse("1000m"),
-										corev1.ResourceMemory: resource.MustParse("2048Mi"),
-									},
-								},
+								Env:          getKubernetesEnvVars(tsdbContainerName),
+								Resources:    tsdbResources,
 								VolumeMounts: volumeMounts,
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{
