@@ -15,7 +15,7 @@ Before following this guide, ensure you have the following:
 ```bash
 kubectl apply \
   --server-side \
-  -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.crds.yaml
+  -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
 ```
 
 ## Install Postgres
