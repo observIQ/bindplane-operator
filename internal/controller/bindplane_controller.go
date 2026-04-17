@@ -1141,7 +1141,7 @@ func getAdvancedCacheRedisTLSVolumeAndMount(bindplane *bindplanev1alpha1.Bindpla
 
 // getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, Postgres TLS,
 // internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS), and advanced cache Redis TLS.
-// Used by Node, Jobs, Jobs Migrate, and NATS so they receive all config TLS secrets when configured.
+// Used by Node, Jobs, and NATS so they receive all config TLS secrets when configured.
 func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
 	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
 	netVols, netMounts := getNetworkTLSVolumeAndMount(bindplane)
