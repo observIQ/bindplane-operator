@@ -254,6 +254,7 @@ func getNatsServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string 
 		"localhost",
 	}
 	for i := int32(0); i < replicas; i++ {
+		names = append(names, fmt.Sprintf("%s-%d.%s.%s", name, i, headlessName, ns))
 		names = append(names, fmt.Sprintf("%s-%d.%s.%s.svc.cluster.local", name, i, headlessName, ns))
 	}
 	return names
