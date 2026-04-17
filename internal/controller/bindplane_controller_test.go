@@ -3024,6 +3024,21 @@ var _ = Describe("migrate Job helpers", func() {
 			Expect(c.ReadinessProbe).To(BeNil())
 			Expect(c.StartupProbe).To(BeNil())
 		})
+
+		It("does not mount the NATS TLS volume even when NATS cert-manager TLS is configured", func() {
+			bindplane.Spec.Config.Nats = &bindplanev1alpha1.NatsConfig{
+				TLS: &bindplanev1alpha1.NatsTLSConfig{
+					CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer"},
+				},
+			}
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			for _, v := range job.Spec.Template.Spec.Volumes {
+				Expect(v.Name).NotTo(Equal(internalTLSNatsVolumeName))
+			}
+			for _, m := range job.Spec.Template.Spec.Containers[0].VolumeMounts {
+				Expect(m.Name).NotTo(Equal(internalTLSNatsVolumeName))
+			}
+		})
 	})
 })
 

@@ -217,9 +217,16 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alpha1.Bindplane) *batchv1.Job {
 	labels := getLabels(bindplane, bindplaneJobsMigrateComponent)
 	selectorLabels := getSelectorLabels(bindplane, bindplaneJobsMigrateComponent)
-	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
 	backoffLimit := migrateJobBackoffLimit
 	ttl := migrateJobTTLSeconds
+
+	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
+	netVols, netMounts := getNetworkTLSVolumeAndMount(bindplane)
+	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
+	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
+	redisVols, redisMounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
+	configVols := append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), redisVols...)
+	configMounts := append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), redisMounts...)
 
 	migrateResources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
