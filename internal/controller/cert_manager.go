@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -373,7 +374,11 @@ func (r *BindplaneReconciler) reconcileCertificate(ctx context.Context, desired 
 		log.Info("Creating Certificate", "name", desired.Name, "namespace", desired.Namespace)
 		return r.Create(ctx, desired)
 	}
-	// Update spec and labels; leave status and other metadata to cert-manager.
+	// Only update when spec or labels have changed — unconditional updates trigger
+	// cert-manager re-issuance on every reconcile, causing CertificateRequest optimistic locking conflicts.
+	if reflect.DeepEqual(existing.Spec, desired.Spec) && reflect.DeepEqual(existing.Labels, desired.Labels) {
+		return nil
+	}
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 	return r.Update(ctx, existing)
