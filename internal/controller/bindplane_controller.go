@@ -186,6 +186,7 @@ const (
 	bindplaneTSDBRemoteWriteEndpointEnvVar = "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT"
 	bindplaneTSDBAuthUsernameEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_USERNAME"
 	bindplaneTSDBAuthPasswordEnvVar        = "BINDPLANE_PROMETHEUS_AUTH_PASSWORD" // #nosec G101 -- env var name, not a credential
+	bindplaneTSDBAuthTypeEnvVar            = "BINDPLANE_PROMETHEUS_AUTH_TYPE"
 
 	// Prometheus remote write TLS (cert-manager internal mTLS)
 	bindplaneTSDBEnableTLSEnvVar     = "BINDPLANE_PROMETHEUS_ENABLE_TLS"

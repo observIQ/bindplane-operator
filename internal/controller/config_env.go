@@ -418,6 +418,7 @@ func getTSDBEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	} else {
 		secretName := getResourceName(bindplane, tsdbBasicAuthSecretSuffix)
 		envVars = append(envVars,
+			corev1.EnvVar{Name: bindplaneTSDBAuthTypeEnvVar, Value: "basic"},
 			corev1.EnvVar{
 				Name: bindplaneTSDBAuthUsernameEnvVar,
 				ValueFrom: &corev1.EnvVarSource{

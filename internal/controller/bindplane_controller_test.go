@@ -3304,10 +3304,11 @@ var _ = Describe("getTSDBEnvVars", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
 		}
 		envVars := getTSDBEnvVars(bindplane)
-		Expect(envVars).To(HaveLen(5))
+		Expect(envVars).To(HaveLen(6))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-tsdb.default.svc"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_TYPE")).To(Equal("basic"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(Equal("(secret)"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(Equal("(secret)"))
 		refUser := envVarSecretKeyRef(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")
@@ -3348,6 +3349,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_HOST")).To(Equal("vm-write.example.internal"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_PORT")).To(Equal("8480"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT")).To(Equal("/api/v1/write"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_TYPE")).To(BeEmpty())
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(BeEmpty())
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(BeEmpty())
 	})
@@ -3393,7 +3395,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 			},
 		}
 		envVars := getTSDBEnvVars(bindplane)
-		Expect(envVars).To(HaveLen(9))
+		Expect(envVars).To(HaveLen(10))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CERT")).To(Equal(internalTLSTSDBClientMountPath + "/tls.crt"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_KEY")).To(Equal(internalTLSTSDBClientMountPath + "/tls.key"))
@@ -3417,7 +3419,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 		}
 		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY")).To(Equal("true"))
-		Expect(envVars).To(HaveLen(10))
+		Expect(envVars).To(HaveLen(11))
 	})
 })
 
