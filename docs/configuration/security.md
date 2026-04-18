@@ -44,20 +44,24 @@ kubectl get secret <bindplane-name>-tsdb-basic-auth -n <namespace> -o jsonpath='
 
 You can use [cert-manager](https://cert-manager.io/) to have the operator automatically issue and rotate TLS certificates for selected in-cluster interfaces, instead of supplying your own TLS Secrets.
 
-**Scope:** cert-manager integration is supported for two in-cluster interfaces:
+**Scope:** cert-manager integration is supported for three in-cluster interfaces:
 
 - **TSDB remote write** (Bindplane → Prometheus): configured via `spec.tsdb.tls.certManager` (server cert) and `spec.config.tsdb.tls.certManager` (client cert). When both are set, mTLS is enabled.
 - **NATS** (Bindplane → NATS, and NATS → NATS cluster): configured via `spec.config.nats.tls.certManager`. A single cert with both `ServerAuth` and `ClientAuth` EKUs is issued and used for the client port (4222), cluster port (6222), and HTTP monitoring port (8222). This is **cert-manager only** — there is no user-provided secret path for NATS TLS.
+- **Transform Agent** (Bindplane → Transform Agent): configured via `spec.transformAgent.tls.certManager`. A single cert with both `ServerAuth` and `ClientAuth` EKUs is issued, mounted into the Transform Agent pod and Bindplane workloads, and wired through `BINDPLANE_TRANSFORM_AGENT_TLS_*`.
 
 cert-manager integration does **not** apply to:
 
 - Bindplane’s primary HTTP interface (port 3001) — use `spec.config.network.tls` with a user-provided Secret
 - Bindplane’s connection to PostgreSQL — use `spec.config.store.postgres.tls` with a user-provided Secret
-- Bindplane’s connection to the Transform Agent — no TLS support
 
 ### TSDB remote write mTLS
 
 Enabling it turns on mTLS for the Bindplane → TSDB path: the operator creates cert-manager `Certificate` resources for a TSDB server cert, a TSDB probe client cert (used by Prometheus’s own exec probes), and a Bindplane client cert; mounts the issued certs; and configures both the TSDB and Bindplane pods accordingly.
+
+### Transform Agent mTLS
+
+Enabling `spec.transformAgent.tls.certManager` turns on mTLS for the Bindplane → Transform Agent path. The operator creates a cert-manager `Certificate` resource for the Transform Agent interface, mounts the issued Secret into the Transform Agent pod and Bindplane workloads, and sets `BINDPLANE_TRANSFORM_AGENT_TLS_CERT`, `BINDPLANE_TRANSFORM_AGENT_TLS_KEY`, and `BINDPLANE_TRANSFORM_AGENT_TLS_CA` on both sides of the connection.
 
 ### Prerequisites
 
@@ -77,10 +81,13 @@ Enabling it turns on mTLS for the Bindplane → TSDB path: the operator creates 
 **NATS:**
 - Set `spec.config.nats.tls.certManager` with `name` (required), and optionally `kind` and `group`. No `secretName` option exists for NATS TLS.
 
+**Transform Agent:**
+- Set `spec.transformAgent.tls.certManager` with `name` (required), and optionally `kind` and `group`. No `secretName` option exists for Transform Agent TLS.
+
 ### Behavior
 
 - The operator creates cert-manager `Certificate` resources (owner-referenced to the Bindplane custom resource). cert-manager issues the certificates and writes them into Kubernetes Secrets.
-- The operator mounts those Secrets into the relevant pods and sets the appropriate environment variables (e.g. `BINDPLANE_PROMETHEUS_ENABLE_TLS`, `BINDPLANE_PROMETHEUS_TLS_CERT`, `BINDPLANE_PROMETHEUS_TLS_KEY`, `BINDPLANE_PROMETHEUS_TLS_CA` for TSDB remote write; `BINDPLANE_NATS_ENABLE_TLS`, `BINDPLANE_NATS_TLS_*` for NATS).
+- The operator mounts those Secrets into the relevant pods and sets the appropriate environment variables (e.g. `BINDPLANE_PROMETHEUS_ENABLE_TLS`, `BINDPLANE_PROMETHEUS_TLS_CERT`, `BINDPLANE_PROMETHEUS_TLS_KEY`, `BINDPLANE_PROMETHEUS_TLS_CA` for TSDB remote write; `BINDPLANE_NATS_ENABLE_TLS`, `BINDPLANE_NATS_TLS_*` for NATS; `BINDPLANE_TRANSFORM_AGENT_TLS_*` for Transform Agent).
 - If you use a user-managed remote TSDB (for example, VictoriaMetrics) via `spec.config.tsdb.remote.enable=true`, configure connectivity under `spec.config.tsdb.remote` and use TLS settings appropriate for that backend.
 - Certificate renewal and rotation are handled by cert-manager; the operator does not modify the Secret data after cert-manager writes it.
 
@@ -131,5 +138,6 @@ This install path:
 | TSDB remote write auth (default operator-managed TSDB) | No (operator-generated) | `BINDPLANE_PROMETHEUS_AUTH_USERNAME`, `BINDPLANE_PROMETHEUS_AUTH_PASSWORD` | — | This document (above) |
 | TSDB TLS / mTLS (cert-manager or user secret) | Yes (opt-in) | `BINDPLANE_PROMETHEUS_ENABLE_TLS`, `BINDPLANE_PROMETHEUS_TLS_*` (when enabled) | `spec.tsdb.tls`, `spec.config.tsdb.tls` | This document (cert-manager TLS); [Configuration – TSDB](configuration.md#tsdb) |
 | NATS TLS / mTLS (cert-manager only) | Yes (opt-in) | `BINDPLANE_NATS_ENABLE_TLS`, `BINDPLANE_NATS_TLS_*` | `spec.config.nats.tls.certManager` | This document (cert-manager TLS) |
+| Transform Agent TLS / mTLS (cert-manager only) | Yes (opt-in) | `BINDPLANE_TRANSFORM_AGENT_TLS_*` | `spec.transformAgent.tls.certManager` | This document (cert-manager TLS) |
 | Redis TLS | Yes | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_*` | `spec.config.advanced.cache.redis.tls` | [Configuration – Advanced](configuration.md#advanced) |
 | Validating admission webhook TLS (operator install) | No (operator infrastructure) | — | `config/default` (cert-manager required); use `config/overlays/no-webhook` / `install-no-webhook.yaml` to disable | This document |

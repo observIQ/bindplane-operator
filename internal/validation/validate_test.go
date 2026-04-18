@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 	"github.com/observiq/bindplane-operator/internal/validation"
@@ -78,6 +79,63 @@ func TestValidateBindplaneName_AcceptsValid(t *testing.T) {
 		if err := validation.ValidateBindplaneName(name); err != nil {
 			t.Errorf("unexpected error for valid name %q: %v", name, err)
 		}
+	}
+}
+
+// ---- ValidateTransformAgentTLSConfig ----
+
+func TestValidateTransformAgentTLSConfig_AcceptsNil(t *testing.T) {
+	if err := validation.ValidateTransformAgentTLSConfig(nil); err != nil {
+		t.Errorf("unexpected error for nil transform agent spec: %v", err)
+	}
+}
+
+func TestValidateTransformAgentTLSConfig_RejectsMissingCertManagerName(t *testing.T) {
+	spec := &bindplanev1alpha1.TransformAgentComponentSpec{
+		TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+			CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{},
+		},
+	}
+	if err := validation.ValidateTransformAgentTLSConfig(spec); err == nil {
+		t.Error("expected error when transform agent TLS is enabled without certManager.name")
+	}
+}
+
+func TestValidateTransformAgentTLSConfig_AcceptsCertManagerName(t *testing.T) {
+	spec := &bindplanev1alpha1.TransformAgentComponentSpec{
+		TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+			CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+		},
+	}
+	if err := validation.ValidateTransformAgentTLSConfig(spec); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateBindplane_RejectsInvalidTransformAgentTLS(t *testing.T) {
+	replicas := int32(1)
+	bp := &bindplanev1alpha1.Bindplane{
+		ObjectMeta: metav1.ObjectMeta{Name: "bindplane"},
+		Spec: bindplanev1alpha1.BindplaneSpec{
+			Version: "1.99.1",
+			Config: bindplanev1alpha1.BindplaneConfigSpec{
+				License: "test-license",
+				Store: bindplanev1alpha1.StoreConfig{
+					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres"},
+				},
+			},
+			Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &replicas},
+			Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &replicas},
+			TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+				Replicas: &replicas,
+				TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+					CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{},
+				},
+			},
+		},
+	}
+	if err := validation.ValidateBindplane(bp); err == nil {
+		t.Error("expected error for invalid transform agent TLS config")
 	}
 }
 

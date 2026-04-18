@@ -83,6 +83,7 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 	replicas := *bindplane.Spec.TransformAgent.Replicas
 	labels := getLabels(bindplane, transformAgentComponent)
 	selectorLabels := getSelectorLabels(bindplane, transformAgentComponent)
+	tlsVols, tlsMounts := getTransformAgentTLSVolumesAndMounts(bindplane)
 
 	maxSurge := intstr.FromInt32(1)
 	maxUnavailable := intstr.FromInt32(1)
@@ -124,13 +125,15 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PodSpec{
+						Volumes:            tlsVols,
 						ServiceAccountName: getResourceName(bindplane, transformAgentComponent),
 						SecurityContext:    newPodSecurityContext(),
 						Affinity:           getTransformAgentAffinity(bindplane),
 						Containers: []corev1.Container{
 							{
-								Name:  transformAgentContainerName,
-								Image: getTransformAgentImage(bindplane),
+								Name:         transformAgentContainerName,
+								Image:        getTransformAgentImage(bindplane),
+								VolumeMounts: tlsMounts,
 								Ports: []corev1.ContainerPort{
 									{
 										Name:          transformAgentHTTPPortName,
@@ -138,7 +141,10 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env:       getKubernetesEnvVars(transformAgentContainerName),
+								Env: combineEnvVars(
+									getKubernetesEnvVars(transformAgentContainerName),
+									getTransformAgentTLSEnvVars(bindplane),
+								),
 								Resources: taResources,
 								StartupProbe: &corev1.Probe{
 									ProbeHandler: corev1.ProbeHandler{

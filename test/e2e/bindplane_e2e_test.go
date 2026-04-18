@@ -23,6 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -36,6 +37,15 @@ func expectedTransformAgentImage(version string) string {
 
 func expectedTSDBImage(version string) string {
 	return "ghcr.io/observiq/bindplane-prometheus:" + version
+}
+
+func envVarValue(envVars []corev1.EnvVar, name string) string {
+	for _, envVar := range envVars {
+		if envVar.Name == name {
+			return envVar.Value
+		}
+	}
+	return ""
 }
 
 func waitForMinimalBindplaneBaseline() {
@@ -204,5 +214,82 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 			ContainSubstring("< HTTP/"),
 			ContainSubstring("Empty reply from server"),
 		))
+	})
+
+	It("supports cert-manager mTLS between Bindplane and the Transform Agent", func() {
+		By("creating a cert-manager issuer for Transform Agent TLS")
+		_, err := applyFixture("transform-agent-tls-issuer.yaml", bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("waiting for the Transform Agent CA issuer to become ready")
+		Eventually(func(g Gomega) {
+			output, err := runCmd(kubectl(
+				bindplaneNamespace,
+				"get",
+				"issuer",
+				"transform-agent-tls-issuer",
+				"-o",
+				`jsonpath={.status.conditions[?(@.type=="Ready")].status}`,
+			))
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(Equal("True"))
+		}, defaultEventuallyLongTimeout, defaultEventuallyPollInterval).Should(Succeed())
+
+		By("patching the Bindplane resource to enable Transform Agent TLS")
+		_, err = runCmd(kubectl(
+			bindplaneNamespace,
+			"patch",
+			"bindplane",
+			bindplaneName,
+			"--type=merge",
+			"-p",
+			`{"spec":{"transformAgent":{"tls":{"certManager":{"name":"transform-agent-tls-issuer"}}}}}`,
+		))
+		Expect(err).NotTo(HaveOccurred())
+
+		By("waiting for the certificate and secret to be issued")
+		Eventually(func(g Gomega) {
+			_, err := runCmd(kubectl(
+				bindplaneNamespace,
+				"get",
+				"certificate.cert-manager.io",
+				bindplaneResourceName("transform-agent-tls"),
+			))
+			g.Expect(err).NotTo(HaveOccurred())
+			_, err = runCmd(kubectl(
+				bindplaneNamespace,
+				"get",
+				"secret",
+				bindplaneResourceName("transform-agent-tls"),
+			))
+			g.Expect(err).NotTo(HaveOccurred())
+		}, defaultEventuallyLongTimeout, defaultEventuallyPollInterval).Should(Succeed())
+
+		By("waiting for workloads to remain ready with Transform Agent TLS enabled")
+		waitForDeploymentAvailable(bindplaneResourceName("transform-agent"), bindplaneNamespace, defaultEventuallyLongTimeout)
+		waitForDeploymentAvailable(bindplaneResourceName("jobs"), bindplaneNamespace, defaultEventuallyLongTimeout)
+		waitForDeploymentAvailable(bindplaneResourceName("node"), bindplaneNamespace, defaultEventuallyLongTimeout)
+		waitForStatefulSetReady(bindplaneResourceName("nats"), bindplaneNamespace, defaultEventuallyLongTimeout)
+		waitForBindplaneCondition(
+			bindplaneName,
+			bindplaneNamespace,
+			"Reconciled",
+			metav1.ConditionTrue,
+			"Reconciled",
+			defaultEventuallyLongTimeout,
+		)
+
+		transformAgentDeployment, err := getDeployment(bindplaneResourceName("transform-agent"), bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		nodeDeployment, err := getDeployment(bindplaneResourceName("node"), bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		jobsDeployment, err := getDeployment(bindplaneResourceName("jobs"), bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(transformAgentDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
+			HaveField("Name", Equal("transform-agent-tls")),
+		))
+		Expect(envVarValue(transformAgentDeployment.Spec.Template.Spec.Containers[0].Env, "BINDPLANE_TRANSFORM_AGENT_TLS_CERT")).To(Equal("/etc/bindplane/transform-agent-tls/tls.crt"))
+		Expect(envVarValue(nodeDeployment.Spec.Template.Spec.Containers[0].Env, "BINDPLANE_TRANSFORM_AGENT_TLS_CA")).To(Equal("/etc/bindplane/transform-agent-tls/ca.crt"))
+		Expect(envVarValue(jobsDeployment.Spec.Template.Spec.Containers[0].Env, "BINDPLANE_TRANSFORM_AGENT_TLS_KEY")).To(Equal("/etc/bindplane/transform-agent-tls/tls.key"))
 	})
 })

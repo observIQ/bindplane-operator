@@ -224,9 +224,10 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 	netVols, netMounts := getNetworkTLSVolumeAndMount(bindplane)
 	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
 	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
+	transformAgentVols, transformAgentMounts := getTransformAgentTLSVolumesAndMounts(bindplane)
 	redisVols, redisMounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
-	configVols := append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), redisVols...)
-	configMounts := append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), redisMounts...)
+	configVols := append(append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), transformAgentVols...), redisVols...)
+	configMounts := append(append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), transformAgentMounts...), redisMounts...)
 
 	migrateResources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{

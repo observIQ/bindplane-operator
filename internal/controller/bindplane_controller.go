@@ -176,6 +176,10 @@ const (
 	internalTLSNatsVolumeName = "nats-tls"
 	internalTLSNatsMountPath  = "/etc/bindplane/nats-tls"
 
+	// Internal TLS (cert-manager) volume mount for the Transform Agent
+	internalTLSTransformAgentVolumeName = "transform-agent-tls"
+	internalTLSTransformAgentMountPath  = "/etc/bindplane/transform-agent-tls"
+
 	// Prometheus configuration
 	bindplaneTSDBEnableRemoteEnvVar        = "BINDPLANE_PROMETHEUS_ENABLE_REMOTE"
 	bindplaneTSDBHostEnvVar                = "BINDPLANE_PROMETHEUS_HOST"
@@ -198,6 +202,9 @@ const (
 	// Transform Agent configuration
 	bindplaneTransformAgentEnableRemoteEnvVar = "BINDPLANE_TRANSFORM_AGENT_ENABLE_REMOTE"
 	bindplaneTransformAgentRemoteAgentsEnvVar = "BINDPLANE_TRANSFORM_AGENT_REMOTE_AGENTS"
+	bindplaneTransformAgentTLSCertEnvVar      = "BINDPLANE_TRANSFORM_AGENT_TLS_CERT"
+	bindplaneTransformAgentTLSKeyEnvVar       = "BINDPLANE_TRANSFORM_AGENT_TLS_KEY"
+	bindplaneTransformAgentTLSCAEnvVar        = "BINDPLANE_TRANSFORM_AGENT_TLS_CA"
 
 	// Event Bus configuration
 	bindplaneEventBusTypeEnvVar                = "BINDPLANE_EVENT_BUS_TYPE"
@@ -1140,7 +1147,8 @@ func getAdvancedCacheRedisTLSVolumeAndMount(bindplane *bindplanev1alpha1.Bindpla
 }
 
 // getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, Postgres TLS,
-// internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS), and advanced cache Redis TLS.
+// internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS, Transform Agent TLS),
+// and advanced cache Redis TLS.
 // Used by Node, Jobs, and NATS so they receive all config TLS secrets when configured.
 func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
 	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
@@ -1148,9 +1156,10 @@ func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]cor
 	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
 	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
 	natsVols, natsMounts := getNatsTLSVolumesAndMounts(bindplane)
+	transformAgentVols, transformAgentMounts := getTransformAgentTLSVolumesAndMounts(bindplane)
 	redisVols, redisMounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
-	vols := append(append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), natsVols...), redisVols...)
-	mounts := append(append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), natsMounts...), redisMounts...)
+	vols := append(append(append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), natsVols...), transformAgentVols...), redisVols...)
+	mounts := append(append(append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), natsMounts...), transformAgentMounts...), redisMounts...)
 	return vols, mounts
 }
 
@@ -1216,6 +1225,26 @@ func getNatsTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev
 	mount := corev1.VolumeMount{
 		Name:      internalTLSNatsVolumeName,
 		MountPath: internalTLSNatsMountPath,
+		ReadOnly:  true,
+	}
+	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
+}
+
+// getTransformAgentTLSVolumesAndMounts returns volumes and mounts for Transform Agent TLS
+// when cert-manager is used (spec.transformAgent.tls.certManager).
+func getTransformAgentTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
+	if !isTransformAgentCertManagerTLSEnabled(bindplane) {
+		return nil, nil
+	}
+	vol := corev1.Volume{
+		Name: internalTLSTransformAgentVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: getResourceName(bindplane, transformAgentTLSCertSuffix)},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      internalTLSTransformAgentVolumeName,
+		MountPath: internalTLSTransformAgentMountPath,
 		ReadOnly:  true,
 	}
 	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}

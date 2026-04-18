@@ -122,7 +122,10 @@ test: setup-envtest ## Run tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= bindplane-operator-test-e2e
 KIND_K8S_VERSION ?=
-E2E_GO_TEST_FLAGS ?= -v -ginkgo.v
+# The default go test timeout is 10m, which is too short for the license-backed
+# e2e suite because it includes cluster bring-up, image pulls, and full workload
+# reconciliation. Keep this overrideable for local tuning.
+E2E_GO_TEST_FLAGS ?= -v -ginkgo.v -timeout 30m
 E2E_LABEL_FILTER ?=
 
 .PHONY: setup-test-e2e

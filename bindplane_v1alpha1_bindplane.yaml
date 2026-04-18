@@ -134,6 +134,11 @@ spec:
                 memory: 512Mi
   transformAgent:
     replicas: 1
+    tls:
+      certManager:
+        name: bindplane-internal-issuer
+        kind: Issuer
+        group: cert-manager.io
     podTemplate:
       spec:
         containers:

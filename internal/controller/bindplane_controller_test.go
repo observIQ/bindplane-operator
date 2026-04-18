@@ -476,6 +476,31 @@ var _ = Describe("Reconcile - Transform Agent", func() {
 		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, pdb)
 		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
+
+	It("mounts TLS cert-manager secret and env vars when Transform Agent TLS is enabled", func() {
+		bp := newTestBindplane("bp-ta-tls", testNamespace)
+		replicas := int32(2)
+		bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
+			Replicas: &replicas,
+			TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+			},
+		}
+		dep := newReconciler().transformAgentDeployment(bp)
+		Expect(dep.Spec.Template.Spec.Volumes).To(ContainElement(
+			HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+		))
+		Expect(dep.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+			And(
+				HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+				HaveField("MountPath", Equal(internalTLSTransformAgentMountPath)),
+			),
+		))
+		envVars := dep.Spec.Template.Spec.Containers[0].Env
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCertEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSKeyEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCAEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/ca.crt"))
+	})
 })
 
 var _ = Describe("Reconcile - TSDB", func() {
@@ -3589,6 +3614,88 @@ var _ = Describe("getNatsTLSVolumesAndMounts", func() {
 		Expect(vols[0].Secret.SecretName).To(Equal("bp-nats-tls"))
 		Expect(mounts[0].Name).To(Equal(internalTLSNatsVolumeName))
 		Expect(mounts[0].MountPath).To(Equal(internalTLSNatsMountPath))
+	})
+})
+
+var _ = Describe("getTransformAgentTLSEnvVars", func() {
+	It("returns nil when Transform Agent TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		envVars := getTransformAgentTLSEnvVars(bindplane)
+		Expect(envVars).To(BeNil())
+	})
+
+	It("returns Transform Agent TLS env vars when spec.transformAgent.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+					},
+				},
+			},
+		}
+		envVars := getTransformAgentTLSEnvVars(bindplane)
+		Expect(envVars).NotTo(BeNil())
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCertEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSKeyEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCAEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/ca.crt"))
+	})
+})
+
+var _ = Describe("getTransformAgentTLSVolumesAndMounts", func() {
+	It("returns nil when Transform Agent TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		vols, mounts := getTransformAgentTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns one volume and one mount when spec.transformAgent.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+					},
+				},
+			},
+		}
+		vols, mounts := getTransformAgentTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(mounts).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal(internalTLSTransformAgentVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("bp-transform-agent-tls"))
+		Expect(mounts[0].Name).To(Equal(internalTLSTransformAgentVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(internalTLSTransformAgentMountPath))
+	})
+})
+
+var _ = Describe("bindplaneJobsMigrateJob", func() {
+	It("mounts Transform Agent TLS when enabled", func() {
+		bindplane := newTestBindplane("bp-migrate-ta-tls", "default")
+		bindplane.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
+			TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+			},
+		}
+
+		job := newReconciler().bindplaneJobsMigrateJob(bindplane)
+
+		Expect(job.Spec.Template.Spec.Volumes).To(ContainElement(
+			And(
+				HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+				HaveField("VolumeSource.Secret.SecretName", Equal("bp-migrate-ta-tls-transform-agent-tls")),
+			),
+		))
+		Expect(job.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+			And(
+				HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+				HaveField("MountPath", Equal(internalTLSTransformAgentMountPath)),
+			),
+		))
+		Expect(envVarByName(job.Spec.Template.Spec.Containers[0].Env, bindplaneTransformAgentTLSCertEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.crt"))
 	})
 })
 

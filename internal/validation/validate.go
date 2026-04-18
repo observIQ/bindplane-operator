@@ -58,6 +58,9 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.Replicas != nil && *bindplane.Spec.TransformAgent.Replicas < 1 {
 		return fmt.Errorf("spec.transformAgent.replicas must be >= 1, got %d", *bindplane.Spec.TransformAgent.Replicas)
 	}
+	if err := ValidateTransformAgentTLSConfig(bindplane.Spec.TransformAgent); err != nil {
+		return err
+	}
 
 	if err := ValidateLicenseConfig(&bindplane.Spec.Config); err != nil {
 		return err
@@ -90,6 +93,17 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 		return err
 	}
 
+	return nil
+}
+
+// ValidateTransformAgentTLSConfig ensures cert-manager config is complete when Transform Agent TLS is enabled.
+func ValidateTransformAgentTLSConfig(transformAgent *bindplanev1alpha1.TransformAgentComponentSpec) error {
+	if transformAgent == nil || transformAgent.TLS == nil {
+		return nil
+	}
+	if transformAgent.TLS.CertManager == nil || transformAgent.TLS.CertManager.Name == "" {
+		return fmt.Errorf("spec.transformAgent.tls: certManager.name is required when TLS is enabled")
+	}
 	return nil
 }
 

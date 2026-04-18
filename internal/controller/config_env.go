@@ -477,6 +477,20 @@ func getNatsTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	}
 }
 
+// getTransformAgentTLSEnvVars returns env vars for Transform Agent TLS when cert-manager is enabled (spec.transformAgent.tls.certManager).
+// Cert-manager secret contains tls.crt, tls.key, and ca.crt.
+func getTransformAgentTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if !isTransformAgentCertManagerTLSEnabled(bindplane) {
+		return nil
+	}
+	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
+	return []corev1.EnvVar{
+		{Name: bindplaneTransformAgentTLSCertEnvVar, Value: internalTLSTransformAgentMountPath + "/" + certKey},
+		{Name: bindplaneTransformAgentTLSKeyEnvVar, Value: internalTLSTransformAgentMountPath + "/" + keyKey},
+		{Name: bindplaneTransformAgentTLSCAEnvVar, Value: internalTLSTransformAgentMountPath + "/" + caKey},
+	}
+}
+
 // getTransformAgentEnvVars returns the Transform Agent environment variables
 // Used by Node, Jobs, Jobs Migrate, and NATS deployments
 func getTransformAgentEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
@@ -869,6 +883,7 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component
 		getBindplaneConfigEnvVars(bindplane),
 		getTSDBEnvVars(bindplane),
 		getTransformAgentEnvVars(bindplane),
+		getTransformAgentTLSEnvVars(bindplane),
 		getProfilingEnvVars(config, component),
 		getPprofEnvVars(config),
 		getStatusEnvVars(config),

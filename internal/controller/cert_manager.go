@@ -38,8 +38,9 @@ const (
 	tsdbRemoteWriteServerCertSuffix = "tsdb-remote-write-server"
 	tsdbRemoteWriteClientCertSuffix = "tsdb-remote-write-client"
 	// tsdbProbeClientCertSuffix is the client cert for Prometheus pod's promtool (probe); ClientAuth EKU only.
-	tsdbProbeClientCertSuffix = "tsdb-probe-client"
-	natsTLSCertSuffix         = "nats-tls"
+	tsdbProbeClientCertSuffix   = "tsdb-probe-client"
+	natsTLSCertSuffix           = "nats-tls"
+	transformAgentTLSCertSuffix = "transform-agent-tls"
 )
 
 // reconcileInternalTLSCertificates reconciles cert-manager Certificate resources for
@@ -73,6 +74,14 @@ func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Conte
 			return err
 		}
 		if err := r.reconcileNatsTLSCert(ctx, bindplane, log); err != nil {
+			return err
+		}
+	}
+	if isTransformAgentCertManagerTLSEnabled(bindplane) {
+		if err := validateTransformAgentTLSConfig(bindplane); err != nil {
+			return err
+		}
+		if err := r.reconcileTransformAgentTLSCert(ctx, bindplane, log); err != nil {
 			return err
 		}
 	}
@@ -233,6 +242,39 @@ func validateNatsTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
 	return nil
 }
 
+// isTransformAgentCertManagerTLSEnabled returns true when Transform Agent TLS is enabled via cert-manager
+// (spec.transformAgent.tls.certManager).
+func isTransformAgentCertManagerTLSEnabled(bindplane *bindplanev1alpha1.Bindplane) bool {
+	ta := bindplane.Spec.TransformAgent
+	return ta != nil && ta.TLS != nil && ta.TLS.CertManager != nil && ta.TLS.CertManager.Name != ""
+}
+
+// validateTransformAgentTLSConfig returns an error when spec.transformAgent.tls is set but certManager.name is empty.
+func validateTransformAgentTLSConfig(bindplane *bindplanev1alpha1.Bindplane) error {
+	ta := bindplane.Spec.TransformAgent
+	if ta == nil || ta.TLS == nil {
+		return nil
+	}
+	if ta.TLS.CertManager == nil || ta.TLS.CertManager.Name == "" {
+		return fmt.Errorf("spec.transformAgent.tls: certManager.name is required when TLS is enabled")
+	}
+	return nil
+}
+
+// getTransformAgentServerCertDNSNames returns DNS names for the Transform Agent certificate.
+// Includes the short service name because Bindplane clients connect via "<service>:4568" in the same namespace.
+func getTransformAgentServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string {
+	name := getResourceName(bindplane, transformAgentComponent)
+	ns := bindplane.Namespace
+	return []string{
+		name,
+		fmt.Sprintf("%s.%s", name, ns),
+		fmt.Sprintf("%s.%s.svc", name, ns),
+		fmt.Sprintf("%s.%s.svc.cluster.local", name, ns),
+		"localhost",
+	}
+}
+
 // getNatsServerCertDNSNames returns DNS names for the NATS certificate (client, cluster, and HTTP use the same cert).
 // Includes short form <service>.<namespace> so clients connecting to e.g. bindplane-sample-nats-client.default can verify the cert.
 func getNatsServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string {
@@ -258,6 +300,26 @@ func getNatsServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string 
 		names = append(names, fmt.Sprintf("%s-%d.%s.%s.svc.cluster.local", name, i, headlessName, ns))
 	}
 	return names
+}
+
+// reconcileTransformAgentTLSCert creates or updates the Transform Agent TLS certificate.
+func (r *BindplaneReconciler) reconcileTransformAgentTLSCert(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	issuerRef := issuerRefToCM(*bindplane.Spec.TransformAgent.TLS.CertManager)
+	dnsNames := getTransformAgentServerCertDNSNames(bindplane)
+	cert := buildTransformAgentCertificate(
+		bindplane,
+		getResourceName(bindplane, transformAgentTLSCertSuffix),
+		getResourceName(bindplane, transformAgentTLSCertSuffix),
+		issuerRef,
+		dnsNames,
+	)
+	if err := controllerutil.SetControllerReference(bindplane, cert, r.Scheme); err != nil {
+		return err
+	}
+	if err := r.reconcileCertificate(ctx, cert, log); err != nil {
+		return fmt.Errorf("reconcile Transform Agent TLS certificate: %w", err)
+	}
+	return nil
 }
 
 // reconcileNatsTLSCert creates or updates the NATS TLS certificate (used for client, cluster, and HTTP ports).
@@ -300,6 +362,38 @@ func buildNatsCertificate(
 			IssuerRef:   issuerRef,
 			DNSNames:    dnsNames,
 			IPAddresses: []string{"127.0.0.1", "::1"},
+			PrivateKey: &cmapi.CertificatePrivateKey{
+				Algorithm: cmapi.RSAKeyAlgorithm,
+				Size:      2048,
+			},
+			Usages: []cmapi.KeyUsage{
+				cmapi.UsageDigitalSignature,
+				cmapi.UsageKeyEncipherment,
+				cmapi.UsageServerAuth,
+				cmapi.UsageClientAuth,
+			},
+		},
+	}
+}
+
+// buildTransformAgentCertificate builds a Certificate with both ServerAuth and ClientAuth for the Transform Agent.
+func buildTransformAgentCertificate(
+	bindplane *bindplanev1alpha1.Bindplane,
+	name, secretName string,
+	issuerRef cmmeta.IssuerReference,
+	dnsNames []string,
+) *cmapi.Certificate {
+	labels := getLabels(bindplane, name)
+	return &cmapi.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: bindplane.Namespace,
+			Labels:    labels,
+		},
+		Spec: cmapi.CertificateSpec{
+			SecretName: secretName,
+			IssuerRef:  issuerRef,
+			DNSNames:   dnsNames,
 			PrivateKey: &cmapi.CertificatePrivateKey{
 				Algorithm: cmapi.RSAKeyAlgorithm,
 				Size:      2048,
