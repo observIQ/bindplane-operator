@@ -20268,6 +20268,25 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
+                  tls:
+                    properties:
+                      certManager:
+                        properties:
+                          group:
+                            default: cert-manager.io
+                            type: string
+                          kind:
+                            default: Issuer
+                            enum:
+                            - Issuer
+                            - ClusterIssuer
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
                 type: object
               tsdb:
                 properties:
@@ -24225,7 +24244,7 @@ spec:
                     type: object
                 type: object
               version:
-                default: 1.98.1
+                default: 1.99.1
                 type: string
             required:
             - config

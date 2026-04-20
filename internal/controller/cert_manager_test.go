@@ -236,6 +236,69 @@ var _ = Describe("validateNatsTLSConfig", func() {
 	})
 })
 
+var _ = Describe("isTransformAgentCertManagerTLSEnabled", func() {
+	It("returns false when spec.transformAgent is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{}
+		Expect(isTransformAgentCertManagerTLSEnabled(bindplane)).To(BeFalse())
+	})
+
+	It("returns false when TLS or CertManager is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{},
+			},
+		}
+		Expect(isTransformAgentCertManagerTLSEnabled(bindplane)).To(BeFalse())
+	})
+
+	It("returns true when TLS.CertManager is set with name", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+					},
+				},
+			},
+		}
+		Expect(isTransformAgentCertManagerTLSEnabled(bindplane)).To(BeTrue())
+	})
+})
+
+var _ = Describe("validateTransformAgentTLSConfig", func() {
+	It("returns nil when spec.transformAgent is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{}
+		Expect(validateTransformAgentTLSConfig(bindplane)).To(Succeed())
+	})
+
+	It("returns error when TLS is set but certManager.name is empty", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{},
+					},
+				},
+			},
+		}
+		Expect(validateTransformAgentTLSConfig(bindplane)).NotTo(Succeed())
+		Expect(validateTransformAgentTLSConfig(bindplane).Error()).To(ContainSubstring("spec.transformAgent.tls"))
+	})
+
+	It("returns nil when certManager is set with non-empty name", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+					},
+				},
+			},
+		}
+		Expect(validateTransformAgentTLSConfig(bindplane)).To(Succeed())
+	})
+})
+
 var _ = Describe("getNatsServerCertDNSNames", func() {
 	It("returns client service, headless, pod DNS names and localhost", func() {
 		replicas := int32(2)
@@ -258,6 +321,22 @@ var _ = Describe("getNatsServerCertDNSNames", func() {
 		Expect(names).To(ContainElement("my-bp-nats-0.my-bp-nats-cluster.default.svc.cluster.local"))
 		Expect(names).To(ContainElement("my-bp-nats-1.my-bp-nats-cluster.default"))
 		Expect(names).To(ContainElement("my-bp-nats-1.my-bp-nats-cluster.default.svc.cluster.local"))
+	})
+})
+
+var _ = Describe("getTransformAgentServerCertDNSNames", func() {
+	It("returns service DNS names used by Bindplane clients", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+		}
+
+		names := getTransformAgentServerCertDNSNames(bindplane)
+		Expect(names).To(ContainElement("my-bp-transform-agent"))
+		Expect(names).To(ContainElement("my-bp-transform-agent.default"))
+		Expect(names).To(ContainElement("my-bp-transform-agent.default.svc"))
+		Expect(names).To(ContainElement("my-bp-transform-agent.default.svc.cluster.local"))
+		Expect(names).To(ContainElement("localhost"))
+		Expect(names).To(HaveLen(5))
 	})
 })
 
@@ -327,5 +406,25 @@ var _ = Describe("buildCertificate", func() {
 		Expect(cert.Spec.CommonName).To(Equal(cn))
 		Expect(cert.Spec.DNSNames).To(BeNil())
 		Expect(cert.Spec.Usages).To(ContainElement(cmapi.UsageClientAuth))
+	})
+})
+
+var _ = Describe("buildTransformAgentCertificate", func() {
+	It("builds a dual-use certificate for the Transform Agent", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "ns"},
+		}
+		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: "Issuer", Group: "cert-manager.io"}
+		dnsNames := []string{"bp-transform-agent", "bp-transform-agent.ns.svc.cluster.local"}
+
+		cert := buildTransformAgentCertificate(bindplane, "bp-transform-agent-tls", "bp-transform-agent-tls", issuerRef, dnsNames)
+
+		Expect(cert.Name).To(Equal("bp-transform-agent-tls"))
+		Expect(cert.Spec.SecretName).To(Equal("bp-transform-agent-tls"))
+		Expect(cert.Spec.DNSNames).To(Equal(dnsNames))
+		Expect(cert.Spec.Usages).To(ContainElement(cmapi.UsageServerAuth))
+		Expect(cert.Spec.Usages).To(ContainElement(cmapi.UsageClientAuth))
+		Expect(cert.Spec.PrivateKey).ToNot(BeNil())
+		Expect(cert.Spec.PrivateKey.Algorithm).To(Equal(cmapi.RSAKeyAlgorithm))
 	})
 })

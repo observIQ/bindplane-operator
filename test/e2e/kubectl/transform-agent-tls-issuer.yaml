@@ -1,0 +1,26 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: transform-agent-tls-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: transform-agent-tls-ca
+spec:
+  isCA: true
+  commonName: transform-agent-tls-ca
+  secretName: transform-agent-tls-ca
+  issuerRef:
+    name: transform-agent-tls-selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: transform-agent-tls-issuer
+spec:
+  ca:
+    secretName: transform-agent-tls-ca

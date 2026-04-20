@@ -22,6 +22,7 @@ The Operator integrates with [cert-manager](https://cert-manager.io/) to automat
 
 - Bindplane Node and the NATS event bus
 - Bindplane Node and the internal TSDB (Prometheus)
+- Bindplane and the Transform Agent
 
 Once cert-manager is configured, the Operator handles certificate lifecycle automatically — no manual secret creation or rotation needed.
 

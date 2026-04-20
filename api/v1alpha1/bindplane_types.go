@@ -31,7 +31,7 @@ type BindplaneSpec struct {
 	// Changing this value triggers a rolling update of all Bindplane workloads and a new
 	// database migration Job before downstream workloads are updated.
 	// +optional
-	// +kubebuilder:default="1.98.1"
+	// +kubebuilder:default="1.99.1"
 	Version string `json:"version,omitempty"`
 
 	// Config contains Bindplane's configuration (license, auth, network, store, eventBus)
@@ -723,6 +723,14 @@ type NatsTLSConfig struct {
 	CertManager *CertManagerTLSIssuerRef `json:"certManager,omitempty"`
 }
 
+// TransformAgentTLSConfig defines TLS for the Transform Agent. Only cert-manager is supported; no secretName.
+type TransformAgentTLSConfig struct {
+	// CertManager references a cert-manager Issuer or ClusterIssuer to issue the Transform Agent certificate
+	// used by both the Transform Agent server and Bindplane clients.
+	// +optional
+	CertManager *CertManagerTLSIssuerRef `json:"certManager,omitempty"`
+}
+
 // CertManagerTLSIssuerRef references a cert-manager Issuer or ClusterIssuer.
 // See https://cert-manager.io/docs/concepts/issuer/
 type CertManagerTLSIssuerRef struct {
@@ -877,6 +885,11 @@ type TransformAgentComponentSpec struct {
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
 	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// TLS configures mutual TLS for the Transform Agent via cert-manager. When set, a single certificate
+	// is used for the Transform Agent server and Bindplane clients.
+	// +optional
+	TLS *TransformAgentTLSConfig `json:"tls,omitempty"`
 
 	// DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.
 	// When false (default), the operator creates a PDB with minAvailable: 1.

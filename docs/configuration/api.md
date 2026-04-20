@@ -312,7 +312,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `version` _string_ | Version specifies the Bindplane release version used for all component container images.<br />Changing this value triggers a rolling update of all Bindplane workloads and a new<br />database migration Job before downstream workloads are updated. | 1.98.1 | Optional: \{\} <br /> |
+| `version` _string_ | Version specifies the Bindplane release version used for all component container images.<br />Changing this value triggers a rolling update of all Bindplane workloads and a new<br />database migration Job before downstream workloads are updated. | 1.99.1 | Optional: \{\} <br /> |
 | `config` _[BindplaneConfigSpec](#bindplaneconfigspec)_ | Config contains Bindplane's configuration (license, auth, network, store, eventBus)<br />This config is shared by Node, Jobs, and Jobs Migrate |  |  |
 | `bindplane` _[BindplaneComponentSpec](#bindplanecomponentspec)_ | Bindplane configuration and pod specification | \{  \} | Optional: \{\} <br /> |
 | `bindplaneJobs` _[BindplaneJobsComponentSpec](#bindplanejobscomponentspec)_ | Bindplane Jobs pod specification |  | Optional: \{\} <br /> |
@@ -329,6 +329,7 @@ See https://cert-manager.io/docs/concepts/issuer/
 _Appears in:_
 - [NatsTLSConfig](#natstlsconfig)
 - [TSDBTLSConfig](#tsdbtlsconfig)
+- [TransformAgentTLSConfig](#transformagenttlsconfig)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -799,7 +800,19 @@ _Appears in:_
 | `replicas` _integer_ | Replicas specifies the number of replicas for Transform Agent deployment | 2 | Optional: \{\} <br /> |
 | `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the Transform Agent primary container.<br />If podTemplate.spec.containers[transform-agent].resources is also set, the podTemplate value takes<br />precedence because it is more specific. |  | Optional: \{\} <br /> |
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Transform Agent |  | Type: object <br />Optional: \{\} <br /> |
+| `tls` _[TransformAgentTLSConfig](#transformagenttlsconfig)_ | TLS configures mutual TLS for the Transform Agent via cert-manager. When set, a single certificate<br />is used for the Transform Agent server and Bindplane clients. |  | Optional: \{\} <br /> |
 | `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. |  | Optional: \{\} <br /> |
+
+#### TransformAgentTLSConfig
+
+TransformAgentTLSConfig defines TLS for the Transform Agent. Only cert-manager is supported; no secretName.
+
+_Appears in:_
+- [TransformAgentComponentSpec](#transformagentcomponentspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `certManager` _[CertManagerTLSIssuerRef](#certmanagertlsissuerref)_ | CertManager references a cert-manager Issuer or ClusterIssuer to issue the Transform Agent certificate<br />used by both the Transform Agent server and Bindplane clients. |  | Optional: \{\} <br /> |
 
 #### VolumeClaimTemplate
 
