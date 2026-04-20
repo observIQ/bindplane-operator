@@ -288,8 +288,17 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 		Expect(transformAgentDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
 			HaveField("Name", Equal("transform-agent-tls")),
 		))
-		Expect(envVarValue(transformAgentDeployment.Spec.Template.Spec.Containers[0].Env, "BINDPLANE_TRANSFORM_AGENT_TLS_CERT")).To(Equal("/etc/bindplane/transform-agent-tls/tls.crt"))
-		Expect(envVarValue(nodeDeployment.Spec.Template.Spec.Containers[0].Env, "BINDPLANE_TRANSFORM_AGENT_TLS_CA")).To(Equal("/etc/bindplane/transform-agent-tls/ca.crt"))
-		Expect(envVarValue(jobsDeployment.Spec.Template.Spec.Containers[0].Env, "BINDPLANE_TRANSFORM_AGENT_TLS_KEY")).To(Equal("/etc/bindplane/transform-agent-tls/tls.key"))
+		Expect(envVarValue(
+			transformAgentDeployment.Spec.Template.Spec.Containers[0].Env,
+			"BINDPLANE_TRANSFORM_AGENT_TLS_CERT",
+		)).To(Equal("/etc/bindplane/transform-agent-tls/tls.crt"))
+		Expect(envVarValue(
+			nodeDeployment.Spec.Template.Spec.Containers[0].Env,
+			"BINDPLANE_TRANSFORM_AGENT_TLS_CA",
+		)).To(Equal("/etc/bindplane/transform-agent-tls/ca.crt"))
+		Expect(envVarValue(
+			jobsDeployment.Spec.Template.Spec.Containers[0].Env,
+			"BINDPLANE_TRANSFORM_AGENT_TLS_KEY",
+		)).To(Equal("/etc/bindplane/transform-agent-tls/tls.key"))
 	})
 })
