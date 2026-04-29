@@ -1228,6 +1228,31 @@ type NetworkConfig struct {
 	// Omit or omit secretName/certKey/keyKey to disable server TLS (e.g. when using Ingress to terminate TLS).
 	// +optional
 	TLS *NetworkTLSConfig `json:"tls,omitempty"`
+
+	// RateLimits configures per-endpoint rate limiting for the REST API and GraphQL API.
+	// +optional
+	RateLimits *NetworkRateLimitsConfig `json:"rateLimits,omitempty"`
+}
+
+// NetworkRateLimitsConfig configures rate limiting for the Bindplane REST and GraphQL APIs.
+type NetworkRateLimitsConfig struct {
+	// APIRate is the maximum number of REST API requests per second (e.g. "10").
+	// Bindplane reads this as a float64.
+	// +optional
+	APIRate string `json:"apiRate,omitempty"`
+
+	// APIBurst is the maximum burst size for REST API requests.
+	// +optional
+	APIBurst int `json:"apiBurst,omitempty"`
+
+	// GraphQLRate is the maximum number of GraphQL API requests per second (e.g. "10").
+	// Bindplane reads this as a float64.
+	// +optional
+	GraphQLRate string `json:"graphqlRate,omitempty"`
+
+	// GraphQLBurst is the maximum burst size for GraphQL API requests.
+	// +optional
+	GraphQLBurst int `json:"graphqlBurst,omitempty"`
 }
 
 // StoreConfig defines store configuration

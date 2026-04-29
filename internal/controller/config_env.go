@@ -166,6 +166,21 @@ func getNetworkConfigEnvVars(network *bindplanev1alpha1.NetworkConfig, bindplane
 			}
 		}
 	}
+	if network != nil && network.RateLimits != nil {
+		rl := network.RateLimits
+		if rl.APIRate != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsAPIRateEnvVar, Value: rl.APIRate})
+		}
+		if rl.APIBurst > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsAPIBurstEnvVar, Value: strconv.Itoa(rl.APIBurst)})
+		}
+		if rl.GraphQLRate != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsGraphQLRateEnvVar, Value: rl.GraphQLRate})
+		}
+		if rl.GraphQLBurst > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsGraphQLBurstEnvVar, Value: strconv.Itoa(rl.GraphQLBurst)})
+		}
+	}
 	remoteURL := ""
 	if network != nil {
 		remoteURL = network.RemoteURL

@@ -12339,6 +12339,17 @@ spec:
                         type: string
                       port:
                         type: string
+                      rateLimits:
+                        properties:
+                          apiBurst:
+                            type: integer
+                          apiRate:
+                            type: string
+                          graphqlBurst:
+                            type: integer
+                          graphqlRate:
+                            type: string
+                        type: object
                       remoteURL:
                         type: string
                       tls:

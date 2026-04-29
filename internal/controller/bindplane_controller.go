@@ -318,6 +318,12 @@ const (
 	// AgentVersions configuration
 	bindplaneAgentVersionsSyncIntervalEnvVar = "BINDPLANE_AGENT_VERSIONS_SYNC_INTERVAL"
 	bindplaneAgentVersionsClientsEnvVar      = "BINDPLANE_AGENT_VERSIONS_CLIENTS"
+
+	// Network rate limits configuration
+	bindplaneNetworkRateLimitsAPIRateEnvVar      = "BINDPLANE_NETWORK_RATE_LIMITS_API_RATE"
+	bindplaneNetworkRateLimitsAPIBurstEnvVar     = "BINDPLANE_NETWORK_RATE_LIMITS_API_BURST"
+	bindplaneNetworkRateLimitsGraphQLRateEnvVar  = "BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_RATE"
+	bindplaneNetworkRateLimitsGraphQLBurstEnvVar = "BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_BURST"
 )
 
 const (
