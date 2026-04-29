@@ -273,6 +273,115 @@ type BindplaneConfigSpec struct {
 	// When omitted, Bindplane uses its own defaults.
 	// +optional
 	AgentVersions *AgentVersionsConfig `json:"agentVersions,omitempty"`
+
+	// SaaS configures Bindplane SaaS-specific functionality including the license server,
+	// Stripe billing, and janitor settings.
+	// +optional
+	SaaS *SaaSConfig `json:"saas,omitempty"`
+}
+
+// SaaSConfig configures Bindplane SaaS-specific functionality.
+type SaaSConfig struct {
+	// Enabled toggles SaaS mode.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// LicenseServerAddress is the URL of the SaaS license server.
+	// +optional
+	LicenseServerAddress string `json:"licenseServerAddress,omitempty"`
+
+	// LicenseServerAPIKey is a plain-text API key for the license server.
+	// +optional
+	LicenseServerAPIKey string `json:"licenseServerAPIKey,omitempty"`
+
+	// LicenseServerAPIKeySecretRef references a Secret containing the license server API key.
+	// Takes precedence over LicenseServerAPIKey when both are set.
+	// +optional
+	LicenseServerAPIKeySecretRef *corev1.SecretKeySelector `json:"licenseServerAPIKeySecretRef,omitempty"`
+
+	// JanitorOrganization is the organization used by the SaaS janitor job.
+	// +optional
+	JanitorOrganization string `json:"janitorOrganization,omitempty"`
+
+	// UseStagePublicRSAKey enables use of the staging RSA public key for token validation.
+	// +optional
+	UseStagePublicRSAKey bool `json:"useStagePublicRSAKey,omitempty"`
+
+	// Stripe configures Stripe billing integration.
+	// +optional
+	Stripe *SaaSStripeConfig `json:"stripe,omitempty"`
+}
+
+// SaaSStripeConfig configures Stripe billing for Bindplane SaaS.
+type SaaSStripeConfig struct {
+	// Enabled toggles Stripe integration.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// SecretKey is a plain-text Stripe secret key.
+	// +optional
+	SecretKey string `json:"secretKey,omitempty"`
+
+	// SecretKeySecretRef references a Secret containing the Stripe secret key.
+	// Takes precedence over SecretKey when both are set.
+	// +optional
+	SecretKeySecretRef *corev1.SecretKeySelector `json:"secretKeySecretRef,omitempty"`
+
+	// PublishableKey is a plain-text Stripe publishable key.
+	// +optional
+	PublishableKey string `json:"publishableKey,omitempty"`
+
+	// PublishableKeySecretRef references a Secret containing the Stripe publishable key.
+	// Takes precedence over PublishableKey when both are set.
+	// +optional
+	PublishableKeySecretRef *corev1.SecretKeySelector `json:"publishableKeySecretRef,omitempty"`
+
+	// WebhookSecret is a plain-text Stripe webhook signing secret.
+	// +optional
+	WebhookSecret string `json:"webhookSecret,omitempty"`
+
+	// WebhookSecretSecretRef references a Secret containing the Stripe webhook secret.
+	// Takes precedence over WebhookSecret when both are set.
+	// +optional
+	WebhookSecretSecretRef *corev1.SecretKeySelector `json:"webhookSecretSecretRef,omitempty"`
+
+	// GrowthPlanIDs configures Stripe plan identifiers for the growth tier.
+	// +optional
+	GrowthPlanIDs *SaaSStripeGrowthPlanIDsConfig `json:"growthPlanIDs,omitempty"`
+
+	// GrowthPlanMeterNames configures Stripe meter names for the growth tier.
+	// +optional
+	GrowthPlanMeterNames *SaaSStripeGrowthPlanMeterNamesConfig `json:"growthPlanMeterNames,omitempty"`
+}
+
+// SaaSStripeGrowthPlanIDsConfig configures Stripe plan IDs for the growth tier.
+type SaaSStripeGrowthPlanIDsConfig struct {
+	// BaseRate is the Stripe price ID for the base rate plan.
+	// +optional
+	BaseRate string `json:"baseRate,omitempty"`
+
+	// UsageRates is a comma-separated list of Stripe price IDs for usage-based rates.
+	// +optional
+	UsageRates string `json:"usageRates,omitempty"`
+}
+
+// SaaSStripeGrowthPlanMeterNamesConfig configures Stripe meter names for usage billing.
+type SaaSStripeGrowthPlanMeterNamesConfig struct {
+	// Logs is the Stripe meter name for log volume.
+	// +optional
+	Logs string `json:"logs,omitempty"`
+
+	// Metrics is the Stripe meter name for metric volume.
+	// +optional
+	Metrics string `json:"metrics,omitempty"`
+
+	// Traces is the Stripe meter name for trace volume.
+	// +optional
+	Traces string `json:"traces,omitempty"`
+
+	// Collectors is the Stripe meter name for collector count.
+	// +optional
+	Collectors string `json:"collectors,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.

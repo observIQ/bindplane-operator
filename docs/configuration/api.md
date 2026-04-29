@@ -316,6 +316,7 @@ _Appears in:_
 | `advanced` _[AdvancedConfig](#advancedconfig)_ | Advanced configures advanced Bindplane options. These are typically used to<br />fine-tune behavior at scale and are not required for basic operation. |  | Optional: \{\} <br /> |
 | `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
+| `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server,<br />Stripe billing, and janitor settings. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsComponentSpec
 
@@ -719,6 +720,68 @@ _Appears in:_
 | `noHeap` _boolean_ | NoHeap disables heap profiling. | false | Optional: \{\} <br /> |
 | `noGoroutine` _boolean_ | NoGoroutine disables goroutine profiling. | false | Optional: \{\} <br /> |
 | `mutex` _boolean_ | Mutex enables mutex profiling (disabled by default in Bindplane). | false | Optional: \{\} <br /> |
+
+#### SaaSConfig
+
+SaaSConfig configures Bindplane SaaS-specific functionality.
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles SaaS mode. |  | Optional: \{\} <br /> |
+| `licenseServerAddress` _string_ | LicenseServerAddress is the URL of the SaaS license server. |  | Optional: \{\} <br /> |
+| `licenseServerAPIKey` _string_ | LicenseServerAPIKey is a plain-text API key for the license server. |  | Optional: \{\} <br /> |
+| `licenseServerAPIKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | LicenseServerAPIKeySecretRef references a Secret containing the license server API key.<br />Takes precedence over LicenseServerAPIKey when both are set. |  | Optional: \{\} <br /> |
+| `janitorOrganization` _string_ | JanitorOrganization is the organization used by the SaaS janitor job. |  | Optional: \{\} <br /> |
+| `useStagePublicRSAKey` _boolean_ | UseStagePublicRSAKey enables use of the staging RSA public key for token validation. |  | Optional: \{\} <br /> |
+| `stripe` _[SaaSStripeConfig](#saasstripeconfig)_ | Stripe configures Stripe billing integration. |  | Optional: \{\} <br /> |
+
+#### SaaSStripeConfig
+
+SaaSStripeConfig configures Stripe billing for Bindplane SaaS.
+
+_Appears in:_
+- [SaaSConfig](#saasconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles Stripe integration. |  | Optional: \{\} <br /> |
+| `secretKey` _string_ | SecretKey is a plain-text Stripe secret key. |  | Optional: \{\} <br /> |
+| `secretKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | SecretKeySecretRef references a Secret containing the Stripe secret key.<br />Takes precedence over SecretKey when both are set. |  | Optional: \{\} <br /> |
+| `publishableKey` _string_ | PublishableKey is a plain-text Stripe publishable key. |  | Optional: \{\} <br /> |
+| `publishableKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | PublishableKeySecretRef references a Secret containing the Stripe publishable key.<br />Takes precedence over PublishableKey when both are set. |  | Optional: \{\} <br /> |
+| `webhookSecret` _string_ | WebhookSecret is a plain-text Stripe webhook signing secret. |  | Optional: \{\} <br /> |
+| `webhookSecretSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | WebhookSecretSecretRef references a Secret containing the Stripe webhook secret.<br />Takes precedence over WebhookSecret when both are set. |  | Optional: \{\} <br /> |
+| `growthPlanIDs` _[SaaSStripeGrowthPlanIDsConfig](#saasstripegrowthplanidsconfig)_ | GrowthPlanIDs configures Stripe plan identifiers for the growth tier. |  | Optional: \{\} <br /> |
+| `growthPlanMeterNames` _[SaaSStripeGrowthPlanMeterNamesConfig](#saasstripegrowthplanmeternamesconfig)_ | GrowthPlanMeterNames configures Stripe meter names for the growth tier. |  | Optional: \{\} <br /> |
+
+#### SaaSStripeGrowthPlanIDsConfig
+
+SaaSStripeGrowthPlanIDsConfig configures Stripe plan IDs for the growth tier.
+
+_Appears in:_
+- [SaaSStripeConfig](#saasstripeconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `baseRate` _string_ | BaseRate is the Stripe price ID for the base rate plan. |  | Optional: \{\} <br /> |
+| `usageRates` _string_ | UsageRates is a comma-separated list of Stripe price IDs for usage-based rates. |  | Optional: \{\} <br /> |
+
+#### SaaSStripeGrowthPlanMeterNamesConfig
+
+SaaSStripeGrowthPlanMeterNamesConfig configures Stripe meter names for usage billing.
+
+_Appears in:_
+- [SaaSStripeConfig](#saasstripeconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `logs` _string_ | Logs is the Stripe meter name for log volume. |  | Optional: \{\} <br /> |
+| `metrics` _string_ | Metrics is the Stripe meter name for metric volume. |  | Optional: \{\} <br /> |
+| `traces` _string_ | Traces is the Stripe meter name for trace volume. |  | Optional: \{\} <br /> |
+| `collectors` _string_ | Collectors is the Stripe meter name for collector count. |  | Optional: \{\} <br /> |
 
 #### StorageSpec
 

@@ -37,6 +37,8 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Rebalance](#rebalance)
   - [Duplication Prevention](#duplication-prevention)
 - [Agent versions](#agent-versions)
+- [SaaS](#saas)
+  - [Stripe](#stripe)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1116,6 +1118,72 @@ spec:
       clients:
         - bdot
         - github
+```
+
+## SaaS
+
+The `spec.config.saas` section configures Bindplane SaaS-specific functionality including the license server, Stripe billing, and janitor settings.
+When omitted, SaaS mode is disabled.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.saas.enabled` | `BINDPLANE_SAAS_ENABLED` | `false` | No |
+| `spec.config.saas.licenseServerAddress` | `BINDPLANE_SAAS_LICENSE_SERVER_ADDRESS` | — | No |
+| `spec.config.saas.licenseServerAPIKey` | `BINDPLANE_SAAS_LICENSE_SERVER_API_KEY` | — | No |
+| `spec.config.saas.licenseServerAPIKeySecretRef` | `BINDPLANE_SAAS_LICENSE_SERVER_API_KEY` | — | No |
+| `spec.config.saas.janitorOrganization` | `BINDPLANE_SAAS_JANITOR_ORGANIZATION` | — | No |
+| `spec.config.saas.useStagePublicRSAKey` | `BINDPLANE_SAAS_USE_STAGE_PUBLIC_RSA_KEY` | `false` | No |
+
+`licenseServerAPIKeySecretRef` takes precedence over `licenseServerAPIKey` when both are set.
+
+### Stripe
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.saas.stripe.enabled` | `BINDPLANE_SAAS_STRIPE_ENABLED` | `false` | No |
+| `spec.config.saas.stripe.secretKey` | `BINDPLANE_SAAS_STRIPE_SECRET_KEY` | — | No |
+| `spec.config.saas.stripe.secretKeySecretRef` | `BINDPLANE_SAAS_STRIPE_SECRET_KEY` | — | No |
+| `spec.config.saas.stripe.publishableKey` | `BINDPLANE_SAAS_STRIPE_PUBLISHABLE_KEY` | — | No |
+| `spec.config.saas.stripe.publishableKeySecretRef` | `BINDPLANE_SAAS_STRIPE_PUBLISHABLE_KEY` | — | No |
+| `spec.config.saas.stripe.webhookSecret` | `BINDPLANE_SAAS_STRIPE_WEBHOOK_SECRET` | — | No |
+| `spec.config.saas.stripe.webhookSecretSecretRef` | `BINDPLANE_SAAS_STRIPE_WEBHOOK_SECRET` | — | No |
+| `spec.config.saas.stripe.growthPlanIDs.baseRate` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_BASE_RATE` | — | No |
+| `spec.config.saas.stripe.growthPlanIDs.usageRates` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_USAGE_RATES` | — | No |
+| `spec.config.saas.stripe.growthPlanMeterNames.logs` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_LOGS` | — | No |
+| `spec.config.saas.stripe.growthPlanMeterNames.metrics` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_METRICS` | — | No |
+| `spec.config.saas.stripe.growthPlanMeterNames.traces` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_TRACES` | — | No |
+| `spec.config.saas.stripe.growthPlanMeterNames.collectors` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_COLLECTORS` | — | No |
+
+Secret references for Stripe keys take precedence over plain-value fields when both are set. Prefer Secret references in production.
+
+```yaml
+spec:
+  config:
+    saas:
+      enabled: true
+      licenseServerAddress: "https://license.bindplane.com"
+      licenseServerAPIKeySecretRef:
+        name: bindplane-secrets
+        key: saas-license-api-key
+      stripe:
+        enabled: true
+        secretKeySecretRef:
+          name: bindplane-secrets
+          key: stripe-secret-key
+        publishableKeySecretRef:
+          name: bindplane-secrets
+          key: stripe-publishable-key
+        webhookSecretSecretRef:
+          name: bindplane-secrets
+          key: stripe-webhook-secret
+        growthPlanIDs:
+          baseRate: "price_xxx"
+          usageRates: "price_yyy,price_zzz"
+        growthPlanMeterNames:
+          logs: "log_volume"
+          metrics: "metric_volume"
+          traces: "trace_volume"
+          collectors: "collector_count"
 ```
 
 ## Scope

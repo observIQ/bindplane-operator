@@ -385,6 +385,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getMiscConfigEnvVars(config)...)
 	envVars = append(envVars, getAgentsConfigEnvVars(config.Agents)...)
 	envVars = append(envVars, getAgentVersionsConfigEnvVars(config.AgentVersions)...)
+	envVars = append(envVars, getSaaSConfigEnvVars(config.SaaS)...)
 	return envVars
 }
 
@@ -869,6 +870,75 @@ func getAgentVersionsConfigEnvVars(av *bindplanev1alpha1.AgentVersionsConfig) []
 	}
 	if len(av.Clients) > 0 {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentVersionsClientsEnvVar, Value: strings.Join(av.Clients, ",")})
+	}
+	return envVars
+}
+
+// getSaaSConfigEnvVars returns env vars for spec.config.saas.
+// Returns nil when saas is nil.
+func getSaaSConfigEnvVars(s *bindplanev1alpha1.SaaSConfig) []corev1.EnvVar {
+	if s == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if s.Enabled {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSEnabledEnvVar, Value: "true"})
+	}
+	if s.LicenseServerAddress != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSLicenseServerAddressEnvVar, Value: s.LicenseServerAddress})
+	}
+	if ev := secretOrValue(bindplaneSaaSLicenseServerAPIKeyEnvVar, s.LicenseServerAPIKey, s.LicenseServerAPIKeySecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if s.JanitorOrganization != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSJanitorOrganizationEnvVar, Value: s.JanitorOrganization})
+	}
+	if s.UseStagePublicRSAKey {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSUseStagePublicRSAKeyEnvVar, Value: "true"})
+	}
+	envVars = append(envVars, getSaaSStripeEnvVars(s.Stripe)...)
+	return envVars
+}
+
+// getSaaSStripeEnvVars returns env vars for spec.config.saas.stripe.
+func getSaaSStripeEnvVars(stripe *bindplanev1alpha1.SaaSStripeConfig) []corev1.EnvVar {
+	if stripe == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if stripe.Enabled {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeEnabledEnvVar, Value: "true"})
+	}
+	if ev := secretOrValue(bindplaneSaaSStripeSecretKeyEnvVar, stripe.SecretKey, stripe.SecretKeySecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ev := secretOrValue(bindplaneSaaSStripePublishableKeyEnvVar, stripe.PublishableKey, stripe.PublishableKeySecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ev := secretOrValue(bindplaneSaaSStripeWebhookSecretEnvVar, stripe.WebhookSecret, stripe.WebhookSecretSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ids := stripe.GrowthPlanIDs; ids != nil {
+		if ids.BaseRate != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthPlanIDsBaseRateEnvVar, Value: ids.BaseRate})
+		}
+		if ids.UsageRates != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthPlanIDsUsageRatesEnvVar, Value: ids.UsageRates})
+		}
+	}
+	if mn := stripe.GrowthPlanMeterNames; mn != nil {
+		if mn.Logs != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesLogsEnvVar, Value: mn.Logs})
+		}
+		if mn.Metrics != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesMetricsEnvVar, Value: mn.Metrics})
+		}
+		if mn.Traces != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesTracesEnvVar, Value: mn.Traces})
+		}
+		if mn.Collectors != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesCollectorsEnvVar, Value: mn.Collectors})
+		}
 	}
 	return envVars
 }
