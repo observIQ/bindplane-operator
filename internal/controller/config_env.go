@@ -465,6 +465,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getFeaturesConfigEnvVars(config.Features)...)
 	envVars = append(envVars, getErrorsConfigEnvVars(config.Errors)...)
 	envVars = append(envVars, getLLMConfigEnvVars(config.LLM)...)
+	envVars = append(envVars, getQuotasConfigEnvVars(config.Quotas)...)
 	return envVars
 }
 
@@ -1017,6 +1018,30 @@ func getSaaSStripeEnvVars(stripe *bindplanev1alpha1.SaaSStripeConfig) []corev1.E
 		}
 		if mn.Collectors != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesCollectorsEnvVar, Value: mn.Collectors})
+		}
+	}
+	return envVars
+}
+
+// getQuotasConfigEnvVars returns env vars for spec.config.quotas.
+// Returns nil when quotas is nil (Bindplane uses its own defaults).
+func getQuotasConfigEnvVars(q *bindplanev1alpha1.QuotasConfig) []corev1.EnvVar {
+	if q == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if q.Enabled {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasEnabledEnvVar, Value: "true"})
+	}
+	if q.Enforced {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasEnforcedEnvVar, Value: "true"})
+	}
+	if q.Projects != nil {
+		if q.Projects.Enabled {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasProjectsEnabledEnvVar, Value: "true"})
+		}
+		if q.Projects.Enforced {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasProjectsEnforcedEnvVar, Value: "true"})
 		}
 	}
 	return envVars

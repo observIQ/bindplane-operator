@@ -418,6 +418,12 @@ const (
 	bindplaneLLMLangsmithProjectNameEnvVar             = "BINDPLANE_LLM_LANGSMITH_PROJECT_NAME"
 	bindplaneLLMOpenAIAPIKeyEnvVar                     = "BINDPLANE_LLM_OPENAI_API_KEY"    // #nosec G101 -- env var name, not a credential
 	bindplaneLLMAnthropicAPIKeyEnvVar                  = "BINDPLANE_LLM_ANTHROPIC_API_KEY" // #nosec G101 -- env var name, not a credential
+
+	// Quotas configuration
+	bindplaneQuotasEnabledEnvVar          = "BINDPLANE_QUOTAS_ENABLED"
+	bindplaneQuotasEnforcedEnvVar         = "BINDPLANE_QUOTAS_ENFORCED"
+	bindplaneQuotasProjectsEnabledEnvVar  = "BINDPLANE_QUOTAS_PROJECTS_ENABLED"
+	bindplaneQuotasProjectsEnforcedEnvVar = "BINDPLANE_QUOTAS_PROJECTS_ENFORCED"
 )
 
 const (
