@@ -28,6 +28,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Advanced](#advanced)
   - [Store stats](#store-stats)
   - [Server](#server)
+  - [Rollout](#rollout)
   - [Cache](#cache)
     - [Redis](#redis)
 - [Agents](#agents)
@@ -848,10 +849,12 @@ The server section configures HTTP and OpAMP server limits.
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.advanced.server.maxRequestBytes` | `BINDPLANE_ADVANCED_SERVER_MAX_REQUEST_BYTES` | — | No |
-| `spec.config.advanced.server.opampShutdownGracePeriod` | `BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD` | — | No |
+| `spec.config.advanced.server.shutdownGracePeriod` | `BINDPLANE_ADVANCED_SERVER_SHUTDOWN_GRACE_PERIOD` | — | No |
+| `spec.config.advanced.server.opampShutdownGracePeriodTarget` | `BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET` | — | No |
 
 - `maxRequestBytes`: Maximum request body size (in bytes) the server accepts, excluding offline agent uploads. Bindplane defaults to 10485760 (10 MiB) when omitted.
-- `opampShutdownGracePeriod`: How long the OpAMP server waits for agents to disconnect during shutdown. Bindplane defaults to 30s when omitted.
+- `shutdownGracePeriod`: Total time the server waits for in-flight requests and connections to finish before forceful shutdown (e.g. `"5m"`). Valid range: 5s–1h. Bindplane defaults to 2m when omitted. Setting this field also adjusts the Node pod's termination grace period to 125% of this value.
+- `opampShutdownGracePeriodTarget`: Fraction of `shutdownGracePeriod` allocated to draining OpAMP agent connections (0.1–1.0, stored as a string, e.g. `"0.6"`). Bindplane defaults to 0.25 when omitted.
 
 Example:
 
@@ -861,7 +864,28 @@ spec:
     advanced:
       server:
         maxRequestBytes: 20971520
-        opampShutdownGracePeriod: "60s"
+        shutdownGracePeriod: "5m"
+        opampShutdownGracePeriodTarget: "0.6"
+```
+
+### Rollout
+
+The rollout section controls the background rollout updater.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.advanced.rollout.disableUpdater` | `BINDPLANE_ADVANCED_ROLLOUT_DISABLE_UPDATER` | `false` | No |
+
+- `disableUpdater`: When `true`, disables the background rollout updater process.
+
+Example:
+
+```yaml
+spec:
+  config:
+    advanced:
+      rollout:
+        disableUpdater: true
 ```
 
 ### Cache

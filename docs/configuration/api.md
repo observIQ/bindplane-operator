@@ -69,6 +69,18 @@ _Appears in:_
 | `store` _[AdvancedStoreConfig](#advancedstoreconfig)_ | Store contains advanced store configuration options. |  | Optional: \{\} <br /> |
 | `server` _[AdvancedServerConfig](#advancedserverconfig)_ | Server contains advanced server configuration options. |  | Optional: \{\} <br /> |
 | `cache` _[AdvancedCacheConfig](#advancedcacheconfig)_ | Cache contains advanced cache configuration options. |  | Optional: \{\} <br /> |
+| `rollout` _[AdvancedRolloutConfig](#advancedrolloutconfig)_ | Rollout contains advanced rollout configuration options. |  | Optional: \{\} <br /> |
+
+#### AdvancedRolloutConfig
+
+AdvancedRolloutConfig contains advanced rollout configuration options.
+
+_Appears in:_
+- [AdvancedConfig](#advancedconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `disableUpdater` _boolean_ | DisableUpdater disables the background rollout updater. |  | Optional: \{\} <br /> |
 
 #### AdvancedServerConfig
 
@@ -81,7 +93,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `maxRequestBytes` _integer_ | MaxRequestBytes is the maximum request body size the server accepts, excluding offline<br />agent uploads. When omitted, Bindplane defaults to 10485760 (10 MiB). |  | Optional: \{\} <br /> |
-| `opampShutdownGracePeriod` _string_ | OpAMPShutdownGracePeriod is how long the OpAMP server waits for agents to disconnect<br />during shutdown (e.g. "30s"). When omitted, Bindplane defaults to 30s. |  | Optional: \{\} <br /> |
+| `shutdownGracePeriod` _string_ | ShutdownGracePeriod is the total time the server waits for in-flight requests and<br />connections to finish before forceful shutdown (e.g. "5m"). When omitted, Bindplane<br />uses its own default. |  | Optional: \{\} <br /> |
+| `opampShutdownGracePeriodTarget` _string_ | OpAMPShutdownGracePeriodTarget is the fraction (0.1–1.0) of ShutdownGracePeriod<br />that the OpAMP server is given to drain agents (e.g. "0.6"). When omitted, Bindplane<br />uses its own default. |  | Optional: \{\} <br /> |
 
 #### AdvancedStoreConfig
 

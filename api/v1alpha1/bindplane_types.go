@@ -397,6 +397,16 @@ type AdvancedConfig struct {
 	// Cache contains advanced cache configuration options.
 	// +optional
 	Cache *AdvancedCacheConfig `json:"cache,omitempty"`
+	// Rollout contains advanced rollout configuration options.
+	// +optional
+	Rollout *AdvancedRolloutConfig `json:"rollout,omitempty"`
+}
+
+// AdvancedRolloutConfig contains advanced rollout configuration options.
+type AdvancedRolloutConfig struct {
+	// DisableUpdater disables the background rollout updater.
+	// +optional
+	DisableUpdater bool `json:"disableUpdater,omitempty"`
 }
 
 // AdvancedStoreConfig contains advanced store configuration options.
@@ -433,10 +443,16 @@ type AdvancedServerConfig struct {
 	// agent uploads. When omitted, Bindplane defaults to 10485760 (10 MiB).
 	// +optional
 	MaxRequestBytes int64 `json:"maxRequestBytes,omitempty"`
-	// OpAMPShutdownGracePeriod is how long the OpAMP server waits for agents to disconnect
-	// during shutdown (e.g. "30s"). When omitted, Bindplane defaults to 30s.
+	// ShutdownGracePeriod is the total time the server waits for in-flight requests and
+	// connections to finish before forceful shutdown (e.g. "5m"). When omitted, Bindplane
+	// uses its own default.
 	// +optional
-	OpAMPShutdownGracePeriod string `json:"opampShutdownGracePeriod,omitempty"`
+	ShutdownGracePeriod string `json:"shutdownGracePeriod,omitempty"`
+	// OpAMPShutdownGracePeriodTarget is the fraction (0.1–1.0) of ShutdownGracePeriod
+	// that the OpAMP server is given to drain agents (e.g. "0.6"). When omitted, Bindplane
+	// uses its own default.
+	// +optional
+	OpAMPShutdownGracePeriodTarget string `json:"opampShutdownGracePeriodTarget,omitempty"`
 }
 
 // AdvancedCacheConfig configures the distributed cache.

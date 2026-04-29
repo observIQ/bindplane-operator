@@ -789,8 +789,94 @@ func getAgentVersionsConfigEnvVars(av *bindplanev1alpha1.AgentVersionsConfig) []
 	return envVars
 }
 
+// getAdvancedStoreStatsEnvVars returns env vars for spec.config.advanced.store.stats.
+func getAdvancedStoreStatsEnvVars(s *bindplanev1alpha1.AdvancedStoreStatsConfig) []corev1.EnvVar {
+	if s == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if s.BatchFlushInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar, Value: s.BatchFlushInterval})
+	}
+	if s.WorkerCount > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsWorkerCountEnvVar, Value: strconv.Itoa(s.WorkerCount)})
+	}
+	if s.EnableSorting {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsEnableSortingEnvVar, Value: "true"})
+	}
+	if s.MetricChannelSize > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar, Value: strconv.Itoa(s.MetricChannelSize)})
+	}
+	if s.BatchChannelSize > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar, Value: strconv.Itoa(s.BatchChannelSize)})
+	}
+	return envVars
+}
+
+// getAdvancedServerEnvVars returns env vars for spec.config.advanced.server.
+func getAdvancedServerEnvVars(srv *bindplanev1alpha1.AdvancedServerConfig) []corev1.EnvVar {
+	if srv == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if srv.MaxRequestBytes > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerMaxRequestBytesEnvVar, Value: strconv.FormatInt(srv.MaxRequestBytes, 10)})
+	}
+	if srv.ShutdownGracePeriod != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerShutdownGracePeriodEnvVar, Value: srv.ShutdownGracePeriod})
+	}
+	if srv.OpAMPShutdownGracePeriodTarget != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar, Value: srv.OpAMPShutdownGracePeriodTarget})
+	}
+	return envVars
+}
+
+// getAdvancedCacheRedisEnvVars returns env vars for spec.config.advanced.cache.redis.
+func getAdvancedCacheRedisEnvVars(r *bindplanev1alpha1.AdvancedCacheRedisConfig) []corev1.EnvVar {
+	if r == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if r.Address != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisAddressEnvVar, Value: r.Address})
+	}
+	if ev := secretOrValue(bindplaneAdvancedCacheRedisPasswordEnvVar, r.Password, r.PasswordSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if r.DB > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisDBEnvVar, Value: strconv.Itoa(r.DB)})
+	}
+	if r.ReadTimeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisReadTimeoutEnvVar, Value: r.ReadTimeout})
+	}
+	if r.WriteTimeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisWriteTimeoutEnvVar, Value: r.WriteTimeout})
+	}
+	if r.EnableTLS {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisEnableTLSEnvVar, Value: "true"})
+	}
+	if r.TLS != nil && r.TLS.SecretName != "" {
+		tls := r.TLS
+		if tls.CertKey != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCertEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CertKey})
+		}
+		if tls.KeyKey != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSKeyEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.KeyKey})
+		}
+		if tls.CAKey != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCAEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CAKey})
+		}
+		if tls.SkipVerify {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar, Value: "true"})
+		}
+		if tls.MinTLSVersion != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSMinVersionEnvVar, Value: tls.MinTLSVersion})
+		}
+	}
+	return envVars
+}
+
 // getAdvancedConfigEnvVars returns env vars for spec.config.advanced.
-// Only StoreStats, Server, and Cache sections are translated.
 // Returns nil when advanced is nil.
 func getAdvancedConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
 	if config == nil || config.Advanced == nil {
@@ -799,82 +885,19 @@ func getAdvancedConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []c
 	adv := config.Advanced
 	var envVars []corev1.EnvVar
 
-	// --- StoreStats ---
-	if adv.Store != nil && adv.Store.Stats != nil {
-		s := adv.Store.Stats
-		if s.BatchFlushInterval != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar, Value: s.BatchFlushInterval})
-		}
-		if s.WorkerCount > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsWorkerCountEnvVar, Value: strconv.Itoa(s.WorkerCount)})
-		}
-		if s.EnableSorting {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsEnableSortingEnvVar, Value: "true"})
-		}
-		if s.MetricChannelSize > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar, Value: strconv.Itoa(s.MetricChannelSize)})
-		}
-		if s.BatchChannelSize > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar, Value: strconv.Itoa(s.BatchChannelSize)})
-		}
+	if adv.Store != nil {
+		envVars = append(envVars, getAdvancedStoreStatsEnvVars(adv.Store.Stats)...)
 	}
-
-	// --- Server ---
-	if adv.Server != nil {
-		srv := adv.Server
-		if srv.MaxRequestBytes > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerMaxRequestBytesEnvVar, Value: strconv.FormatInt(srv.MaxRequestBytes, 10)})
-		}
-		if srv.OpAMPShutdownGracePeriod != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar, Value: srv.OpAMPShutdownGracePeriod})
-		}
+	if adv.Rollout != nil && adv.Rollout.DisableUpdater {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutDisableUpdaterEnvVar, Value: "true"})
 	}
-
-	// --- Cache ---
+	envVars = append(envVars, getAdvancedServerEnvVars(adv.Server)...)
 	if adv.Cache != nil {
 		c := adv.Cache
 		if c.Type != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheTypeEnvVar, Value: c.Type})
 		}
-		if c.Redis != nil {
-			r := c.Redis
-			if r.Address != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisAddressEnvVar, Value: r.Address})
-			}
-			if ev := secretOrValue(bindplaneAdvancedCacheRedisPasswordEnvVar, r.Password, r.PasswordSecretRef); ev != nil {
-				envVars = append(envVars, *ev)
-			}
-			if r.DB > 0 {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisDBEnvVar, Value: strconv.Itoa(r.DB)})
-			}
-			if r.ReadTimeout != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisReadTimeoutEnvVar, Value: r.ReadTimeout})
-			}
-			if r.WriteTimeout != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisWriteTimeoutEnvVar, Value: r.WriteTimeout})
-			}
-			if r.EnableTLS {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisEnableTLSEnvVar, Value: "true"})
-			}
-			if r.TLS != nil && r.TLS.SecretName != "" {
-				tls := r.TLS
-				if tls.CertKey != "" {
-					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCertEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CertKey})
-				}
-				if tls.KeyKey != "" {
-					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSKeyEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.KeyKey})
-				}
-				if tls.CAKey != "" {
-					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCAEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CAKey})
-				}
-				if tls.SkipVerify {
-					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar, Value: "true"})
-				}
-				if tls.MinTLSVersion != "" {
-					envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSMinVersionEnvVar, Value: tls.MinTLSVersion})
-				}
-			}
-		}
+		envVars = append(envVars, getAdvancedCacheRedisEnvVars(c.Redis)...)
 	}
 
 	return envVars
