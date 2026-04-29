@@ -35,6 +35,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Authentication](#agents-authentication)
   - [Heartbeat](#heartbeat)
   - [Rebalance](#rebalance)
+  - [Duplication Prevention](#duplication-prevention)
 - [Agent versions](#agent-versions)
 - [Scope](#scope)
 - [Examples](#examples)
@@ -1021,10 +1022,43 @@ The `spec.config.agents` section configures how Bindplane communicates with agen
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.agents.maxSimultaneousConnections` | `BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS` | `10` | No |
+| `spec.config.agents.enableConnectionRegistryMiddleware` | `BINDPLANE_AGENTS_ENABLE_CONNECTION_REGISTRY_MIDDLEWARE` | `false` | No |
+| `spec.config.agents.connectionRegistryHeartbeatInterval` | `BINDPLANE_AGENTS_CONNECTION_REGISTRY_HEARTBEAT_INTERVAL` | `15s` | No |
+| `spec.config.agents.connectionRegistryStaleDuration` | `BINDPLANE_AGENTS_CONNECTION_REGISTRY_STALE_DURATION` | `45s` | No |
+| `spec.config.agents.connectionRegistryLockTimeout` | `BINDPLANE_AGENTS_CONNECTION_REGISTRY_LOCK_TIMEOUT` | `2s` | No |
+| `spec.config.agents.connectionClaimTimeout` | `BINDPLANE_AGENTS_CONNECTION_CLAIM_TIMEOUT` | `3s` | No |
 
 See [Max concurrency](#max-concurrency) for details. Do not modify unless directed by Bindplane support.
 
 `rebalancePercentage` and `rebalanceJitter` are integers in the range 0–100. A value of 0 disables that feature.
+
+`connectionRegistryStaleDuration` must be greater than `connectionRegistryHeartbeatInterval`. `connectionClaimTimeout` must be greater than `connectionRegistryLockTimeout`. These fields only take effect when `enableConnectionRegistryMiddleware` is `true`.
+
+### Duplication Prevention
+
+`spec.config.agents.duplicationPrevention` configures detection and handling of duplicate agent connections (the same agent connecting from multiple sources). All fields are optional; defaults are shown in the table below.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.agents.duplicationPrevention.enableMiddleware` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_MIDDLEWARE` | `false` | No |
+| `spec.config.agents.duplicationPrevention.reassignID` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGN_ID` | `false` | No |
+| `spec.config.agents.duplicationPrevention.detectionStrategy` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_DETECTION_STRATEGY` | — | No |
+| `spec.config.agents.duplicationPrevention.detectionGracePeriod` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_DETECTION_GRACE_PERIOD` | `3m` | No |
+| `spec.config.agents.duplicationPrevention.minGracePeriodFailures` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_MIN_GRACE_PERIOD_FAILURES` | `3` | No |
+| `spec.config.agents.duplicationPrevention.retryAfter` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_RETRY_AFTER` | `30s` | No |
+| `spec.config.agents.duplicationPrevention.maxReassignmentAttempts` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_MAX_REASSIGNMENT_ATTEMPTS` | `3` | No |
+| `spec.config.agents.duplicationPrevention.reassignmentCacheTTL` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGNMENT_CACHE_TTL` | `24h` | No |
+| `spec.config.agents.duplicationPrevention.reassignmentRetryAfter` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGNMENT_RETRY_AFTER` | `5m` | No |
+| `spec.config.agents.duplicationPrevention.enableDuplicateNotifications` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_DUPLICATE_NOTIFICATIONS` | `false` | No |
+| `spec.config.agents.duplicationPrevention.enablePerOrgEnforcement` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_PER_ORG_ENFORCEMENT` | `false` | No |
+
+- `detectionStrategy` must be `grace_period` when set.
+- `detectionGracePeriod` must be >= `connectionRegistryStaleDuration`. Used with the `grace_period` strategy.
+- `minGracePeriodFailures`: both the grace period duration and this count must be satisfied before confirming a duplicate (minimum 1).
+- `retryAfter`: Retry-After header value sent during the grace period window.
+- `maxReassignmentAttempts`: valid range 1–10.
+- `reassignmentCacheTTL`: maximum 7d.
+- `reassignmentRetryAfter`: maximum 1h; sent when permanently rejecting after max attempts.
 
 ```yaml
 spec:
@@ -1041,6 +1075,23 @@ spec:
       heartbeatTTL: "2m"
       rebalanceInterval: "30m"
       rebalancePercentage: 50
+      enableConnectionRegistryMiddleware: true
+      connectionRegistryHeartbeatInterval: "20s"
+      connectionRegistryStaleDuration: "60s"
+      connectionRegistryLockTimeout: "3s"
+      connectionClaimTimeout: "5s"
+      duplicationPrevention:
+        enableMiddleware: true
+        reassignID: true
+        detectionStrategy: grace_period
+        detectionGracePeriod: "3m"
+        minGracePeriodFailures: 3
+        retryAfter: "30s"
+        maxReassignmentAttempts: 3
+        reassignmentCacheTTL: "24h"
+        reassignmentRetryAfter: "5m"
+        enableDuplicateNotifications: true
+        enablePerOrgEnforcement: true
 ```
 
 ## Agent versions

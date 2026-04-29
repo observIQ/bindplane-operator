@@ -4160,6 +4160,83 @@ var _ = Describe("getAgentsConfigEnvVars", func() {
 		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
 		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(BeEmpty())
 	})
+
+	It("sets connection registry env vars when all fields are set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			MaxSimultaneousConnections:          10,
+			EnableConnectionRegistryMiddleware:  true,
+			ConnectionRegistryHeartbeatInterval: "20s",
+			ConnectionRegistryStaleDuration:     "60s",
+			ConnectionRegistryLockTimeout:       "3s",
+			ConnectionClaimTimeout:              "5s",
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsEnableConnectionRegistryMiddlewareEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryHeartbeatIntervalEnvVar)).To(Equal("20s"))
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryStaleDurationEnvVar)).To(Equal("60s"))
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryLockTimeoutEnvVar)).To(Equal("3s"))
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionClaimTimeoutEnvVar)).To(Equal("5s"))
+	})
+
+	It("does not set connection registry interval/timeout env vars when fields are empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			MaxSimultaneousConnections: 10,
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryHeartbeatIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryStaleDurationEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryLockTimeoutEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsConnectionClaimTimeoutEnvVar)).To(BeEmpty())
+	})
+
+	It("sets all duplication prevention env vars when configured", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			MaxSimultaneousConnections: 10,
+			DuplicationPrevention: &bindplanev1alpha1.AgentDuplicationPreventionConfig{
+				EnableMiddleware:             true,
+				ReassignID:                   true,
+				DetectionStrategy:            "grace_period",
+				DetectionGracePeriod:         "5m",
+				MinGracePeriodFailures:       5,
+				RetryAfter:                   "45s",
+				MaxReassignmentAttempts:      5,
+				ReassignmentCacheTTL:         "48h",
+				ReassignmentRetryAfter:       "10m",
+				EnableDuplicateNotifications: true,
+				EnablePerOrgEnforcement:      true,
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevEnableMiddlewareEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignIDEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevDetectionStrategyEnvVar)).To(Equal("grace_period"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevDetectionGracePeriodEnvVar)).To(Equal("5m"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMinGracePeriodFailuresEnvVar)).To(Equal("5"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevRetryAfterEnvVar)).To(Equal("45s"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMaxReassignmentAttemptsEnvVar)).To(Equal("5"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentCacheTTLEnvVar)).To(Equal("48h"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentRetryAfterEnvVar)).To(Equal("10m"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevEnableDuplicateNotificationsEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevEnablePerOrgEnforcementEnvVar)).To(Equal("true"))
+	})
+
+	It("does not set duplication prevention optional env vars when fields are zero/empty/false", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			MaxSimultaneousConnections: 10,
+			DuplicationPrevention:      &bindplanev1alpha1.AgentDuplicationPreventionConfig{},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevDetectionGracePeriodEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMinGracePeriodFailuresEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevRetryAfterEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMaxReassignmentAttemptsEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentCacheTTLEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentRetryAfterEnvVar)).To(BeEmpty())
+	})
 })
 
 var _ = Describe("getAgentVersionsConfigEnvVars", func() {
