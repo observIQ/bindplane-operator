@@ -12371,6 +12371,77 @@ spec:
                             type: integer
                         type: object
                     type: object
+                  features:
+                    properties:
+                      overrides:
+                        properties:
+                          growthLicense:
+                            type: boolean
+                          llmFeatures:
+                            type: boolean
+                          notifications:
+                            type: boolean
+                          pipelineIntelligence:
+                            type: boolean
+                          pipelineIntelligenceChronicleForwarderConfigImport:
+                            type: boolean
+                          pipelineIntelligenceGenerateProcessors:
+                            type: boolean
+                          pipelineIntelligenceOtelConfigImport:
+                            type: boolean
+                          pipelineIntelligenceParseField:
+                            type: boolean
+                          pipelineIntelligenceSnapshotLogTypes:
+                            type: boolean
+                          rawConfigLegacy:
+                            type: boolean
+                          secopsIntegration:
+                            type: boolean
+                          secopsTheme:
+                            type: boolean
+                        type: object
+                      postHog:
+                        properties:
+                          defaultFeatureFlagsPollingInterval:
+                            type: string
+                          endpoint:
+                            type: string
+                          personalAPIKey:
+                            type: string
+                          personalAPIKeySecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          projectAPIKey:
+                            type: string
+                          projectAPIKeySecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                      type:
+                        enum:
+                        - posthog
+                        type: string
+                    type: object
                   license:
                     minLength: 1
                     type: string

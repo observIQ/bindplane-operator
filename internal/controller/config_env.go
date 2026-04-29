@@ -462,6 +462,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getAgentVersionsConfigEnvVars(config.AgentVersions)...)
 	envVars = append(envVars, getSaaSConfigEnvVars(config.SaaS)...)
 	envVars = append(envVars, getEncryptionProviderEnvVars(config.EncryptionProvider)...)
+	envVars = append(envVars, getFeaturesConfigEnvVars(config.Features)...)
 	return envVars
 }
 
@@ -1019,6 +1020,41 @@ func getSaaSStripeEnvVars(stripe *bindplanev1alpha1.SaaSStripeConfig) []corev1.E
 	return envVars
 }
 
+// getFeaturesConfigEnvVars returns env vars for spec.config.features.
+// Returns nil when features is nil.
+func getFeaturesConfigEnvVars(f *bindplanev1alpha1.FeaturesConfig) []corev1.EnvVar {
+	if f == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if f.Type != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesTypeEnvVar, Value: f.Type})
+	}
+	if f.PostHog != nil {
+		envVars = append(envVars, getPostHogEnvVars(f.PostHog)...)
+	}
+	envVars = append(envVars, getFeatureOverridesEnvVars(f.Overrides)...)
+	return envVars
+}
+
+// getPostHogEnvVars returns env vars for the PostHog feature flag config.
+func getPostHogEnvVars(ph *bindplanev1alpha1.PostHogConfig) []corev1.EnvVar {
+	var envVars []corev1.EnvVar
+	if ev := secretOrValue(bindplaneFeaturesPostHogProjectAPIKeyEnvVar, ph.ProjectAPIKey, ph.ProjectAPIKeySecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ev := secretOrValue(bindplaneFeaturesPostHogPersonalAPIKeyEnvVar, ph.PersonalAPIKey, ph.PersonalAPIKeySecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if ph.Endpoint != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesPostHogEndpointEnvVar, Value: ph.Endpoint})
+	}
+	if ph.DefaultFeatureFlagsPollingInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesPostHogPollingIntervalEnvVar, Value: ph.DefaultFeatureFlagsPollingInterval})
+	}
+	return envVars
+}
+
 // getAdvancedStoreStatsEnvVars returns env vars for spec.config.advanced.store.stats.
 func getAdvancedStoreStatsEnvVars(s *bindplanev1alpha1.AdvancedStoreStatsConfig) []corev1.EnvVar {
 	if s == nil {
@@ -1129,6 +1165,52 @@ func getEncryptionProviderEnvVars(ep *bindplanev1alpha1.EncryptionProviderConfig
 		if kms.KeyRotationPeriod != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSKeyRotationPeriodEnvVar, Value: kms.KeyRotationPeriod})
 		}
+	}
+	return envVars
+}
+
+// getFeatureOverridesEnvVars returns env vars for feature flag overrides.
+// Returns nil when overrides is nil.
+func getFeatureOverridesEnvVars(o *bindplanev1alpha1.FeatureOverridesConfig) []corev1.EnvVar {
+	if o == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if o.GrowthLicense {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesGrowthLicenseEnvVar, Value: "true"})
+	}
+	if o.SecopsTheme {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSecopsThemeEnvVar, Value: "true"})
+	}
+	if o.SecopsIntegration {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSecopsIntegrationEnvVar, Value: "true"})
+	}
+	if o.LLMFeatures {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesLLMFeaturesEnvVar, Value: "true"})
+	}
+	if o.PipelineIntelligence {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceEnvVar, Value: "true"})
+	}
+	if o.PipelineIntelligenceSnapshotLogTypes {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceSnapshotLogTypesEnvVar, Value: "true"})
+	}
+	if o.PipelineIntelligenceOtelConfigImport {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceOtelConfigImportEnvVar, Value: "true"})
+	}
+	if o.PipelineIntelligenceChronicleForwarderConfigImport {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceChronicleForwarderConfigImportEnvVar, Value: "true"})
+	}
+	if o.PipelineIntelligenceParseField {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceParseFieldEnvVar, Value: "true"})
+	}
+	if o.PipelineIntelligenceGenerateProcessors {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceGenerateProcessorsEnvVar, Value: "true"})
+	}
+	if o.RawConfigLegacy {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesRawConfigLegacyEnvVar, Value: "true"})
+	}
+	if o.Notifications {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesNotificationsEnvVar, Value: "true"})
 	}
 	return envVars
 }
