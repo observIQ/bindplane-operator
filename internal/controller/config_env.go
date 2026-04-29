@@ -464,6 +464,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getEncryptionProviderEnvVars(config.EncryptionProvider)...)
 	envVars = append(envVars, getFeaturesConfigEnvVars(config.Features)...)
 	envVars = append(envVars, getErrorsConfigEnvVars(config.Errors)...)
+	envVars = append(envVars, getLLMConfigEnvVars(config.LLM)...)
 	return envVars
 }
 
@@ -1235,6 +1236,61 @@ func getErrorsConfigEnvVars(e *bindplanev1alpha1.ErrorsConfig) []corev1.EnvVar {
 	if e.Environment != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnvironmentEnvVar, Value: e.Environment})
 	}
+	return envVars
+}
+
+// getLLMConfigEnvVars returns env vars for spec.config.llm.
+// Returns nil when llm is nil (LLM features are disabled).
+func getLLMConfigEnvVars(llm *bindplanev1alpha1.LLMConfig) []corev1.EnvVar {
+	if llm == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+
+	if llm.Gemini != nil {
+		g := llm.Gemini
+		if g.ProjectID != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiProjectIDEnvVar, Value: g.ProjectID})
+		}
+		if g.Location != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiLocationEnvVar, Value: g.Location})
+		}
+		if g.VectorSearchRedis != nil {
+			vsr := g.VectorSearchRedis
+			if vsr.Address != "" {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiVectorSearchRedisAddressEnvVar, Value: vsr.Address})
+			}
+			if vsr.EnableTLS {
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiVectorSearchRedisEnableTLSEnvVar, Value: "true"})
+			}
+		}
+	}
+
+	if llm.Langsmith != nil {
+		ls := llm.Langsmith
+		if ls.Enabled {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithEnabledEnvVar, Value: "true"})
+		}
+		if ev := secretOrValue(bindplaneLLMLangsmithAPIKeyEnvVar, ls.APIKey, ls.APIKeySecretRef); ev != nil {
+			envVars = append(envVars, *ev)
+		}
+		if ls.ProjectName != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithProjectNameEnvVar, Value: ls.ProjectName})
+		}
+	}
+
+	if llm.OpenAI != nil {
+		if ev := secretOrValue(bindplaneLLMOpenAIAPIKeyEnvVar, llm.OpenAI.APIKey, llm.OpenAI.APIKeySecretRef); ev != nil {
+			envVars = append(envVars, *ev)
+		}
+	}
+
+	if llm.Anthropic != nil {
+		if ev := secretOrValue(bindplaneLLMAnthropicAPIKeyEnvVar, llm.Anthropic.APIKey, llm.Anthropic.APIKeySecretRef); ev != nil {
+			envVars = append(envVars, *ev)
+		}
+	}
+
 	return envVars
 }
 

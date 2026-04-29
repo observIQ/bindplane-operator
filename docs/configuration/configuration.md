@@ -45,6 +45,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [PostHog](#posthog)
   - [Feature overrides](#feature-overrides)
 - [Errors](#errors)
+- [LLM](#llm)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1183,7 +1184,6 @@ spec:
         - github
 ```
 
-<<<<<<< HEAD
 ## SaaS
 
 The `spec.config.saas` section configures Bindplane SaaS-specific functionality including the license server, Stripe billing, and janitor settings.
@@ -1276,6 +1276,43 @@ The `spec.config.errors` section configures error tracking (e.g., BetterStack). 
 | `spec.config.errors.environment` | `BINDPLANE_ERRORS_ENVIRONMENT` | — | No |
 
 `backendDSN` and `frontendDSN` are service-specific DSNs (e.g., BetterStack ingest DSN). `environment` is reported to the error tracking service (e.g., `"production"`, `"staging"`).
+## LLM
+
+The `spec.config.llm` section configures large language model integrations. When omitted, LLM features are disabled.
+
+### Gemini
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.llm.gemini.projectID` | `BINDPLANE_LLM_GEMINI_PROJECT_ID` | — | No |
+| `spec.config.llm.gemini.location` | `BINDPLANE_LLM_GEMINI_LOCATION` | — | No |
+| `spec.config.llm.gemini.vectorSearchRedis.address` | `BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ADDRESS` | — | No |
+| `spec.config.llm.gemini.vectorSearchRedis.enableTLS` | `BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ENABLE_TLS` | `false` | No |
+
+### LangSmith
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.llm.langsmith.enabled` | `BINDPLANE_LLM_LANGSMITH_ENABLED` | `false` | No |
+| `spec.config.llm.langsmith.apiKey` | `BINDPLANE_LLM_LANGSMITH_API_KEY` | — | No |
+| `spec.config.llm.langsmith.apiKeySecretRef` | `BINDPLANE_LLM_LANGSMITH_API_KEY` | — | No |
+| `spec.config.llm.langsmith.projectName` | `BINDPLANE_LLM_LANGSMITH_PROJECT_NAME` | — | No |
+
+### OpenAI
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.llm.openai.apiKey` | `BINDPLANE_LLM_OPENAI_API_KEY` | — | No |
+| `spec.config.llm.openai.apiKeySecretRef` | `BINDPLANE_LLM_OPENAI_API_KEY` | — | No |
+
+### Anthropic
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.llm.anthropic.apiKey` | `BINDPLANE_LLM_ANTHROPIC_API_KEY` | — | No |
+| `spec.config.llm.anthropic.apiKeySecretRef` | `BINDPLANE_LLM_ANTHROPIC_API_KEY` | — | No |
+
+For `apiKey` and `apiKeySecretRef`, the Secret reference takes precedence when both are set. Prefer Secret references in production.
 
 ```yaml
 spec:
@@ -1360,6 +1397,27 @@ spec:
       backendDSN: "https://errors.example.com/backend-dsn"
       frontendDSN: "https://errors.example.com/frontend-dsn"
       environment: production
+    llm:
+      gemini:
+        projectID: my-gcp-project
+        location: us-central1
+        vectorSearchRedis:
+          address: "redis.example.com:6379"
+          enableTLS: true
+      langsmith:
+        enabled: true
+        apiKeySecretRef:
+          name: llm-secrets
+          key: langsmith-api-key
+        projectName: bindplane-prod
+      openai:
+        apiKeySecretRef:
+          name: llm-secrets
+          key: openai-api-key
+      anthropic:
+        apiKeySecretRef:
+          name: llm-secrets
+          key: anthropic-api-key
 ```
 
 ## Scope
