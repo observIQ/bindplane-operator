@@ -401,6 +401,12 @@ const (
 	bindplaneFeaturesOverridesPipelineIntelligenceGenerateProcessorsEnvVar             = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_GENERATE_PROCESSORS"
 	bindplaneFeaturesOverridesRawConfigLegacyEnvVar                                    = "BINDPLANE_FEATURES_OVERRIDES_RAW_CONFIG_LEGACY"
 	bindplaneFeaturesOverridesNotificationsEnvVar                                      = "BINDPLANE_FEATURES_OVERRIDES_NOTIFICATIONS"
+
+	// Errors configuration
+	bindplaneErrorsEnabledEnvVar     = "BINDPLANE_ERRORS_ENABLED"
+	bindplaneErrorsBackendDSNEnvVar  = "BINDPLANE_ERRORS_BACKEND_DSN"
+	bindplaneErrorsFrontendDSNEnvVar = "BINDPLANE_ERRORS_FRONTEND_DSN"
+	bindplaneErrorsEnvironmentEnvVar = "BINDPLANE_ERRORS_ENVIRONMENT"
 )
 
 const (
