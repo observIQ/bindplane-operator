@@ -374,6 +374,14 @@ const (
 	bindplaneSaaSStripeGrowthMeterNamesMetricsEnvVar    = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_METRICS"
 	bindplaneSaaSStripeGrowthMeterNamesTracesEnvVar     = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_TRACES"
 	bindplaneSaaSStripeGrowthMeterNamesCollectorsEnvVar = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_COLLECTORS"
+
+	// EncryptionProvider configuration
+	bindplaneEncryptionProviderTypeEnvVar                       = "BINDPLANE_ENCRYPTIONPROVIDER_TYPE"
+	bindplaneEncryptionProviderGoogleKMSProjectIDEnvVar         = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_PROJECTID"
+	bindplaneEncryptionProviderGoogleKMSLocationEnvVar          = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_LOCATION"
+	bindplaneEncryptionProviderGoogleKMSKeyRotationPeriodEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_ROTATION_PERIOD"
+	// bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar is set only on the Jobs Migrate workload.
+	bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB"
 )
 
 const (

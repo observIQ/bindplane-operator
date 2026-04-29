@@ -278,6 +278,11 @@ type BindplaneConfigSpec struct {
 	// Stripe billing, and janitor settings.
 	// +optional
 	SaaS *SaaSConfig `json:"saas,omitempty"`
+
+	// EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.
+	// When omitted, Bindplane uses its built-in encryption.
+	// +optional
+	EncryptionProvider *EncryptionProviderConfig `json:"encryptionProvider,omitempty"`
 }
 
 // SaaSConfig configures Bindplane SaaS-specific functionality.
@@ -382,6 +387,38 @@ type SaaSStripeGrowthPlanMeterNamesConfig struct {
 	// Collectors is the Stripe meter name for collector count.
 	// +optional
 	Collectors string `json:"collectors,omitempty"`
+}
+
+// EncryptionProviderConfig configures the encryption provider for Bindplane.
+type EncryptionProviderConfig struct {
+	// Type is the encryption provider type.
+	// +optional
+	// +kubebuilder:validation:Enum=googleKMS
+	Type string `json:"type,omitempty"`
+
+	// GoogleKMS configures Google Cloud KMS as the encryption provider.
+	// +optional
+	GoogleKMS *GoogleKMSConfig `json:"googleKMS,omitempty"`
+}
+
+// GoogleKMSConfig configures Google Cloud KMS as the encryption provider.
+type GoogleKMSConfig struct {
+	// ProjectID is the Google Cloud project ID that contains the KMS key ring.
+	// +optional
+	ProjectID string `json:"projectID,omitempty"`
+
+	// Location is the Google Cloud region or zone for the KMS key ring (e.g., "us-central1").
+	// +optional
+	Location string `json:"location,omitempty"`
+
+	// KeyRotationPeriod is the rotation period for KMS keys (e.g., "30d").
+	// +optional
+	KeyRotationPeriod string `json:"keyRotationPeriod,omitempty"`
+
+	// KeyDeletionJob enables the KMS key deletion job on the Jobs Migrate workload only.
+	// When true, BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is set on Jobs Migrate.
+	// +optional
+	KeyDeletionJob bool `json:"keyDeletionJob,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.

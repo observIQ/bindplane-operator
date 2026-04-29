@@ -269,6 +269,7 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 								getKubernetesEnvVars(bindplaneJobsContainerName),
 								[]corev1.EnvVar{{Name: bindplaneModeEnvVar, Value: bindplaneJobsMigrateModeValue}},
 								getBindplaneCommonEnvVars(bindplane, bindplaneJobsMigrateComponent),
+								getJobsMigrateEncryptionEnvVars(bindplane),
 							),
 							Resources:       migrateResources,
 							SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
@@ -280,6 +281,16 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 			),
 		},
 	}
+}
+
+// getJobsMigrateEncryptionEnvVars returns Jobs Migrate-only env vars for the encryption provider.
+// Currently only BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is Jobs Migrate-specific.
+func getJobsMigrateEncryptionEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	ep := bindplane.Spec.Config.EncryptionProvider
+	if ep == nil || ep.GoogleKMS == nil || !ep.GoogleKMS.KeyDeletionJob {
+		return nil
+	}
+	return []corev1.EnvVar{{Name: bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar, Value: "true"}}
 }
 
 // reconcileMigrateJob ensures the migration batch/v1 Job runs to completion before downstream

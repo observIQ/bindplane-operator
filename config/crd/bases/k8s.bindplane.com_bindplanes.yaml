@@ -12341,6 +12341,24 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
+                  encryptionProvider:
+                    properties:
+                      googleKMS:
+                        properties:
+                          keyDeletionJob:
+                            type: boolean
+                          keyRotationPeriod:
+                            type: string
+                          location:
+                            type: string
+                          projectID:
+                            type: string
+                        type: object
+                      type:
+                        enum:
+                        - googleKMS
+                        type: string
+                    type: object
                   eventBus:
                     properties:
                       health:

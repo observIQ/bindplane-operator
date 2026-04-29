@@ -461,6 +461,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getAgentsConfigEnvVars(config.Agents)...)
 	envVars = append(envVars, getAgentVersionsConfigEnvVars(config.AgentVersions)...)
 	envVars = append(envVars, getSaaSConfigEnvVars(config.SaaS)...)
+	envVars = append(envVars, getEncryptionProviderEnvVars(config.EncryptionProvider)...)
 	return envVars
 }
 
@@ -1100,6 +1101,33 @@ func getAdvancedCacheRedisEnvVars(r *bindplanev1alpha1.AdvancedCacheRedisConfig)
 		}
 		if tls.MinTLSVersion != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSMinVersionEnvVar, Value: tls.MinTLSVersion})
+		}
+	}
+	return envVars
+}
+
+// getEncryptionProviderEnvVars returns env vars for spec.config.encryptionProvider.
+// Returns nil when encryptionProvider is nil (Bindplane uses its built-in encryption).
+// Note: BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is NOT included here;
+// it is injected directly into the Jobs Migrate workload only.
+func getEncryptionProviderEnvVars(ep *bindplanev1alpha1.EncryptionProviderConfig) []corev1.EnvVar {
+	if ep == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if ep.Type != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderTypeEnvVar, Value: ep.Type})
+	}
+	if ep.GoogleKMS != nil {
+		kms := ep.GoogleKMS
+		if kms.ProjectID != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSProjectIDEnvVar, Value: kms.ProjectID})
+		}
+		if kms.Location != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSLocationEnvVar, Value: kms.Location})
+		}
+		if kms.KeyRotationPeriod != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSKeyRotationPeriodEnvVar, Value: kms.KeyRotationPeriod})
 		}
 	}
 	return envVars

@@ -40,6 +40,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Agent versions](#agent-versions)
 - [SaaS](#saas)
   - [Stripe](#stripe)
+- [Encryption provider](#encryption-provider)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1242,6 +1243,32 @@ spec:
           metrics: "metric_volume"
           traces: "trace_volume"
           collectors: "collector_count"
+```
+
+## Encryption provider
+
+The `spec.config.encryptionProvider` section configures at-rest encryption of sensitive store data. When omitted, Bindplane uses its built-in encryption.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.encryptionProvider.type` | `BINDPLANE_ENCRYPTIONPROVIDER_TYPE` | — | No |
+| `spec.config.encryptionProvider.googleKMS.projectID` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_PROJECTID` | — | No |
+| `spec.config.encryptionProvider.googleKMS.location` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_LOCATION` | — | No |
+| `spec.config.encryptionProvider.googleKMS.keyRotationPeriod` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_ROTATION_PERIOD` | — | No |
+| `spec.config.encryptionProvider.googleKMS.keyDeletionJob` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB` | `false` | No |
+
+`type` must be `googleKMS` when set. `keyDeletionJob` is injected only into the **Jobs Migrate** workload — it is not set on Node, NATS, or Jobs.
+
+```yaml
+spec:
+  config:
+    encryptionProvider:
+      type: googleKMS
+      googleKMS:
+        projectID: my-gcp-project
+        location: us-central1
+        keyRotationPeriod: 30d
+        keyDeletionJob: true
 ```
 
 ## Scope
