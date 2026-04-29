@@ -126,10 +126,11 @@ const (
 	bindplaneStoreSummaryRollupRetentionDaysEnvVar = "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS"
 
 	// Tracing configuration
-	bindplaneTracingTypeEnvVar         = "BINDPLANE_TRACING_TYPE"
-	bindplaneTracingOTLPEndpointEnvVar = "BINDPLANE_TRACING_OTLP_ENDPOINT"
-	bindplaneTracingOTLPInsecureEnvVar = "BINDPLANE_TRACING_OTLP_INSECURE"
-	bindplaneTracingSamplingRateEnvVar = "BINDPLANE_TRACING_SAMPLING_RATE"
+	bindplaneTracingTypeEnvVar            = "BINDPLANE_TRACING_TYPE"
+	bindplaneTracingOTLPEndpointEnvVar    = "BINDPLANE_TRACING_OTLP_ENDPOINT"
+	bindplaneTracingOTLPInsecureEnvVar    = "BINDPLANE_TRACING_OTLP_INSECURE"
+	bindplaneTracingSamplingRateEnvVar    = "BINDPLANE_TRACING_SAMPLING_RATE"
+	bindplaneTracingHoneycombAPIKeyEnvVar = "BINDPLANE_TRACING_HONEYCOMB_API_KEY" // #nosec G101 -- env var name, not a credential
 
 	// Metrics configuration
 	bindplaneMetricsTypeEnvVar               = "BINDPLANE_METRICS_TYPE"
