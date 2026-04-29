@@ -119,6 +119,23 @@ const (
 	bindplaneOIDCIssuerEnvVar       = "BINDPLANE_OIDC_ISSUER"
 	bindplaneOIDCScopesEnvVar       = "BINDPLANE_OIDC_SCOPES"
 
+	// Auth session and API key
+	bindplaneSessionSecretEnvVar = "BINDPLANE_SESSION_SECRET" // #nosec G101 -- env var name, not a credential
+	bindplaneSecretKeyEnvVar     = "BINDPLANE_SECRET_KEY"     // #nosec G101 -- env var name, not a credential
+
+	// Auth0 configuration
+	bindplaneAuth0ClientIDEnvVar                = "BINDPLANE_AUTH0_CLIENT_ID"
+	bindplaneAuth0DomainEnvVar                  = "BINDPLANE_AUTH0_DOMAIN"
+	bindplaneAuth0AudienceEnvVar                = "BINDPLANE_AUTH0_AUDIENCE"
+	bindplaneAuth0ManagementDomainEnvVar        = "BINDPLANE_AUTH0_MANAGEMENT_DOMAIN"
+	bindplaneAuth0ManagementClientIDEnvVar      = "BINDPLANE_AUTH0_MANAGEMENT_CLIENT_ID"
+	bindplaneAuth0ManagementClientSecretEnvVar  = "BINDPLANE_AUTH0_MANAGEMENT_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential
+	bindplaneAuth0SSOEnabledEnvVar              = "BINDPLANE_AUTH_AUTH0_SSO_ENABLED"
+	bindplaneAuth0SSOSelfServiceProfileIDEnvVar = "BINDPLANE_AUTH_AUTH0_SSO_SELF_SERVICE_PROFILE_ID"
+	bindplaneAuth0WIFClientIDEnvVar             = "BINDPLANE_AUTH_AUTH0_WIF_CLIENT_ID"
+	bindplaneAuth0WIFClientSecretEnvVar         = "BINDPLANE_AUTH_AUTH0_WIF_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential
+	bindplaneAuth0WIFAudienceEnvVar             = "BINDPLANE_AUTH_AUTH0_WIF_AUDIENCE"
+
 	// Store configuration
 	bindplaneStoreTypeEnvVar                       = "BINDPLANE_STORE_TYPE"
 	bindplaneStoreMaxEventsEnvVar                  = "BINDPLANE_STORE_MAX_EVENTS"
@@ -562,6 +579,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Reconcile internal TLS certificates (cert-manager) before workloads that mount them.
 	if err := r.reconcileInternalTLSCertificates(ctx, bindplane, log); err != nil {
 		log.Error(err, "unable to reconcile internal TLS certificates")
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile session secret before workloads that consume it via BINDPLANE_SESSION_SECRET.
+	if err := r.reconcileSessionSecret(ctx, bindplane, log); err != nil {
+		log.Error(err, "unable to reconcile session secret")
 		return ctrl.Result{}, err
 	}
 

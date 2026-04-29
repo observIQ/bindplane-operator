@@ -2553,6 +2553,48 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(Equal("/etc/bindplane/network-tls/tls.key"))
 		Expect(envVarByName(envVars, "BINDPLANE_TLS_CA")).To(Equal("/etc/bindplane/network-tls/ca.crt"))
 	})
+
+	It("references auto-generated session secret when no user session secret is configured", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		ref := envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-session-secret"))
+		Expect(ref.Key).To(Equal(sessionSecretKey))
+	})
+
+	It("references auto-generated session secret when auth is set but has no session secret fields", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{Type: "system"}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		ref := envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-session-secret"))
+		Expect(ref.Key).To(Equal(sessionSecretKey))
+	})
+
+	It("injects plain session secret value when sessionSecret string is set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{SessionSecret: "mysecret"}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_SESSION_SECRET")).To(Equal("mysecret"))
+		Expect(envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")).To(BeNil())
+	})
+
+	It("injects SecretKeyRef when sessionSecretSecretRef is set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{
+			SessionSecretSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+				Key:                  "session-secret",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		ref := envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("my-secret"))
+		Expect(ref.Key).To(Equal("session-secret"))
+	})
 })
 
 var _ = Describe("getNetworkTLSVolumeAndMount", func() {
@@ -4278,5 +4320,101 @@ var _ = Describe("getAgentVersionsConfigEnvVars", func() {
 		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
 		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(Equal("3h"))
 		Expect(envVarByName(envVars, bindplaneAgentVersionsClientsEnvVar)).To(BeEmpty())
+	})
+})
+
+var _ = Describe("reconcileSessionSecret", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-session-secret")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates session secret Secret when no user fields are set", func() {
+		name := "bp-sess-auto"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey(sessionSecretKey))
+		Expect(string(secret.Data[sessionSecretKey])).NotTo(BeEmpty())
+	})
+
+	It("does not overwrite existing session secret on re-reconcile", func() {
+		name := "bp-sess-stable"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		firstValue := string(secret.Data[sessionSecretKey])
+
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret = &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(string(secret.Data[sessionSecretKey])).To(Equal(firstValue))
+	})
+
+	It("does not create session secret when sessionSecret string is set", func() {
+		name := "bp-sess-plain"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{SessionSecret: "provided-secret"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not create session secret when sessionSecretSecretRef is set", func() {
+		name := "bp-sess-ref"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{
+			SessionSecretSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "external-secret"},
+				Key:                  "session-secret",
+			},
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 })

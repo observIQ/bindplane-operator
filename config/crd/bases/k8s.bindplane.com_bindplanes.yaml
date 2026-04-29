@@ -12116,6 +12116,78 @@ spec:
                     type: object
                   auth:
                     properties:
+                      apiKey:
+                        type: string
+                      apiKeySecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      auth0:
+                        properties:
+                          audience:
+                            type: string
+                          clientID:
+                            type: string
+                          domain:
+                            type: string
+                          managementClientID:
+                            type: string
+                          managementClientSecret:
+                            type: string
+                          managementClientSecretSecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          managementDomain:
+                            type: string
+                          sso:
+                            properties:
+                              enabled:
+                                type: boolean
+                              selfServiceProfileID:
+                                type: string
+                            type: object
+                          wif:
+                            properties:
+                              audience:
+                                type: string
+                              clientID:
+                                type: string
+                              clientSecret:
+                                type: string
+                              clientSecretSecretRef:
+                                properties:
+                                  key:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    type: string
+                                  optional:
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                            type: object
+                        type: object
                       ldap:
                         properties:
                           baseDN:
@@ -12228,6 +12300,21 @@ spec:
                         - key
                         type: object
                         x-kubernetes-map-type: atomic
+                      sessionSecret:
+                        type: string
+                      sessionSecretSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       sessionsStrictMode:
                         type: boolean
                       type:
@@ -12236,6 +12323,7 @@ spec:
                         - ldap
                         - active-directory
                         - oidc
+                        - auth0
                         type: string
                       username:
                         type: string
