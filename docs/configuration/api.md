@@ -530,6 +530,21 @@ _Appears in:_
 | `webURL` _string_ | WebURL is the URL used by the client for the web interface. Defaults to RemoteURL when not set. Only set when explicitly configuring. |  | Optional: \{\} <br /> |
 | `corsAllowedOrigins` _string_ | CorsAllowedOrigins is the allowed origin for CORS requests. Only set when explicitly configuring. |  | Optional: \{\} <br /> |
 | `tls` _[NetworkTLSConfig](#networktlsconfig)_ | TLS configures TLS for the Bindplane server using a Secret. The operator mounts the Secret and sets<br />BINDPLANE_TLS_CERT, BINDPLANE_TLS_KEY, and optionally BINDPLANE_TLS_CA to the mounted file paths.<br />Omit or omit secretName/certKey/keyKey to disable server TLS (e.g. when using Ingress to terminate TLS). |  | Optional: \{\} <br /> |
+| `rateLimits` _[NetworkRateLimitsConfig](#networkratelimitsconfig)_ | RateLimits configures per-endpoint rate limiting for the REST API and GraphQL API. |  | Optional: \{\} <br /> |
+
+#### NetworkRateLimitsConfig
+
+NetworkRateLimitsConfig configures rate limiting for the Bindplane REST and GraphQL APIs.
+
+_Appears in:_
+- [NetworkConfig](#networkconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiRate` _string_ | APIRate is the maximum number of REST API requests per second (e.g. "10").<br />Bindplane reads this as a float64. |  | Optional: \{\} <br /> |
+| `apiBurst` _integer_ | APIBurst is the maximum burst size for REST API requests. |  | Optional: \{\} <br /> |
+| `graphqlRate` _string_ | GraphQLRate is the maximum number of GraphQL API requests per second (e.g. "10").<br />Bindplane reads this as a float64. |  | Optional: \{\} <br /> |
+| `graphqlBurst` _integer_ | GraphQLBurst is the maximum burst size for GraphQL API requests. |  | Optional: \{\} <br /> |
 
 #### NetworkTLSConfig
 

@@ -276,6 +276,7 @@ TLS is generally not configured on the Bindplane server when you use Ingress or 
 | `spec.config.network.webURL` | `BINDPLANE_WEB_URL` | — | No |
 | `spec.config.network.corsAllowedOrigins` | `BINDPLANE_CORS_ALLOWED_ORIGINS` | — | No |
 | `spec.config.network.tls` | (see below) | — | No |
+| `spec.config.network.rateLimits` | (see below) | — | No |
 
 `BINDPLANE_REMOTE_URL` is always set. When `spec.config.network.remoteURL` is not configured, it defaults to the internal node service URL (`http://<bindplane-name>-node:3001`). Override this when the Bindplane UI is accessed through an ingress or load balancer, e.g. `https://bindplane.my-corp.net`.
 
@@ -321,6 +322,28 @@ spec:
         certKey: tls.crt
         keyKey: tls.key
         caKey: ca.crt
+```
+
+**Network Rate Limits:** Configure per-endpoint rate limiting for the REST and GraphQL APIs. Rate fields are decimal strings read by Bindplane as float64 (requests per second).
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.network.rateLimits.apiRate` | `BINDPLANE_NETWORK_RATE_LIMITS_API_RATE` | — | No |
+| `spec.config.network.rateLimits.apiBurst` | `BINDPLANE_NETWORK_RATE_LIMITS_API_BURST` | — | No |
+| `spec.config.network.rateLimits.graphqlRate` | `BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_RATE` | — | No |
+| `spec.config.network.rateLimits.graphqlBurst` | `BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_BURST` | — | No |
+
+Example (rate limits):
+
+```yaml
+spec:
+  config:
+    network:
+      rateLimits:
+        apiRate: "10"
+        apiBurst: 20
+        graphqlRate: "10"
+        graphqlBurst: 20
 ```
 
 ## Store
