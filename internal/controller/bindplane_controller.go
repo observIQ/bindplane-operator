@@ -271,9 +271,13 @@ const (
 	bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar  = "BINDPLANE_ADVANCED_STORE_STATS_METRIC_CHANNEL_SIZE"
 	bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar   = "BINDPLANE_ADVANCED_STORE_STATS_BATCH_CHANNEL_SIZE"
 
+	// Advanced rollout
+	bindplaneAdvancedRolloutDisableUpdaterEnvVar = "BINDPLANE_ADVANCED_ROLLOUT_DISABLE_UPDATER"
+
 	// Advanced server
-	bindplaneAdvancedServerMaxRequestBytesEnvVar          = "BINDPLANE_ADVANCED_SERVER_MAX_REQUEST_BYTES"
-	bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar = "BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD"
+	bindplaneAdvancedServerMaxRequestBytesEnvVar                = "BINDPLANE_ADVANCED_SERVER_MAX_REQUEST_BYTES"
+	bindplaneAdvancedServerShutdownGracePeriodEnvVar            = "BINDPLANE_ADVANCED_SERVER_SHUTDOWN_GRACE_PERIOD"
+	bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar = "BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET"
 
 	// Advanced cache
 	bindplaneAdvancedCacheTypeEnvVar              = "BINDPLANE_ADVANCED_CACHE_TYPE"

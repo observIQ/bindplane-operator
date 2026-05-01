@@ -261,14 +261,14 @@ func (r *BindplaneReconciler) nodeService(bindplane *bindplanev1alpha1.Bindplane
 }
 
 // nodeTerminationGracePeriodSeconds returns the termination grace period for the Node deployment.
-// When spec.config.advanced.server.opampShutdownGracePeriod is set, the grace period is 125% of
-// that value (rounded up to the next whole second) to ensure the pod outlives the OpAMP shutdown.
+// When spec.config.advanced.server.shutdownGracePeriod is set, the grace period is 125% of
+// that value (rounded up to the next whole second) to ensure the pod outlives the server shutdown.
 // Falls back to defaultTerminationGracePeriodSeconds when the field is unset or unparseable.
 func nodeTerminationGracePeriodSeconds(bindplane *bindplanev1alpha1.Bindplane) int64 {
 	if bindplane.Spec.Config.Advanced == nil || bindplane.Spec.Config.Advanced.Server == nil {
 		return defaultTerminationGracePeriodSeconds
 	}
-	opampPeriod := bindplane.Spec.Config.Advanced.Server.OpAMPShutdownGracePeriod
+	opampPeriod := bindplane.Spec.Config.Advanced.Server.ShutdownGracePeriod
 	if opampPeriod == "" {
 		return defaultTerminationGracePeriodSeconds
 	}

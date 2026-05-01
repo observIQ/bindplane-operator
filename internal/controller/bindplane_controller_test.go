@@ -2310,19 +2310,19 @@ var _ = Describe("workload pod security context defaults", func() {
 })
 
 var _ = Describe("nodeTerminationGracePeriodSeconds", func() {
-	makeBindplane := func(opampPeriod string) *bindplanev1alpha1.Bindplane {
+	makeBindplane := func(shutdownPeriod string) *bindplanev1alpha1.Bindplane {
 		bp := &bindplanev1alpha1.Bindplane{}
-		if opampPeriod != "" {
+		if shutdownPeriod != "" {
 			bp.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
 				Server: &bindplanev1alpha1.AdvancedServerConfig{
-					OpAMPShutdownGracePeriod: opampPeriod,
+					ShutdownGracePeriod: shutdownPeriod,
 				},
 			}
 		}
 		return bp
 	}
 
-	It("returns default when OpAMPShutdownGracePeriod is not set", func() {
+	It("returns default when ShutdownGracePeriod is not set", func() {
 		Expect(nodeTerminationGracePeriodSeconds(makeBindplane(""))).To(Equal(int64(60)))
 	})
 
@@ -3737,7 +3737,7 @@ var _ = Describe("getAdvancedConfigEnvVars", func() {
 		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedServerShutdownGracePeriodEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAdvancedCacheTypeEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisAddressEnvVar)).To(BeEmpty())
 	})
@@ -3778,27 +3778,30 @@ var _ = Describe("getAdvancedConfigEnvVars", func() {
 		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(BeEmpty())
 	})
 
-	It("sets Server env vars when maxRequestBytes and opampShutdownGracePeriod are set", func() {
+	It("sets Server env vars when set", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
 			Server: &bindplanev1alpha1.AdvancedServerConfig{
-				MaxRequestBytes:          20971520,
-				OpAMPShutdownGracePeriod: "60s",
+				MaxRequestBytes:                20971520,
+				ShutdownGracePeriod:            "5m",
+				OpAMPShutdownGracePeriodTarget: "0.5",
 			},
 		}
 		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
 		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(Equal("20971520"))
-		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar)).To(Equal("60s"))
+		Expect(envVarByName(envVars, bindplaneAdvancedServerShutdownGracePeriodEnvVar)).To(Equal("5m"))
+		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar)).To(Equal("0.5"))
 	})
 
-	It("does not set Server env vars when maxRequestBytes is zero and opampShutdownGracePeriod is empty", func() {
+	It("does not set Server env vars when fields are zero or empty", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
 			Server: &bindplanev1alpha1.AdvancedServerConfig{},
 		}
 		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
 		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedServerShutdownGracePeriodEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar)).To(BeEmpty())
 	})
 
 	It("sets Cache type env var when type is non-empty", func() {

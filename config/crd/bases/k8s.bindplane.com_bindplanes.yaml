@@ -11966,12 +11966,19 @@ spec:
                             - redis
                             type: string
                         type: object
+                      rollout:
+                        properties:
+                          disableUpdater:
+                            type: boolean
+                        type: object
                       server:
                         properties:
                           maxRequestBytes:
                             format: int64
                             type: integer
-                          opampShutdownGracePeriod:
+                          opampShutdownGracePeriodTarget:
+                            type: string
+                          shutdownGracePeriod:
                             type: string
                         type: object
                       store:
