@@ -751,18 +751,34 @@ type CertManagerTLSIssuerRef struct {
 
 // TracingConfig defines tracing configuration
 type TracingConfig struct {
-	// Type specifies the tracing type. One of: otlp, google. When empty, tracing is disabled.
+	// Type specifies the tracing type. One of: otlp, google, honeycomb. When empty, tracing is disabled.
 	// +optional
-	// +kubebuilder:validation:Enum=otlp;google
+	// +kubebuilder:validation:Enum=otlp;google;honeycomb
 	Type string `json:"type,omitempty"`
 
 	// OTLP configures OTLP tracing when Type is otlp.
 	// +optional
 	OTLP *TracingOTLPConfig `json:"otlp,omitempty"`
 
+	// Honeycomb configures Honeycomb tracing when Type is honeycomb.
+	// +optional
+	Honeycomb *TracingHoneycombConfig `json:"honeycomb,omitempty"`
+
 	// SamplingRate is the ratio between 0 and 1 of traces to keep. Omit or 0 to disable sampling.
 	// +optional
 	SamplingRate string `json:"samplingRate,omitempty"`
+}
+
+// TracingHoneycombConfig defines Honeycomb tracing configuration.
+type TracingHoneycombConfig struct {
+	// APIKey is the Honeycomb API key (plain text). Use APIKeySecretRef instead for sensitive values.
+	// +optional
+	APIKey string `json:"apiKey,omitempty"`
+
+	// APIKeySecretRef references a Kubernetes Secret containing the Honeycomb API key.
+	// Takes precedence over APIKey when both are set.
+	// +optional
+	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
 }
 
 // TracingOTLPConfig defines OTLP tracing configuration

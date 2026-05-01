@@ -446,13 +446,15 @@ spec:
 
 Tracing is optional. When `spec.config.tracing` is omitted or `type` is empty, tracing is disabled and no tracing environment variables are set.
 
-Supported types: `otlp`, `google`. For `otlp`, configure the `otlp` block with endpoint and optional insecure flag. You can set a sampling rate (string, e.g. `"0.5"`) between 0 and 1.
+Supported types: `otlp`, `google`, `honeycomb`. For `otlp`, configure the `otlp` block with endpoint and optional insecure flag. For `honeycomb`, configure the `honeycomb` block with an API key. You can set a sampling rate (string, e.g. `"0.5"`) between 0 and 1.
 
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.tracing.type` | `BINDPLANE_TRACING_TYPE` | — | No (omit to disable) |
 | `spec.config.tracing.otlp.endpoint` | `BINDPLANE_TRACING_OTLP_ENDPOINT` | — | Yes when type is `otlp` |
 | `spec.config.tracing.otlp.insecure` | `BINDPLANE_TRACING_OTLP_INSECURE` | `false` | No |
+| `spec.config.tracing.honeycomb.apiKey` | `BINDPLANE_TRACING_HONEYCOMB_API_KEY` | — | Yes when type is `honeycomb` |
+| `spec.config.tracing.honeycomb.apiKeySecretRef` | `BINDPLANE_TRACING_HONEYCOMB_API_KEY` | — | Yes when type is `honeycomb` (use instead of `apiKey`) |
 | `spec.config.tracing.samplingRate` | `BINDPLANE_TRACING_SAMPLING_RATE` | — | No |
 
 Example (OTLP tracing):
@@ -466,6 +468,19 @@ spec:
         endpoint: http://otel-collector.observability.svc:4317
         insecure: false
       samplingRate: "0.5"
+```
+
+Example (Honeycomb tracing using a Secret reference):
+
+```yaml
+spec:
+  config:
+    tracing:
+      type: honeycomb
+      honeycomb:
+        apiKeySecretRef:
+          name: bindplane-honeycomb
+          key: api-key
 ```
 
 ## Metrics

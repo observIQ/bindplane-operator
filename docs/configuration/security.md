@@ -140,4 +140,5 @@ This install path:
 | NATS TLS / mTLS (cert-manager only) | Yes (opt-in) | `BINDPLANE_NATS_ENABLE_TLS`, `BINDPLANE_NATS_TLS_*` | `spec.config.nats.tls.certManager` | This document (cert-manager TLS) |
 | Transform Agent TLS / mTLS (cert-manager only) | Yes (opt-in) | `BINDPLANE_TRANSFORM_AGENT_TLS_*` | `spec.transformAgent.tls.certManager` | This document (cert-manager TLS) |
 | Redis TLS | Yes | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_*` | `spec.config.advanced.cache.redis.tls` | [Configuration – Advanced](configuration.md#advanced) |
+| Honeycomb API key | Yes | `BINDPLANE_TRACING_HONEYCOMB_API_KEY` | `spec.config.tracing.honeycomb.apiKey` or `apiKeySecretRef` | [Configuration – Tracing](configuration.md#tracing) |
 | Validating admission webhook TLS (operator install) | No (operator infrastructure) | — | `config/default` (cert-manager required); use `config/overlays/no-webhook` / `install-no-webhook.yaml` to disable | This document |

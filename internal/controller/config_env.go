@@ -271,6 +271,11 @@ func getTracingConfigEnvVars(tracing *bindplanev1alpha1.TracingConfig) []corev1.
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingOTLPInsecureEnvVar, Value: "true"})
 		}
 	}
+	if tracing.Type == "honeycomb" && tracing.Honeycomb != nil {
+		if ev := secretOrValue(bindplaneTracingHoneycombAPIKeyEnvVar, tracing.Honeycomb.APIKey, tracing.Honeycomb.APIKeySecretRef); ev != nil {
+			envVars = append(envVars, *ev)
+		}
+	}
 	if tracing.SamplingRate != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingSamplingRateEnvVar, Value: tracing.SamplingRate})
 	}

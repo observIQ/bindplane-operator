@@ -772,9 +772,22 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _string_ | Type specifies the tracing type. One of: otlp, google. When empty, tracing is disabled. |  | Enum: [otlp google] <br />Optional: \{\} <br /> |
+| `type` _string_ | Type specifies the tracing type. One of: otlp, google, honeycomb. When empty, tracing is disabled. |  | Enum: [otlp google honeycomb] <br />Optional: \{\} <br /> |
 | `otlp` _[TracingOTLPConfig](#tracingotlpconfig)_ | OTLP configures OTLP tracing when Type is otlp. |  | Optional: \{\} <br /> |
+| `honeycomb` _[TracingHoneycombConfig](#tracinghoneycombconfig)_ | Honeycomb configures Honeycomb tracing when Type is honeycomb. |  | Optional: \{\} <br /> |
 | `samplingRate` _string_ | SamplingRate is the ratio between 0 and 1 of traces to keep. Omit or 0 to disable sampling. |  | Optional: \{\} <br /> |
+
+#### TracingHoneycombConfig
+
+TracingHoneycombConfig defines Honeycomb tracing configuration.
+
+_Appears in:_
+- [TracingConfig](#tracingconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiKey` _string_ | APIKey is the Honeycomb API key (plain text). Use APIKeySecretRef instead for sensitive values. |  | Optional: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | APIKeySecretRef references a Kubernetes Secret containing the Honeycomb API key.<br />Takes precedence over APIKey when both are set. |  | Optional: \{\} <br /> |
 
 #### TracingOTLPConfig
 
