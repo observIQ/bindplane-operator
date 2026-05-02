@@ -127,8 +127,59 @@ func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig) []corev1.EnvVar {
 	if ev := secretOrValue(bindplanePasswordEnvVar, auth.Password, auth.PasswordSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
+	if ev := secretOrValue(bindplaneSecretKeyEnvVar, auth.APIKey, auth.APIKeySecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
 	envVars = append(envVars, getLDAPEnvVars(auth.LDAP)...)
 	envVars = append(envVars, getOIDCEnvVars(auth.OIDC)...)
+	envVars = append(envVars, getAuth0EnvVars(auth.Auth0)...)
+	return envVars
+}
+
+// getAuth0EnvVars returns env vars for spec.config.auth.auth0.
+// Returns nil when auth0 is nil.
+func getAuth0EnvVars(a *bindplanev1alpha1.Auth0Config) []corev1.EnvVar {
+	if a == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if a.ClientID != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0ClientIDEnvVar, Value: a.ClientID})
+	}
+	if a.Domain != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0DomainEnvVar, Value: a.Domain})
+	}
+	if a.Audience != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0AudienceEnvVar, Value: a.Audience})
+	}
+	if a.ManagementDomain != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0ManagementDomainEnvVar, Value: a.ManagementDomain})
+	}
+	if a.ManagementClientID != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0ManagementClientIDEnvVar, Value: a.ManagementClientID})
+	}
+	if ev := secretOrValue(bindplaneAuth0ManagementClientSecretEnvVar, a.ManagementClientSecret, a.ManagementClientSecretSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
+	}
+	if sso := a.SSO; sso != nil {
+		if sso.Enabled {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0SSOEnabledEnvVar, Value: "true"})
+		}
+		if sso.SelfServiceProfileID != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0SSOSelfServiceProfileIDEnvVar, Value: sso.SelfServiceProfileID})
+		}
+	}
+	if wif := a.WIF; wif != nil {
+		if wif.ClientID != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0WIFClientIDEnvVar, Value: wif.ClientID})
+		}
+		if ev := secretOrValue(bindplaneAuth0WIFClientSecretEnvVar, wif.ClientSecret, wif.ClientSecretSecretRef); ev != nil {
+			envVars = append(envVars, *ev)
+		}
+		if wif.Audience != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0WIFAudienceEnvVar, Value: wif.Audience})
+		}
+	}
 	return envVars
 }
 
@@ -376,6 +427,30 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 		envVars = append(envVars, *ev)
 	}
 	envVars = append(envVars, getAuthConfigEnvVars(config.Auth)...)
+
+	// Session secret: always injected. User-provided plain value or SecretRef takes precedence;
+	// otherwise reference the operator-generated secret.
+	var sessionSecretEV corev1.EnvVar
+	if config.Auth != nil {
+		if ev := secretOrValue(bindplaneSessionSecretEnvVar, config.Auth.SessionSecret, config.Auth.SessionSecretSecretRef); ev != nil {
+			sessionSecretEV = *ev
+		}
+	}
+	if sessionSecretEV.Name == "" {
+		sessionSecretEV = corev1.EnvVar{
+			Name: bindplaneSessionSecretEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: getResourceName(bindplane, sessionSecretSuffix),
+					},
+					Key: sessionSecretKey,
+				},
+			},
+		}
+	}
+	envVars = append(envVars, sessionSecretEV)
+
 	envVars = append(envVars, getNetworkConfigEnvVars(config.Network, bindplane)...)
 	envVars = append(envVars, corev1.EnvVar{Name: bindplaneStoreTypeEnvVar, Value: "postgres"})
 	envVars = append(envVars, getPostgresConfigEnvVars(config.Store.Postgres)...)

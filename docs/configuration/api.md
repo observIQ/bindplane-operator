@@ -242,6 +242,51 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `retentionDays` _integer_ | RetentionDays is the number of days to retain audit trail events. | 365 | Optional: \{\} <br /> |
 
+#### Auth0Config
+
+Auth0Config configures Auth0 as the Bindplane authentication provider.
+
+_Appears in:_
+- [AuthConfig](#authconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `clientID` _string_ | ClientID is the Auth0 application client ID. |  | Optional: \{\} <br /> |
+| `domain` _string_ | Domain is the Auth0 tenant domain (e.g. "example.auth0.com"). |  | Optional: \{\} <br /> |
+| `audience` _string_ | Audience is the Auth0 API audience identifier. |  | Optional: \{\} <br /> |
+| `managementDomain` _string_ | ManagementDomain is the Auth0 management API domain. |  | Optional: \{\} <br /> |
+| `managementClientID` _string_ | ManagementClientID is the client ID for the Auth0 management API application. |  | Optional: \{\} <br /> |
+| `managementClientSecret` _string_ | ManagementClientSecret is a plain-text client secret for the Auth0 management API. |  | Optional: \{\} <br /> |
+| `managementClientSecretSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | ManagementClientSecretSecretRef references a Secret containing the management API client secret.<br />Takes precedence over ManagementClientSecret when both are set. |  | Optional: \{\} <br /> |
+| `sso` _[Auth0SSOConfig](#auth0ssoconfig)_ | SSO configures Auth0 single sign-on settings. |  | Optional: \{\} <br /> |
+| `wif` _[Auth0WIFConfig](#auth0wifconfig)_ | WIF configures Workload Identity Federation for Auth0. |  | Optional: \{\} <br /> |
+
+#### Auth0SSOConfig
+
+Auth0SSOConfig configures Auth0 SSO settings.
+
+_Appears in:_
+- [Auth0Config](#auth0config)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles Auth0 SSO support. |  | Optional: \{\} <br /> |
+| `selfServiceProfileID` _string_ | SelfServiceProfileID is the Auth0 self-service SSO profile identifier. |  | Optional: \{\} <br /> |
+
+#### Auth0WIFConfig
+
+Auth0WIFConfig configures Workload Identity Federation for Auth0.
+
+_Appears in:_
+- [Auth0Config](#auth0config)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `clientID` _string_ | ClientID is the WIF client ID. |  | Optional: \{\} <br /> |
+| `clientSecret` _string_ | ClientSecret is a plain-text WIF client secret. |  | Optional: \{\} <br /> |
+| `clientSecretSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | ClientSecretSecretRef references a Secret containing the WIF client secret.<br />Takes precedence over ClientSecret when both are set. |  | Optional: \{\} <br /> |
+| `audience` _string_ | Audience is the WIF audience identifier. |  | Optional: \{\} <br /> |
+
 #### AuthConfig
 
 AuthConfig defines authentication configuration
@@ -251,14 +296,19 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _string_ | Type specifies the authentication type. |  | Enum: [system ldap active-directory oidc] <br />Optional: \{\} <br /> |
+| `type` _string_ | Type specifies the authentication type. |  | Enum: [system ldap active-directory oidc auth0] <br />Optional: \{\} <br /> |
 | `username` _string_ | Username for authentication |  | Optional: \{\} <br /> |
 | `usernameSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | UsernameSecretRef references a Kubernetes Secret containing the auth username.<br />Takes precedence over Username if both are set. |  | Optional: \{\} <br /> |
 | `password` _string_ | Password for authentication |  | Optional: \{\} <br /> |
 | `passwordSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | PasswordSecretRef references a Kubernetes Secret containing the auth password.<br />Takes precedence over Password if both are set. |  | Optional: \{\} <br /> |
+| `sessionSecret` _string_ | SessionSecret is a plain-text secret used to sign session cookies. |  | Optional: \{\} <br /> |
+| `sessionSecretSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | SessionSecretSecretRef references a Secret containing the session secret.<br />Takes precedence over SessionSecret when both are set. |  | Optional: \{\} <br /> |
+| `apiKey` _string_ | APIKey is a plain-text API key for programmatic access. |  | Optional: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | APIKeySecretRef references a Secret containing the API key.<br />Takes precedence over APIKey when both are set. |  | Optional: \{\} <br /> |
 | `sessionsStrictMode` _boolean_ | SessionsStrictMode enables strict mode for session cookies. |  | Optional: \{\} <br /> |
 | `ldap` _[LDAPConfig](#ldapconfig)_ | LDAP is the configuration for ldap or active-directory auth types. |  | Optional: \{\} <br /> |
 | `oidc` _[OIDCConfig](#oidcconfig)_ | OIDC is the configuration for the oidc auth type. |  | Optional: \{\} <br /> |
+| `auth0` _[Auth0Config](#auth0config)_ | Auth0 is the configuration for the auth0 auth type. |  | Optional: \{\} <br /> |
 
 #### Bindplane
 

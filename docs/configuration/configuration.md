@@ -11,6 +11,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [System auth](#system-auth)
   - [LDAP and Active Directory](#ldap-and-active-directory)
   - [OIDC](#oidc)
+  - [Auth0](#auth0)
 - [Network](#network)
 - [Store](#store)
   - [PostgreSQL](#postgresql)
@@ -72,12 +73,18 @@ spec:
 
 ## Authentication
 
-Supported auth types: `system`, `ldap`, `active-directory`, `oidc`.
+Supported auth types: `system`, `ldap`, `active-directory`, `oidc`, `auth0`.
 
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.auth.type` | `BINDPLANE_AUTH_TYPE` | — | No |
 | `spec.config.auth.sessionsStrictMode` | `BINDPLANE_AUTH_SESSIONS_STRICT_MODE` | `false` | No |
+| `spec.config.auth.sessionSecret` | `BINDPLANE_SESSION_SECRET` | — | No |
+| `spec.config.auth.sessionSecretSecretRef` | `BINDPLANE_SESSION_SECRET` | — | No |
+| `spec.config.auth.apiKey` | `BINDPLANE_SECRET_KEY` | — | No |
+| `spec.config.auth.apiKeySecretRef` | `BINDPLANE_SECRET_KEY` | — | No |
+
+`sessionSecretSecretRef` and `apiKeySecretRef` take precedence over plain-value fields when both are set.
 
 ### System auth
 
@@ -265,6 +272,57 @@ spec:
         clientSecretSecretRef:
           name: oidc-secrets
           key: client-secret
+```
+
+### Auth0
+
+Set `spec.config.auth.type` to `auth0`. The management client secret and WIF client secret support both plain values and Secret references; Secret references take precedence.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.auth.auth0.clientID` | `BINDPLANE_AUTH0_CLIENT_ID` | — | No |
+| `spec.config.auth.auth0.domain` | `BINDPLANE_AUTH0_DOMAIN` | — | No |
+| `spec.config.auth.auth0.audience` | `BINDPLANE_AUTH0_AUDIENCE` | — | No |
+| `spec.config.auth.auth0.managementDomain` | `BINDPLANE_AUTH0_MANAGEMENT_DOMAIN` | — | No |
+| `spec.config.auth.auth0.managementClientID` | `BINDPLANE_AUTH0_MANAGEMENT_CLIENT_ID` | — | No |
+| `spec.config.auth.auth0.managementClientSecret` | `BINDPLANE_AUTH0_MANAGEMENT_CLIENT_SECRET` | — | No |
+| `spec.config.auth.auth0.managementClientSecretSecretRef` | `BINDPLANE_AUTH0_MANAGEMENT_CLIENT_SECRET` | — | No |
+| `spec.config.auth.auth0.sso.enabled` | `BINDPLANE_AUTH_AUTH0_SSO_ENABLED` | `false` | No |
+| `spec.config.auth.auth0.sso.selfServiceProfileID` | `BINDPLANE_AUTH_AUTH0_SSO_SELF_SERVICE_PROFILE_ID` | — | No |
+| `spec.config.auth.auth0.wif.clientID` | `BINDPLANE_AUTH_AUTH0_WIF_CLIENT_ID` | — | No |
+| `spec.config.auth.auth0.wif.clientSecret` | `BINDPLANE_AUTH_AUTH0_WIF_CLIENT_SECRET` | — | No |
+| `spec.config.auth.auth0.wif.clientSecretSecretRef` | `BINDPLANE_AUTH_AUTH0_WIF_CLIENT_SECRET` | — | No |
+| `spec.config.auth.auth0.wif.audience` | `BINDPLANE_AUTH_AUTH0_WIF_AUDIENCE` | — | No |
+
+```yaml
+spec:
+  config:
+    auth:
+      type: auth0
+      sessionSecretSecretRef:
+        name: bindplane-secrets
+        key: session-secret
+      apiKeySecretRef:
+        name: bindplane-secrets
+        key: api-key
+      auth0:
+        clientID: "your-client-id"
+        domain: "example.auth0.com"
+        audience: "https://api.example.com"
+        managementDomain: "example.auth0.com"
+        managementClientID: "mgmt-client-id"
+        managementClientSecretSecretRef:
+          name: bindplane-secrets
+          key: auth0-mgmt-client-secret
+        sso:
+          enabled: true
+          selfServiceProfileID: "ssp_xxx"
+        wif:
+          clientID: "wif-client-id"
+          clientSecretSecretRef:
+            name: bindplane-secrets
+            key: auth0-wif-client-secret
+          audience: "https://iam.googleapis.com/projects/..."
 ```
 
 ## Network

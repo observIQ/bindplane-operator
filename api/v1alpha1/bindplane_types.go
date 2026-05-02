@@ -1212,7 +1212,7 @@ type PodTemplateSpec struct {
 type AuthConfig struct {
 	// Type specifies the authentication type.
 	// +optional
-	// +kubebuilder:validation:Enum=system;ldap;active-directory;oidc
+	// +kubebuilder:validation:Enum=system;ldap;active-directory;oidc;auth0
 	Type string `json:"type,omitempty"`
 
 	// Username for authentication
@@ -1233,6 +1233,24 @@ type AuthConfig struct {
 	// +optional
 	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 
+	// SessionSecret is a plain-text secret used to sign session cookies.
+	// +optional
+	SessionSecret string `json:"sessionSecret,omitempty"`
+
+	// SessionSecretSecretRef references a Secret containing the session secret.
+	// Takes precedence over SessionSecret when both are set.
+	// +optional
+	SessionSecretSecretRef *corev1.SecretKeySelector `json:"sessionSecretSecretRef,omitempty"`
+
+	// APIKey is a plain-text API key for programmatic access.
+	// +optional
+	APIKey string `json:"apiKey,omitempty"`
+
+	// APIKeySecretRef references a Secret containing the API key.
+	// Takes precedence over APIKey when both are set.
+	// +optional
+	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
+
 	// SessionsStrictMode enables strict mode for session cookies.
 	// +optional
 	SessionsStrictMode bool `json:"sessionsStrictMode,omitempty"`
@@ -1245,7 +1263,80 @@ type AuthConfig struct {
 	// +optional
 	OIDC *OIDCConfig `json:"oidc,omitempty"`
 
-	// Note: sessionSecret is not exposed - it will be dynamically generated and stored as a Kubernetes secret
+	// Auth0 is the configuration for the auth0 auth type.
+	// +optional
+	Auth0 *Auth0Config `json:"auth0,omitempty"`
+}
+
+// Auth0Config configures Auth0 as the Bindplane authentication provider.
+type Auth0Config struct {
+	// ClientID is the Auth0 application client ID.
+	// +optional
+	ClientID string `json:"clientID,omitempty"`
+
+	// Domain is the Auth0 tenant domain (e.g. "example.auth0.com").
+	// +optional
+	Domain string `json:"domain,omitempty"`
+
+	// Audience is the Auth0 API audience identifier.
+	// +optional
+	Audience string `json:"audience,omitempty"`
+
+	// ManagementDomain is the Auth0 management API domain.
+	// +optional
+	ManagementDomain string `json:"managementDomain,omitempty"`
+
+	// ManagementClientID is the client ID for the Auth0 management API application.
+	// +optional
+	ManagementClientID string `json:"managementClientID,omitempty"`
+
+	// ManagementClientSecret is a plain-text client secret for the Auth0 management API.
+	// +optional
+	ManagementClientSecret string `json:"managementClientSecret,omitempty"`
+
+	// ManagementClientSecretSecretRef references a Secret containing the management API client secret.
+	// Takes precedence over ManagementClientSecret when both are set.
+	// +optional
+	ManagementClientSecretSecretRef *corev1.SecretKeySelector `json:"managementClientSecretSecretRef,omitempty"`
+
+	// SSO configures Auth0 single sign-on settings.
+	// +optional
+	SSO *Auth0SSOConfig `json:"sso,omitempty"`
+
+	// WIF configures Workload Identity Federation for Auth0.
+	// +optional
+	WIF *Auth0WIFConfig `json:"wif,omitempty"`
+}
+
+// Auth0SSOConfig configures Auth0 SSO settings.
+type Auth0SSOConfig struct {
+	// Enabled toggles Auth0 SSO support.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// SelfServiceProfileID is the Auth0 self-service SSO profile identifier.
+	// +optional
+	SelfServiceProfileID string `json:"selfServiceProfileID,omitempty"`
+}
+
+// Auth0WIFConfig configures Workload Identity Federation for Auth0.
+type Auth0WIFConfig struct {
+	// ClientID is the WIF client ID.
+	// +optional
+	ClientID string `json:"clientID,omitempty"`
+
+	// ClientSecret is a plain-text WIF client secret.
+	// +optional
+	ClientSecret string `json:"clientSecret,omitempty"`
+
+	// ClientSecretSecretRef references a Secret containing the WIF client secret.
+	// Takes precedence over ClientSecret when both are set.
+	// +optional
+	ClientSecretSecretRef *corev1.SecretKeySelector `json:"clientSecretSecretRef,omitempty"`
+
+	// Audience is the WIF audience identifier.
+	// +optional
+	Audience string `json:"audience,omitempty"`
 }
 
 // LDAPConfig defines LDAP and Active Directory authentication configuration
