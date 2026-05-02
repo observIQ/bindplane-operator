@@ -12449,6 +12449,100 @@ spec:
                     x-kubernetes-validations:
                     - message: projectID is required when profiling is enabled
                       rule: '!self.enabled || (size(self.projectID) > 0)'
+                  saas:
+                    properties:
+                      enabled:
+                        type: boolean
+                      janitorOrganization:
+                        type: string
+                      licenseServerAPIKey:
+                        type: string
+                      licenseServerAPIKeySecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      licenseServerAddress:
+                        type: string
+                      stripe:
+                        properties:
+                          enabled:
+                            type: boolean
+                          growthPlanIDs:
+                            properties:
+                              baseRate:
+                                type: string
+                              usageRates:
+                                type: string
+                            type: object
+                          growthPlanMeterNames:
+                            properties:
+                              collectors:
+                                type: string
+                              logs:
+                                type: string
+                              metrics:
+                                type: string
+                              traces:
+                                type: string
+                            type: object
+                          publishableKey:
+                            type: string
+                          publishableKeySecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          secretKey:
+                            type: string
+                          secretKeySecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          webhookSecret:
+                            type: string
+                          webhookSecretSecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                      useStagePublicRSAKey:
+                        type: boolean
+                    type: object
                   status:
                     properties:
                       enabled:

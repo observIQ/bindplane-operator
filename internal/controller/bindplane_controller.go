@@ -340,6 +340,23 @@ const (
 	bindplaneNetworkRateLimitsAPIBurstEnvVar     = "BINDPLANE_NETWORK_RATE_LIMITS_API_BURST"
 	bindplaneNetworkRateLimitsGraphQLRateEnvVar  = "BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_RATE"
 	bindplaneNetworkRateLimitsGraphQLBurstEnvVar = "BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_BURST"
+
+	// SaaS configuration
+	bindplaneSaaSEnabledEnvVar                          = "BINDPLANE_SAAS_ENABLED"
+	bindplaneSaaSLicenseServerAddressEnvVar             = "BINDPLANE_SAAS_LICENSE_SERVER_ADDRESS"
+	bindplaneSaaSLicenseServerAPIKeyEnvVar              = "BINDPLANE_SAAS_LICENSE_SERVER_API_KEY" // #nosec G101
+	bindplaneSaaSJanitorOrganizationEnvVar              = "BINDPLANE_SAAS_JANITOR_ORGANIZATION"
+	bindplaneSaaSUseStagePublicRSAKeyEnvVar             = "BINDPLANE_SAAS_USE_STAGE_PUBLIC_RSA_KEY"
+	bindplaneSaaSStripeEnabledEnvVar                    = "BINDPLANE_SAAS_STRIPE_ENABLED"
+	bindplaneSaaSStripeSecretKeyEnvVar                  = "BINDPLANE_SAAS_STRIPE_SECRET_KEY"      // #nosec G101
+	bindplaneSaaSStripePublishableKeyEnvVar             = "BINDPLANE_SAAS_STRIPE_PUBLISHABLE_KEY" // #nosec G101
+	bindplaneSaaSStripeWebhookSecretEnvVar              = "BINDPLANE_SAAS_STRIPE_WEBHOOK_SECRET"  // #nosec G101
+	bindplaneSaaSStripeGrowthPlanIDsBaseRateEnvVar      = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_BASE_RATE"
+	bindplaneSaaSStripeGrowthPlanIDsUsageRatesEnvVar    = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_USAGE_RATES"
+	bindplaneSaaSStripeGrowthMeterNamesLogsEnvVar       = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_LOGS"
+	bindplaneSaaSStripeGrowthMeterNamesMetricsEnvVar    = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_METRICS"
+	bindplaneSaaSStripeGrowthMeterNamesTracesEnvVar     = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_TRACES"
+	bindplaneSaaSStripeGrowthMeterNamesCollectorsEnvVar = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_COLLECTORS"
 )
 
 const (
