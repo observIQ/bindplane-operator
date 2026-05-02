@@ -785,6 +785,75 @@ func getAgentsConfigEnvVars(agents *bindplanev1alpha1.AgentsConfig) []corev1.Env
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsRebalanceJitterEnvVar, Value: strconv.Itoa(*agents.RebalanceJitter)})
 	}
 
+	// Connection registry middleware
+	envVars = append(envVars, getAgentsConnectionRegistryEnvVars(agents)...)
+
+	// Duplication prevention
+	envVars = append(envVars, getAgentsDuplicationPreventionEnvVars(agents.DuplicationPrevention)...)
+
+	return envVars
+}
+
+// getAgentsConnectionRegistryEnvVars returns connection registry env vars for spec.config.agents.
+func getAgentsConnectionRegistryEnvVars(agents *bindplanev1alpha1.AgentsConfig) []corev1.EnvVar {
+	var envVars []corev1.EnvVar
+	if agents.EnableConnectionRegistryMiddleware {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsEnableConnectionRegistryMiddlewareEnvVar, Value: "true"})
+	}
+	if agents.ConnectionRegistryHeartbeatInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionRegistryHeartbeatIntervalEnvVar, Value: agents.ConnectionRegistryHeartbeatInterval})
+	}
+	if agents.ConnectionRegistryStaleDuration != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionRegistryStaleDurationEnvVar, Value: agents.ConnectionRegistryStaleDuration})
+	}
+	if agents.ConnectionRegistryLockTimeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionRegistryLockTimeoutEnvVar, Value: agents.ConnectionRegistryLockTimeout})
+	}
+	if agents.ConnectionClaimTimeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionClaimTimeoutEnvVar, Value: agents.ConnectionClaimTimeout})
+	}
+	return envVars
+}
+
+// getAgentsDuplicationPreventionEnvVars returns env vars for spec.config.agents.duplicationPrevention.
+func getAgentsDuplicationPreventionEnvVars(dp *bindplanev1alpha1.AgentDuplicationPreventionConfig) []corev1.EnvVar {
+	if dp == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if dp.EnableMiddleware {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevEnableMiddlewareEnvVar, Value: "true"})
+	}
+	if dp.ReassignID {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevReassignIDEnvVar, Value: "true"})
+	}
+	if dp.DetectionStrategy != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevDetectionStrategyEnvVar, Value: dp.DetectionStrategy})
+	}
+	if dp.DetectionGracePeriod != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevDetectionGracePeriodEnvVar, Value: dp.DetectionGracePeriod})
+	}
+	if dp.MinGracePeriodFailures > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevMinGracePeriodFailuresEnvVar, Value: strconv.Itoa(dp.MinGracePeriodFailures)})
+	}
+	if dp.RetryAfter != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevRetryAfterEnvVar, Value: dp.RetryAfter})
+	}
+	if dp.MaxReassignmentAttempts > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevMaxReassignmentAttemptsEnvVar, Value: strconv.Itoa(dp.MaxReassignmentAttempts)})
+	}
+	if dp.ReassignmentCacheTTL != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevReassignmentCacheTTLEnvVar, Value: dp.ReassignmentCacheTTL})
+	}
+	if dp.ReassignmentRetryAfter != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevReassignmentRetryAfterEnvVar, Value: dp.ReassignmentRetryAfter})
+	}
+	if dp.EnableDuplicateNotifications {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevEnableDuplicateNotificationsEnvVar, Value: "true"})
+	}
+	if dp.EnablePerOrgEnforcement {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevEnablePerOrgEnforcementEnvVar, Value: "true"})
+	}
 	return envVars
 }
 

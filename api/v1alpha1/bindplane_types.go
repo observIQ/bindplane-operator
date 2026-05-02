@@ -321,6 +321,97 @@ type AgentsConfig struct {
 	// +optional
 	// +kubebuilder:default=10
 	MaxSimultaneousConnections int `json:"maxSimultaneousConnections,omitempty"`
+
+	// EnableConnectionRegistryMiddleware enables the connection registry middleware.
+	// +optional
+	EnableConnectionRegistryMiddleware bool `json:"enableConnectionRegistryMiddleware,omitempty"`
+
+	// ConnectionRegistryHeartbeatInterval is the interval at which agents send heartbeats to
+	// the connection registry (e.g. "15s"). When omitted, Bindplane defaults to 15s.
+	// +optional
+	ConnectionRegistryHeartbeatInterval string `json:"connectionRegistryHeartbeatInterval,omitempty"`
+
+	// ConnectionRegistryStaleDuration is the duration after which an agent connection is
+	// considered stale if no heartbeat is received (e.g. "45s"). Must be greater than
+	// connectionRegistryHeartbeatInterval. When omitted, Bindplane defaults to 45s.
+	// +optional
+	ConnectionRegistryStaleDuration string `json:"connectionRegistryStaleDuration,omitempty"`
+
+	// ConnectionRegistryLockTimeout is the PostgreSQL lock_timeout for connection registry
+	// operations (e.g. "2s"). When omitted, Bindplane defaults to 2s.
+	// +optional
+	ConnectionRegistryLockTimeout string `json:"connectionRegistryLockTimeout,omitempty"`
+
+	// ConnectionClaimTimeout is the overall timeout for ClaimConnection operations (e.g. "3s").
+	// Must be greater than connectionRegistryLockTimeout. When omitted, Bindplane defaults to 3s.
+	// +optional
+	ConnectionClaimTimeout string `json:"connectionClaimTimeout,omitempty"`
+
+	// DuplicationPrevention configures duplicate agent connection prevention.
+	// +optional
+	DuplicationPrevention *AgentDuplicationPreventionConfig `json:"duplicationPrevention,omitempty"`
+}
+
+// AgentDuplicationPreventionConfig configures duplicate agent connection prevention.
+type AgentDuplicationPreventionConfig struct {
+	// EnableMiddleware enables the duplication prevention middleware.
+	// +optional
+	EnableMiddleware bool `json:"enableMiddleware,omitempty"`
+
+	// ReassignID reassigns the agent ID when a duplicate is detected.
+	// +optional
+	ReassignID bool `json:"reassignID,omitempty"`
+
+	// DetectionStrategy is the strategy used to detect duplicate connections.
+	// Valid values: grace_period.
+	// +optional
+	// +kubebuilder:validation:Enum=grace_period
+	DetectionStrategy string `json:"detectionStrategy,omitempty"`
+
+	// DetectionGracePeriod is how long after the first claim failure to wait before treating
+	// subsequent failures as true duplicates (e.g. "3m"). Used with the grace_period strategy.
+	// Must be >= connectionRegistryStaleDuration. When omitted, Bindplane defaults to 3m.
+	// +optional
+	DetectionGracePeriod string `json:"detectionGracePeriod,omitempty"`
+
+	// MinGracePeriodFailures is the minimum number of claim failures required before the
+	// grace_period strategy confirms a duplicate. Both the time (grace period) and count
+	// must be satisfied. When omitted, Bindplane defaults to 3.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MinGracePeriodFailures int `json:"minGracePeriodFailures,omitempty"`
+
+	// RetryAfter is the Retry-After duration sent to the agent when rejecting connections
+	// during the grace period (e.g. "30s"). When omitted, Bindplane defaults to 30s.
+	// +optional
+	RetryAfter string `json:"retryAfter,omitempty"`
+
+	// MaxReassignmentAttempts is the maximum number of times an agent can reconnect with
+	// the same ID after being assigned a new ID before being permanently rejected (1–10).
+	// When omitted, Bindplane defaults to 3.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10
+	MaxReassignmentAttempts int `json:"maxReassignmentAttempts,omitempty"`
+
+	// ReassignmentCacheTTL is how long to remember reassignment attempts (e.g. "24h").
+	// Maximum 7d. When omitted, Bindplane defaults to 24h.
+	// +optional
+	ReassignmentCacheTTL string `json:"reassignmentCacheTTL,omitempty"`
+
+	// ReassignmentRetryAfter is the Retry-After duration sent to an agent when it is
+	// permanently rejected after exceeding maxReassignmentAttempts (e.g. "5m").
+	// Maximum 1h. When omitted, Bindplane defaults to 5m.
+	// +optional
+	ReassignmentRetryAfter string `json:"reassignmentRetryAfter,omitempty"`
+
+	// EnableDuplicateNotifications enables sending notifications when duplicate connections are detected.
+	// +optional
+	EnableDuplicateNotifications bool `json:"enableDuplicateNotifications,omitempty"`
+
+	// EnablePerOrgEnforcement enables per-organization enforcement of duplicate prevention.
+	// +optional
+	EnablePerOrgEnforcement bool `json:"enablePerOrgEnforcement,omitempty"`
 }
 
 // AgentVersionsConfig configures how Bindplane syncs agent versions.

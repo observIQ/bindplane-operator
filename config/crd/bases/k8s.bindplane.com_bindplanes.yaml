@@ -12040,6 +12040,46 @@ spec:
                           type:
                             type: string
                         type: object
+                      connectionClaimTimeout:
+                        type: string
+                      connectionRegistryHeartbeatInterval:
+                        type: string
+                      connectionRegistryLockTimeout:
+                        type: string
+                      connectionRegistryStaleDuration:
+                        type: string
+                      duplicationPrevention:
+                        properties:
+                          detectionGracePeriod:
+                            type: string
+                          detectionStrategy:
+                            enum:
+                            - grace_period
+                            type: string
+                          enableDuplicateNotifications:
+                            type: boolean
+                          enableMiddleware:
+                            type: boolean
+                          enablePerOrgEnforcement:
+                            type: boolean
+                          maxReassignmentAttempts:
+                            maximum: 10
+                            minimum: 1
+                            type: integer
+                          minGracePeriodFailures:
+                            minimum: 1
+                            type: integer
+                          reassignID:
+                            type: boolean
+                          reassignmentCacheTTL:
+                            type: string
+                          reassignmentRetryAfter:
+                            type: string
+                          retryAfter:
+                            type: string
+                        type: object
+                      enableConnectionRegistryMiddleware:
+                        type: boolean
                       heartbeatExpiryInterval:
                         type: string
                       heartbeatInterval:

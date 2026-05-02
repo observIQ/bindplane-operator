@@ -123,6 +123,27 @@ _Appears in:_
 | `metricChannelSize` _integer_ | MetricChannelSize is the buffer size for the incoming metrics channel. |  | Optional: \{\} <br /> |
 | `batchChannelSize` _integer_ | BatchChannelSize is the buffer size for the batch channel between accept and save workers. |  | Optional: \{\} <br /> |
 
+#### AgentDuplicationPreventionConfig
+
+AgentDuplicationPreventionConfig configures duplicate agent connection prevention.
+
+_Appears in:_
+- [AgentsConfig](#agentsconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enableMiddleware` _boolean_ | EnableMiddleware enables the duplication prevention middleware. |  | Optional: \{\} <br /> |
+| `reassignID` _boolean_ | ReassignID reassigns the agent ID when a duplicate is detected. |  | Optional: \{\} <br /> |
+| `detectionStrategy` _string_ | DetectionStrategy is the strategy used to detect duplicate connections.<br />Valid values: grace_period. |  | Enum: [grace_period] <br />Optional: \{\} <br /> |
+| `detectionGracePeriod` _string_ | DetectionGracePeriod is how long after the first claim failure to wait before treating<br />subsequent failures as true duplicates (e.g. "3m"). Used with the grace_period strategy.<br />Must be >= connectionRegistryStaleDuration. When omitted, Bindplane defaults to 3m. |  | Optional: \{\} <br /> |
+| `minGracePeriodFailures` _integer_ | MinGracePeriodFailures is the minimum number of claim failures required before the<br />grace_period strategy confirms a duplicate. Both the time (grace period) and count<br />must be satisfied. When omitted, Bindplane defaults to 3. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `retryAfter` _string_ | RetryAfter is the Retry-After duration sent to the agent when rejecting connections<br />during the grace period (e.g. "30s"). When omitted, Bindplane defaults to 30s. |  | Optional: \{\} <br /> |
+| `maxReassignmentAttempts` _integer_ | MaxReassignmentAttempts is the maximum number of times an agent can reconnect with<br />the same ID after being assigned a new ID before being permanently rejected (1–10).<br />When omitted, Bindplane defaults to 3. |  | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `reassignmentCacheTTL` _string_ | ReassignmentCacheTTL is how long to remember reassignment attempts (e.g. "24h").<br />Maximum 7d. When omitted, Bindplane defaults to 24h. |  | Optional: \{\} <br /> |
+| `reassignmentRetryAfter` _string_ | ReassignmentRetryAfter is the Retry-After duration sent to an agent when it is<br />permanently rejected after exceeding maxReassignmentAttempts (e.g. "5m").<br />Maximum 1h. When omitted, Bindplane defaults to 5m. |  | Optional: \{\} <br /> |
+| `enableDuplicateNotifications` _boolean_ | EnableDuplicateNotifications enables sending notifications when duplicate connections are detected. |  | Optional: \{\} <br /> |
+| `enablePerOrgEnforcement` _boolean_ | EnablePerOrgEnforcement enables per-organization enforcement of duplicate prevention. |  | Optional: \{\} <br /> |
+
 #### AgentVersionsConfig
 
 AgentVersionsConfig configures how Bindplane syncs agent versions.
@@ -191,6 +212,12 @@ _Appears in:_
 | `rebalancePercentage` _integer_ | RebalancePercentage is the percentage of agents to rebalance (0–100).<br />0 disables percentage-based rebalancing. When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `rebalanceJitter` _integer_ | RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).<br />When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxSimultaneousConnections` _integer_ | MaxSimultaneousConnections is the maximum number of goroutines that will service<br />OpAMP connections concurrently. Generally set to the same value as<br />spec.config.maxConcurrency. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
+| `enableConnectionRegistryMiddleware` _boolean_ | EnableConnectionRegistryMiddleware enables the connection registry middleware. |  | Optional: \{\} <br /> |
+| `connectionRegistryHeartbeatInterval` _string_ | ConnectionRegistryHeartbeatInterval is the interval at which agents send heartbeats to<br />the connection registry (e.g. "15s"). When omitted, Bindplane defaults to 15s. |  | Optional: \{\} <br /> |
+| `connectionRegistryStaleDuration` _string_ | ConnectionRegistryStaleDuration is the duration after which an agent connection is<br />considered stale if no heartbeat is received (e.g. "45s"). Must be greater than<br />connectionRegistryHeartbeatInterval. When omitted, Bindplane defaults to 45s. |  | Optional: \{\} <br /> |
+| `connectionRegistryLockTimeout` _string_ | ConnectionRegistryLockTimeout is the PostgreSQL lock_timeout for connection registry<br />operations (e.g. "2s"). When omitted, Bindplane defaults to 2s. |  | Optional: \{\} <br /> |
+| `connectionClaimTimeout` _string_ | ConnectionClaimTimeout is the overall timeout for ClaimConnection operations (e.g. "3s").<br />Must be greater than connectionRegistryLockTimeout. When omitted, Bindplane defaults to 3s. |  | Optional: \{\} <br /> |
+| `duplicationPrevention` _[AgentDuplicationPreventionConfig](#agentduplicationpreventionconfig)_ | DuplicationPrevention configures duplicate agent connection prevention. |  | Optional: \{\} <br /> |
 
 #### AnalyticsConfig
 
