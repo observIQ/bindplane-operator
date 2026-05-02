@@ -367,6 +367,7 @@ _Appears in:_
 | `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server,<br />Stripe billing, and janitor settings. |  | Optional: \{\} <br /> |
+| `encryptionProvider` _[EncryptionProviderConfig](#encryptionproviderconfig)_ | EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.<br />When omitted, Bindplane uses its built-in encryption. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsComponentSpec
 
@@ -428,6 +429,18 @@ _Appears in:_
 | `kind` _string_ | Kind is the type of issuer. Either "Issuer" (namespaced) or "ClusterIssuer" (cluster-scoped). | Issuer | Enum: [Issuer ClusterIssuer] <br />Optional: \{\} <br /> |
 | `group` _string_ | Group is the API group of the issuer. Defaults to cert-manager.io. | cert-manager.io | Optional: \{\} <br /> |
 
+#### EncryptionProviderConfig
+
+EncryptionProviderConfig configures the encryption provider for Bindplane.
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type is the encryption provider type. |  | Enum: [googleKMS] <br />Optional: \{\} <br /> |
+| `googleKMS` _[GoogleKMSConfig](#googlekmsconfig)_ | GoogleKMS configures Google Cloud KMS as the encryption provider. |  | Optional: \{\} <br /> |
+
 #### EventBusConfig
 
 EventBusConfig configures the Bindplane event bus (NATS) integration.
@@ -453,6 +466,20 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `requiredHosts` _integer_ | RequiredHosts is the minimum number of pods that must respond to the health check<br />event for the event bus to be considered healthy. When omitted, defaults to<br />floor(total / 2) + 1, where total is the sum of node, NATS, and jobs replicas.<br />Jobs Migrate is a batch/v1 Job (not a long-running pod) and is excluded from this total. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `interval` _string_ | Interval is how often the event bus health check is performed (e.g. 15s, 1m).<br />When omitted, the Bindplane server default is used. |  | Optional: \{\} <br /> |
+
+#### GoogleKMSConfig
+
+GoogleKMSConfig configures Google Cloud KMS as the encryption provider.
+
+_Appears in:_
+- [EncryptionProviderConfig](#encryptionproviderconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `projectID` _string_ | ProjectID is the Google Cloud project ID that contains the KMS key ring. |  | Optional: \{\} <br /> |
+| `location` _string_ | Location is the Google Cloud region or zone for the KMS key ring (e.g., "us-central1"). |  | Optional: \{\} <br /> |
+| `keyRotationPeriod` _string_ | KeyRotationPeriod is the rotation period for KMS keys (e.g., "30d"). |  | Optional: \{\} <br /> |
+| `keyDeletionJob` _boolean_ | KeyDeletionJob enables the KMS key deletion job on the Jobs Migrate workload only.<br />When true, BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is set on Jobs Migrate. |  | Optional: \{\} <br /> |
 
 #### LDAPConfig
 
