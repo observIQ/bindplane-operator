@@ -293,6 +293,11 @@ type BindplaneConfigSpec struct {
 	// When omitted, error tracking is disabled.
 	// +optional
 	Errors *ErrorsConfig `json:"errors,omitempty"`
+
+	// LLM configures large language model integrations.
+	// When omitted, LLM features are disabled.
+	// +optional
+	LLM *LLMConfig `json:"llm,omitempty"`
 }
 
 // SaaSConfig configures Bindplane SaaS-specific functionality.
@@ -542,6 +547,92 @@ type ErrorsConfig struct {
 	// Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging").
 	// +optional
 	Environment string `json:"environment,omitempty"`
+}
+
+// LLMConfig configures large language model integrations for Bindplane.
+type LLMConfig struct {
+	// Gemini configures Google Gemini integration.
+	// +optional
+	Gemini *GeminiConfig `json:"gemini,omitempty"`
+
+	// Langsmith configures LangSmith tracing for LLM calls.
+	// +optional
+	Langsmith *LangsmithConfig `json:"langsmith,omitempty"`
+
+	// OpenAI configures OpenAI integration.
+	// +optional
+	OpenAI *OpenAIConfig `json:"openai,omitempty"`
+
+	// Anthropic configures Anthropic integration.
+	// +optional
+	Anthropic *AnthropicConfig `json:"anthropic,omitempty"`
+}
+
+// GeminiConfig configures Google Gemini as an LLM backend.
+type GeminiConfig struct {
+	// ProjectID is the Google Cloud project ID.
+	// +optional
+	ProjectID string `json:"projectID,omitempty"`
+
+	// Location is the Google Cloud region for the Gemini API (e.g., "us-central1").
+	// +optional
+	Location string `json:"location,omitempty"`
+
+	// VectorSearchRedis configures Redis for Gemini vector search.
+	// +optional
+	VectorSearchRedis *VectorSearchRedisConfig `json:"vectorSearchRedis,omitempty"`
+}
+
+// VectorSearchRedisConfig configures Redis for vector search.
+type VectorSearchRedisConfig struct {
+	// Address is the Redis address (host:port).
+	// +optional
+	Address string `json:"address,omitempty"`
+
+	// EnableTLS enables TLS for the Redis connection.
+	// +optional
+	EnableTLS bool `json:"enableTLS,omitempty"`
+}
+
+// LangsmithConfig configures LangSmith LLM call tracing.
+type LangsmithConfig struct {
+	// Enabled enables LangSmith tracing.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// APIKey is the LangSmith API key (plain value; prefer apiKeySecretRef in production).
+	// +optional
+	APIKey string `json:"apiKey,omitempty"`
+
+	// APIKeySecretRef references a Kubernetes Secret containing the LangSmith API key.
+	// +optional
+	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
+
+	// ProjectName is the LangSmith project name for tracing.
+	// +optional
+	ProjectName string `json:"projectName,omitempty"`
+}
+
+// OpenAIConfig configures OpenAI integration.
+type OpenAIConfig struct {
+	// APIKey is the OpenAI API key (plain value; prefer apiKeySecretRef in production).
+	// +optional
+	APIKey string `json:"apiKey,omitempty"`
+
+	// APIKeySecretRef references a Kubernetes Secret containing the OpenAI API key.
+	// +optional
+	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
+}
+
+// AnthropicConfig configures Anthropic integration.
+type AnthropicConfig struct {
+	// APIKey is the Anthropic API key (plain value; prefer apiKeySecretRef in production).
+	// +optional
+	APIKey string `json:"apiKey,omitempty"`
+
+	// APIKeySecretRef references a Kubernetes Secret containing the Anthropic API key.
+	// +optional
+	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.

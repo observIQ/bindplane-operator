@@ -12469,6 +12469,81 @@ spec:
                     - key
                     type: object
                     x-kubernetes-map-type: atomic
+                  llm:
+                    properties:
+                      anthropic:
+                        properties:
+                          apiKey:
+                            type: string
+                          apiKeySecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                      gemini:
+                        properties:
+                          location:
+                            type: string
+                          projectID:
+                            type: string
+                          vectorSearchRedis:
+                            properties:
+                              address:
+                                type: string
+                              enableTLS:
+                                type: boolean
+                            type: object
+                        type: object
+                      langsmith:
+                        properties:
+                          apiKey:
+                            type: string
+                          apiKeySecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          enabled:
+                            type: boolean
+                          projectName:
+                            type: string
+                        type: object
+                      openai:
+                        properties:
+                          apiKey:
+                            type: string
+                          apiKeySecretRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                    type: object
                   logging:
                     properties:
                       level:

@@ -231,6 +231,18 @@ _Appears in:_
 | `disabled` _boolean_ | Disabled turns off analytics reporting. When false or omitted, analytics are enabled.<br />Free licenses do not support disabling analytics; this option is ignored for that license type. | false | Optional: \{\} <br /> |
 | `segmentWriteKey` _string_ | SegmentWriteKey overrides the default Segment write key used for analytics.<br />Do not set unless directed by Bindplane support. |  | Optional: \{\} <br /> |
 
+#### AnthropicConfig
+
+AnthropicConfig configures Anthropic integration.
+
+_Appears in:_
+- [LLMConfig](#llmconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiKey` _string_ | APIKey is the Anthropic API key (plain value; prefer apiKeySecretRef in production). |  | Optional: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | APIKeySecretRef references a Kubernetes Secret containing the Anthropic API key. |  | Optional: \{\} <br /> |
+
 #### AuditTrailConfig
 
 AuditTrailConfig defines audit trail configuration
@@ -370,6 +382,7 @@ _Appears in:_
 | `encryptionProvider` _[EncryptionProviderConfig](#encryptionproviderconfig)_ | EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.<br />When omitted, Bindplane uses its built-in encryption. |  | Optional: \{\} <br /> |
 | `features` _[FeaturesConfig](#featuresconfig)_ | Features configures the feature flag backend and feature overrides.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `errors` _[ErrorsConfig](#errorsconfig)_ | Errors configures error tracking (e.g., BetterStack, Sentry).<br />When omitted, error tracking is disabled. |  | Optional: \{\} <br /> |
+| `llm` _[LLMConfig](#llmconfig)_ | LLM configures large language model integrations.<br />When omitted, LLM features are disabled. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsComponentSpec
 
@@ -518,6 +531,19 @@ _Appears in:_
 | `postHog` _[PostHogConfig](#posthogconfig)_ | PostHog configures PostHog as the feature flag backend. |  | Optional: \{\} <br /> |
 | `overrides` _[FeatureOverridesConfig](#featureoverridesconfig)_ | Overrides configures feature flag overrides that force specific features on or off. |  | Optional: \{\} <br /> |
 
+#### GeminiConfig
+
+GeminiConfig configures Google Gemini as an LLM backend.
+
+_Appears in:_
+- [LLMConfig](#llmconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `projectID` _string_ | ProjectID is the Google Cloud project ID. |  | Optional: \{\} <br /> |
+| `location` _string_ | Location is the Google Cloud region for the Gemini API (e.g., "us-central1"). |  | Optional: \{\} <br /> |
+| `vectorSearchRedis` _[VectorSearchRedisConfig](#vectorsearchredisconfig)_ | VectorSearchRedis configures Redis for Gemini vector search. |  | Optional: \{\} <br /> |
+
 #### GoogleKMSConfig
 
 GoogleKMSConfig configures Google Cloud KMS as the encryption provider.
@@ -568,6 +594,34 @@ _Appears in:_
 | `certKey` _string_ | CertKey is the key in the Secret for the TLS certificate (for mutual TLS). |  | Optional: \{\} <br /> |
 | `keyKey` _string_ | KeyKey is the key in the Secret for the TLS private key (for mutual TLS). |  | Optional: \{\} <br /> |
 | `caKey` _string_ | CAKey is the key in the Secret for the CA certificate. Omit to use system CAs. |  | Optional: \{\} <br /> |
+
+#### LLMConfig
+
+LLMConfig configures large language model integrations for Bindplane.
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `gemini` _[GeminiConfig](#geminiconfig)_ | Gemini configures Google Gemini integration. |  | Optional: \{\} <br /> |
+| `langsmith` _[LangsmithConfig](#langsmithconfig)_ | Langsmith configures LangSmith tracing for LLM calls. |  | Optional: \{\} <br /> |
+| `openai` _[OpenAIConfig](#openaiconfig)_ | OpenAI configures OpenAI integration. |  | Optional: \{\} <br /> |
+| `anthropic` _[AnthropicConfig](#anthropicconfig)_ | Anthropic configures Anthropic integration. |  | Optional: \{\} <br /> |
+
+#### LangsmithConfig
+
+LangsmithConfig configures LangSmith LLM call tracing.
+
+_Appears in:_
+- [LLMConfig](#llmconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled enables LangSmith tracing. |  | Optional: \{\} <br /> |
+| `apiKey` _string_ | APIKey is the LangSmith API key (plain value; prefer apiKeySecretRef in production). |  | Optional: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | APIKeySecretRef references a Kubernetes Secret containing the LangSmith API key. |  | Optional: \{\} <br /> |
+| `projectName` _string_ | ProjectName is the LangSmith project name for tracing. |  | Optional: \{\} <br /> |
 
 #### LoggingConfig
 
@@ -756,6 +810,18 @@ _Appears in:_
 | `clientSecretSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | ClientSecretSecretRef references a Kubernetes Secret containing the OIDC client secret.<br />Takes precedence over ClientSecret if both are set. |  | Optional: \{\} <br /> |
 | `issuer` _string_ | Issuer is the URL of the OIDC provider |  | Optional: \{\} <br /> |
 | `scopes` _string array_ | Scopes is the list of OAuth2 scopes to request |  | Optional: \{\} <br /> |
+
+#### OpenAIConfig
+
+OpenAIConfig configures OpenAI integration.
+
+_Appears in:_
+- [LLMConfig](#llmconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `apiKey` _string_ | APIKey is the OpenAI API key (plain value; prefer apiKeySecretRef in production). |  | Optional: \{\} <br /> |
+| `apiKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | APIKeySecretRef references a Kubernetes Secret containing the OpenAI API key. |  | Optional: \{\} <br /> |
 
 #### PodTemplateSpec
 
@@ -1088,6 +1154,18 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `certManager` _[CertManagerTLSIssuerRef](#certmanagertlsissuerref)_ | CertManager references a cert-manager Issuer or ClusterIssuer to issue the Transform Agent certificate<br />used by both the Transform Agent server and Bindplane clients. |  | Optional: \{\} <br /> |
+
+#### VectorSearchRedisConfig
+
+VectorSearchRedisConfig configures Redis for vector search.
+
+_Appears in:_
+- [GeminiConfig](#geminiconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `address` _string_ | Address is the Redis address (host:port). |  | Optional: \{\} <br /> |
+| `enableTLS` _boolean_ | EnableTLS enables TLS for the Redis connection. |  | Optional: \{\} <br /> |
 
 #### VolumeClaimTemplate
 

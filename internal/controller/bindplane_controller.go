@@ -407,6 +407,17 @@ const (
 	bindplaneErrorsBackendDSNEnvVar  = "BINDPLANE_ERRORS_BACKEND_DSN"
 	bindplaneErrorsFrontendDSNEnvVar = "BINDPLANE_ERRORS_FRONTEND_DSN"
 	bindplaneErrorsEnvironmentEnvVar = "BINDPLANE_ERRORS_ENVIRONMENT"
+
+	// LLM configuration
+	bindplaneLLMGeminiProjectIDEnvVar                  = "BINDPLANE_LLM_GEMINI_PROJECT_ID"
+	bindplaneLLMGeminiLocationEnvVar                   = "BINDPLANE_LLM_GEMINI_LOCATION"
+	bindplaneLLMGeminiVectorSearchRedisAddressEnvVar   = "BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ADDRESS"
+	bindplaneLLMGeminiVectorSearchRedisEnableTLSEnvVar = "BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ENABLE_TLS"
+	bindplaneLLMLangsmithEnabledEnvVar                 = "BINDPLANE_LLM_LANGSMITH_ENABLED"
+	bindplaneLLMLangsmithAPIKeyEnvVar                  = "BINDPLANE_LLM_LANGSMITH_API_KEY" // #nosec G101 -- env var name, not a credential
+	bindplaneLLMLangsmithProjectNameEnvVar             = "BINDPLANE_LLM_LANGSMITH_PROJECT_NAME"
+	bindplaneLLMOpenAIAPIKeyEnvVar                     = "BINDPLANE_LLM_OPENAI_API_KEY"    // #nosec G101 -- env var name, not a credential
+	bindplaneLLMAnthropicAPIKeyEnvVar                  = "BINDPLANE_LLM_ANTHROPIC_API_KEY" // #nosec G101 -- env var name, not a credential
 )
 
 const (
