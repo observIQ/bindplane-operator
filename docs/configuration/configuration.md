@@ -41,6 +41,9 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [SaaS](#saas)
   - [Stripe](#stripe)
 - [Encryption provider](#encryption-provider)
+- [Features](#features)
+  - [PostHog](#posthog)
+  - [Feature overrides](#feature-overrides)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1215,6 +1218,50 @@ When omitted, SaaS mode is disabled.
 
 Secret references for Stripe keys take precedence over plain-value fields when both are set. Prefer Secret references in production.
 
+## Features
+
+The `spec.config.features` section configures the feature flag backend and enables optional feature overrides.
+When omitted, feature flags are disabled and all overrides default to `false`.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.features.type` | `BINDPLANE_FEATURES_TYPE` | — | No |
+
+`type` accepts: `posthog`.
+
+### PostHog
+
+PostHog is the supported feature flag backend. When `type: posthog` is set, configure the connection via the fields below. API keys may be provided as plain values or as Secret references; the Secret reference takes precedence when both are set.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.features.postHog.projectAPIKey` | `BINDPLANE_FEATURES_POSTHOG_PROJECT_API_KEY` | — | No |
+| `spec.config.features.postHog.projectAPIKeySecretRef` | `BINDPLANE_FEATURES_POSTHOG_PROJECT_API_KEY` | — | No |
+| `spec.config.features.postHog.personalAPIKey` | `BINDPLANE_FEATURES_POSTHOG_PERSONAL_API_KEY` | — | No |
+| `spec.config.features.postHog.personalAPIKeySecretRef` | `BINDPLANE_FEATURES_POSTHOG_PERSONAL_API_KEY` | — | No |
+| `spec.config.features.postHog.endpoint` | `BINDPLANE_FEATURES_POSTHOG_ENDPOINT` | — | No |
+| `spec.config.features.postHog.defaultFeatureFlagsPollingInterval` | `BINDPLANE_FEATURES_POSTHOG_DEFAULT_FEATURE_FLAGS_POLLING_INTERVAL` | — | No |
+
+### Feature overrides
+
+Feature overrides allow individual features to be force-enabled regardless of the feature flag backend result.
+All override fields are boolean and default to `false`.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.features.overrides.growthLicense` | `BINDPLANE_FEATURES_OVERRIDES_GROWTH_LICENSE` | `false` | No |
+| `spec.config.features.overrides.secopsTheme` | `BINDPLANE_FEATURES_OVERRIDES_SECOPS_THEME` | `false` | No |
+| `spec.config.features.overrides.secopsIntegration` | `BINDPLANE_FEATURES_OVERRIDES_SECOPS_INTEGRATION` | `false` | No |
+| `spec.config.features.overrides.llmFeatures` | `BINDPLANE_FEATURES_OVERRIDES_LLM_FEATURES` | `false` | No |
+| `spec.config.features.overrides.pipelineIntelligence` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE` | `false` | No |
+| `spec.config.features.overrides.pipelineIntelligenceSnapshotLogTypes` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SNAPSHOT_LOG_TYPES` | `false` | No |
+| `spec.config.features.overrides.pipelineIntelligenceOtelConfigImport` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_OTEL_CONFIG_IMPORT` | `false` | No |
+| `spec.config.features.overrides.pipelineIntelligenceChronicleForwarderConfigImport` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_CHRONICLE_FORWARDER_CONFIG_IMPORT` | `false` | No |
+| `spec.config.features.overrides.pipelineIntelligenceParseField` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_PARSE_FIELD` | `false` | No |
+| `spec.config.features.overrides.pipelineIntelligenceGenerateProcessors` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_GENERATE_PROCESSORS` | `false` | No |
+| `spec.config.features.overrides.rawConfigLegacy` | `BINDPLANE_FEATURES_OVERRIDES_RAW_CONFIG_LEGACY` | `false` | No |
+| `spec.config.features.overrides.notifications` | `BINDPLANE_FEATURES_OVERRIDES_NOTIFICATIONS` | `false` | No |
+
 ```yaml
 spec:
   config:
@@ -1269,6 +1316,25 @@ spec:
         location: us-central1
         keyRotationPeriod: 30d
         keyDeletionJob: true
+```
+
+```yaml
+spec:
+  config:
+    features:
+      type: posthog
+      postHog:
+        projectAPIKeySecretRef:
+          name: bindplane-secrets
+          key: posthog-project-api-key
+        personalAPIKeySecretRef:
+          name: bindplane-secrets
+          key: posthog-personal-api-key
+        endpoint: "https://app.posthog.com"
+        defaultFeatureFlagsPollingInterval: "30s"
+      overrides:
+        growthLicense: true
+        pipelineIntelligence: true
 ```
 
 ## Scope

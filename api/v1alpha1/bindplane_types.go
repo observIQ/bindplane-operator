@@ -283,6 +283,11 @@ type BindplaneConfigSpec struct {
 	// When omitted, Bindplane uses its built-in encryption.
 	// +optional
 	EncryptionProvider *EncryptionProviderConfig `json:"encryptionProvider,omitempty"`
+
+	// Features configures the feature flag backend and feature overrides.
+	// When omitted, Bindplane uses its own defaults.
+	// +optional
+	Features *FeaturesConfig `json:"features,omitempty"`
 }
 
 // SaaSConfig configures Bindplane SaaS-specific functionality.
@@ -419,6 +424,100 @@ type GoogleKMSConfig struct {
 	// When true, BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is set on Jobs Migrate.
 	// +optional
 	KeyDeletionJob bool `json:"keyDeletionJob,omitempty"`
+}
+
+// FeaturesConfig configures the feature flag backend and feature overrides.
+type FeaturesConfig struct {
+	// Type is the feature flag backend type.
+	// +optional
+	// +kubebuilder:validation:Enum=posthog
+	Type string `json:"type,omitempty"`
+
+	// PostHog configures PostHog as the feature flag backend.
+	// +optional
+	PostHog *PostHogConfig `json:"postHog,omitempty"`
+
+	// Overrides configures feature flag overrides that force specific features on or off.
+	// +optional
+	Overrides *FeatureOverridesConfig `json:"overrides,omitempty"`
+}
+
+// PostHogConfig configures PostHog as the feature flag backend.
+type PostHogConfig struct {
+	// ProjectAPIKey is the PostHog project API key (plain value; prefer projectAPIKeySecretRef in production).
+	// +optional
+	ProjectAPIKey string `json:"projectAPIKey,omitempty"`
+
+	// ProjectAPIKeySecretRef references a Kubernetes Secret containing the PostHog project API key.
+	// +optional
+	ProjectAPIKeySecretRef *corev1.SecretKeySelector `json:"projectAPIKeySecretRef,omitempty"`
+
+	// PersonalAPIKey is the PostHog personal API key (plain value; prefer personalAPIKeySecretRef in production).
+	// +optional
+	PersonalAPIKey string `json:"personalAPIKey,omitempty"`
+
+	// PersonalAPIKeySecretRef references a Kubernetes Secret containing the PostHog personal API key.
+	// +optional
+	PersonalAPIKeySecretRef *corev1.SecretKeySelector `json:"personalAPIKeySecretRef,omitempty"`
+
+	// Endpoint is the PostHog API endpoint URL.
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// DefaultFeatureFlagsPollingInterval is the polling interval for feature flags (e.g., "30s").
+	// +optional
+	DefaultFeatureFlagsPollingInterval string `json:"defaultFeatureFlagsPollingInterval,omitempty"`
+}
+
+// FeatureOverridesConfig forces specific features on or off regardless of the flag backend.
+type FeatureOverridesConfig struct {
+	// GrowthLicense forces the growth license feature on.
+	// +optional
+	GrowthLicense bool `json:"growthLicense,omitempty"`
+
+	// SecopsTheme forces the SecOps theme on.
+	// +optional
+	SecopsTheme bool `json:"secopsTheme,omitempty"`
+
+	// SecopsIntegration forces the SecOps integration feature on.
+	// +optional
+	SecopsIntegration bool `json:"secopsIntegration,omitempty"`
+
+	// LLMFeatures forces LLM features on.
+	// +optional
+	LLMFeatures bool `json:"llmFeatures,omitempty"`
+
+	// PipelineIntelligence forces the pipeline intelligence feature on.
+	// +optional
+	PipelineIntelligence bool `json:"pipelineIntelligence,omitempty"`
+
+	// PipelineIntelligenceSnapshotLogTypes forces the pipeline intelligence snapshot log types feature on.
+	// +optional
+	PipelineIntelligenceSnapshotLogTypes bool `json:"pipelineIntelligenceSnapshotLogTypes,omitempty"`
+
+	// PipelineIntelligenceOtelConfigImport forces the OpenTelemetry config import pipeline intelligence feature on.
+	// +optional
+	PipelineIntelligenceOtelConfigImport bool `json:"pipelineIntelligenceOtelConfigImport,omitempty"`
+
+	// PipelineIntelligenceChronicleForwarderConfigImport forces the Chronicle Forwarder config import feature on.
+	// +optional
+	PipelineIntelligenceChronicleForwarderConfigImport bool `json:"pipelineIntelligenceChronicleForwarderConfigImport,omitempty"`
+
+	// PipelineIntelligenceParseField forces the parse field pipeline intelligence feature on.
+	// +optional
+	PipelineIntelligenceParseField bool `json:"pipelineIntelligenceParseField,omitempty"`
+
+	// PipelineIntelligenceGenerateProcessors forces the generate processors pipeline intelligence feature on.
+	// +optional
+	PipelineIntelligenceGenerateProcessors bool `json:"pipelineIntelligenceGenerateProcessors,omitempty"`
+
+	// RawConfigLegacy forces the raw config legacy feature on.
+	// +optional
+	RawConfigLegacy bool `json:"rawConfigLegacy,omitempty"`
+
+	// Notifications forces the notifications feature on.
+	// +optional
+	Notifications bool `json:"notifications,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.

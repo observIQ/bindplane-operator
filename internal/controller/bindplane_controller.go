@@ -382,6 +382,25 @@ const (
 	bindplaneEncryptionProviderGoogleKMSKeyRotationPeriodEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_ROTATION_PERIOD"
 	// bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar is set only on the Jobs Migrate workload.
 	bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB"
+
+	// Features configuration
+	bindplaneFeaturesTypeEnvVar                                                        = "BINDPLANE_FEATURES_TYPE"
+	bindplaneFeaturesPostHogProjectAPIKeyEnvVar                                        = "BINDPLANE_FEATURES_POSTHOG_PROJECT_API_KEY"  // #nosec G101 -- env var name, not a credential
+	bindplaneFeaturesPostHogPersonalAPIKeyEnvVar                                       = "BINDPLANE_FEATURES_POSTHOG_PERSONAL_API_KEY" // #nosec G101 -- env var name, not a credential
+	bindplaneFeaturesPostHogEndpointEnvVar                                             = "BINDPLANE_FEATURES_POSTHOG_ENDPOINT"
+	bindplaneFeaturesPostHogPollingIntervalEnvVar                                      = "BINDPLANE_FEATURES_POSTHOG_DEFAULT_FEATURE_FLAGS_POLLING_INTERVAL"
+	bindplaneFeaturesOverridesGrowthLicenseEnvVar                                      = "BINDPLANE_FEATURES_OVERRIDES_GROWTH_LICENSE"
+	bindplaneFeaturesOverridesSecopsThemeEnvVar                                        = "BINDPLANE_FEATURES_OVERRIDES_SECOPS_THEME"
+	bindplaneFeaturesOverridesSecopsIntegrationEnvVar                                  = "BINDPLANE_FEATURES_OVERRIDES_SECOPS_INTEGRATION"
+	bindplaneFeaturesOverridesLLMFeaturesEnvVar                                        = "BINDPLANE_FEATURES_OVERRIDES_LLM_FEATURES"
+	bindplaneFeaturesOverridesPipelineIntelligenceEnvVar                               = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE"
+	bindplaneFeaturesOverridesPipelineIntelligenceSnapshotLogTypesEnvVar               = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SNAPSHOT_LOG_TYPES"
+	bindplaneFeaturesOverridesPipelineIntelligenceOtelConfigImportEnvVar               = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_OTEL_CONFIG_IMPORT"
+	bindplaneFeaturesOverridesPipelineIntelligenceChronicleForwarderConfigImportEnvVar = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_CHRONICLE_FORWARDER_CONFIG_IMPORT"
+	bindplaneFeaturesOverridesPipelineIntelligenceParseFieldEnvVar                     = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_PARSE_FIELD"
+	bindplaneFeaturesOverridesPipelineIntelligenceGenerateProcessorsEnvVar             = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_GENERATE_PROCESSORS"
+	bindplaneFeaturesOverridesRawConfigLegacyEnvVar                                    = "BINDPLANE_FEATURES_OVERRIDES_RAW_CONFIG_LEGACY"
+	bindplaneFeaturesOverridesNotificationsEnvVar                                      = "BINDPLANE_FEATURES_OVERRIDES_NOTIFICATIONS"
 )
 
 const (

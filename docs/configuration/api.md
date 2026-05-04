@@ -368,6 +368,7 @@ _Appears in:_
 | `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server,<br />Stripe billing, and janitor settings. |  | Optional: \{\} <br /> |
 | `encryptionProvider` _[EncryptionProviderConfig](#encryptionproviderconfig)_ | EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.<br />When omitted, Bindplane uses its built-in encryption. |  | Optional: \{\} <br /> |
+| `features` _[FeaturesConfig](#featuresconfig)_ | Features configures the feature flag backend and feature overrides.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsComponentSpec
 
@@ -466,6 +467,41 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `requiredHosts` _integer_ | RequiredHosts is the minimum number of pods that must respond to the health check<br />event for the event bus to be considered healthy. When omitted, defaults to<br />floor(total / 2) + 1, where total is the sum of node, NATS, and jobs replicas.<br />Jobs Migrate is a batch/v1 Job (not a long-running pod) and is excluded from this total. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 | `interval` _string_ | Interval is how often the event bus health check is performed (e.g. 15s, 1m).<br />When omitted, the Bindplane server default is used. |  | Optional: \{\} <br /> |
+
+#### FeatureOverridesConfig
+
+FeatureOverridesConfig forces specific features on or off regardless of the flag backend.
+
+_Appears in:_
+- [FeaturesConfig](#featuresconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `growthLicense` _boolean_ | GrowthLicense forces the growth license feature on. |  | Optional: \{\} <br /> |
+| `secopsTheme` _boolean_ | SecopsTheme forces the SecOps theme on. |  | Optional: \{\} <br /> |
+| `secopsIntegration` _boolean_ | SecopsIntegration forces the SecOps integration feature on. |  | Optional: \{\} <br /> |
+| `llmFeatures` _boolean_ | LLMFeatures forces LLM features on. |  | Optional: \{\} <br /> |
+| `pipelineIntelligence` _boolean_ | PipelineIntelligence forces the pipeline intelligence feature on. |  | Optional: \{\} <br /> |
+| `pipelineIntelligenceSnapshotLogTypes` _boolean_ | PipelineIntelligenceSnapshotLogTypes forces the pipeline intelligence snapshot log types feature on. |  | Optional: \{\} <br /> |
+| `pipelineIntelligenceOtelConfigImport` _boolean_ | PipelineIntelligenceOtelConfigImport forces the OpenTelemetry config import pipeline intelligence feature on. |  | Optional: \{\} <br /> |
+| `pipelineIntelligenceChronicleForwarderConfigImport` _boolean_ | PipelineIntelligenceChronicleForwarderConfigImport forces the Chronicle Forwarder config import feature on. |  | Optional: \{\} <br /> |
+| `pipelineIntelligenceParseField` _boolean_ | PipelineIntelligenceParseField forces the parse field pipeline intelligence feature on. |  | Optional: \{\} <br /> |
+| `pipelineIntelligenceGenerateProcessors` _boolean_ | PipelineIntelligenceGenerateProcessors forces the generate processors pipeline intelligence feature on. |  | Optional: \{\} <br /> |
+| `rawConfigLegacy` _boolean_ | RawConfigLegacy forces the raw config legacy feature on. |  | Optional: \{\} <br /> |
+| `notifications` _boolean_ | Notifications forces the notifications feature on. |  | Optional: \{\} <br /> |
+
+#### FeaturesConfig
+
+FeaturesConfig configures the feature flag backend and feature overrides.
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `type` _string_ | Type is the feature flag backend type. |  | Enum: [posthog] <br />Optional: \{\} <br /> |
+| `postHog` _[PostHogConfig](#posthogconfig)_ | PostHog configures PostHog as the feature flag backend. |  | Optional: \{\} <br /> |
+| `overrides` _[FeatureOverridesConfig](#featureoverridesconfig)_ | Overrides configures feature flag overrides that force specific features on or off. |  | Optional: \{\} <br /> |
 
 #### GoogleKMSConfig
 
@@ -725,6 +761,22 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `metadata` _[ObjectMeta](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#objectmeta-v1-meta)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
 | `spec` _[PodSpec](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#podspec-v1-core)_ | Specification of the desired behavior of the pod.<br />More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status |  | Optional: \{\} <br /> |
+
+#### PostHogConfig
+
+PostHogConfig configures PostHog as the feature flag backend.
+
+_Appears in:_
+- [FeaturesConfig](#featuresconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `projectAPIKey` _string_ | ProjectAPIKey is the PostHog project API key (plain value; prefer projectAPIKeySecretRef in production). |  | Optional: \{\} <br /> |
+| `projectAPIKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | ProjectAPIKeySecretRef references a Kubernetes Secret containing the PostHog project API key. |  | Optional: \{\} <br /> |
+| `personalAPIKey` _string_ | PersonalAPIKey is the PostHog personal API key (plain value; prefer personalAPIKeySecretRef in production). |  | Optional: \{\} <br /> |
+| `personalAPIKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | PersonalAPIKeySecretRef references a Kubernetes Secret containing the PostHog personal API key. |  | Optional: \{\} <br /> |
+| `endpoint` _string_ | Endpoint is the PostHog API endpoint URL. |  | Optional: \{\} <br /> |
+| `defaultFeatureFlagsPollingInterval` _string_ | DefaultFeatureFlagsPollingInterval is the polling interval for feature flags (e.g., "30s"). |  | Optional: \{\} <br /> |
 
 #### PostgresConfig
 
