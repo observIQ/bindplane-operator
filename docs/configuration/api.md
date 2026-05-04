@@ -496,8 +496,10 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled enables error tracking. |  | Optional: \{\} <br /> |
-| `backendDSN` _string_ | BackendDSN is the DSN (Data Source Name) for the backend error tracking service. |  | Optional: \{\} <br /> |
-| `frontendDSN` _string_ | FrontendDSN is the DSN for the frontend error tracking service. |  | Optional: \{\} <br /> |
+| `backendDSN` _string_ | BackendDSN is the DSN (Data Source Name) for the backend error tracking service.<br />DSNs may contain authentication tokens; prefer backendDSNSecretRef in production. |  | Optional: \{\} <br /> |
+| `backendDSNSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | BackendDSNSecretRef references a Kubernetes Secret containing the backend DSN.<br />Takes precedence over BackendDSN when both are set. |  | Optional: \{\} <br /> |
+| `frontendDSN` _string_ | FrontendDSN is the DSN for the frontend error tracking service.<br />DSNs may contain authentication tokens; prefer frontendDSNSecretRef in production. |  | Optional: \{\} <br /> |
+| `frontendDSNSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | FrontendDSNSecretRef references a Kubernetes Secret containing the frontend DSN.<br />Takes precedence over FrontendDSN when both are set. |  | Optional: \{\} <br /> |
 | `environment` _string_ | Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging"). |  | Optional: \{\} <br /> |
 | `release` _string_ | Release is the release version reported to the error tracking service (e.g., "1.2.3"). |  | Optional: \{\} <br /> |
 | `tracesSampleRate` _string_ | TracesSampleRate is the fraction of transactions to send for performance monitoring (0.0 to 1.0). |  | Optional: \{\} <br /> |

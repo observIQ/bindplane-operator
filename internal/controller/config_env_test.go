@@ -416,3 +416,86 @@ func TestGetNatsTLSEnvVars_NoCertManagerReturnsNil(t *testing.T) {
 		t.Errorf("expected nil when cert-manager TLS is not enabled, got %v", envVars)
 	}
 }
+
+// TestGetErrorsConfigEnvVars_PlainValue verifies that when BackendDSN / FrontendDSN
+// are set as plain strings, the env var is emitted as a plain Value.
+func TestGetErrorsConfigEnvVars_PlainValue(t *testing.T) {
+	cfg := &bindplanev1alpha1.ErrorsConfig{
+		Enabled:     true,
+		BackendDSN:  "https://key@sentry.io/123",
+		FrontendDSN: "https://key@sentry.io/456",
+		Environment: "production",
+	}
+	envVars := getErrorsConfigEnvVars(cfg)
+
+	found := map[string]string{}
+	for _, ev := range envVars {
+		if ev.ValueFrom == nil {
+			found[ev.Name] = ev.Value
+		}
+	}
+
+	if v, ok := found[bindplaneErrorsBackendDSNEnvVar]; !ok || v != "https://key@sentry.io/123" {
+		t.Errorf("expected %s = %q, got %q", bindplaneErrorsBackendDSNEnvVar, "https://key@sentry.io/123", v)
+	}
+	if v, ok := found[bindplaneErrorsFrontendDSNEnvVar]; !ok || v != "https://key@sentry.io/456" {
+		t.Errorf("expected %s = %q, got %q", bindplaneErrorsFrontendDSNEnvVar, "https://key@sentry.io/456", v)
+	}
+}
+
+// TestGetErrorsConfigEnvVars_SecretRef verifies that when BackendDSNSecretRef /
+// FrontendDSNSecretRef are set, the env var is emitted with valueFrom.secretKeyRef.
+func TestGetErrorsConfigEnvVars_SecretRef(t *testing.T) {
+	cfg := &bindplanev1alpha1.ErrorsConfig{
+		Enabled: true,
+		BackendDSNSecretRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+			Key:                  "backend-dsn",
+		},
+		FrontendDSNSecretRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+			Key:                  "frontend-dsn",
+		},
+	}
+	envVars := getErrorsConfigEnvVars(cfg)
+
+	found := map[string]*corev1.SecretKeySelector{}
+	for _, ev := range envVars {
+		if ev.ValueFrom != nil && ev.ValueFrom.SecretKeyRef != nil {
+			found[ev.Name] = ev.ValueFrom.SecretKeyRef
+		}
+	}
+
+	if ref, ok := found[bindplaneErrorsBackendDSNEnvVar]; !ok || ref.Name != "my-secret" || ref.Key != "backend-dsn" {
+		t.Errorf("expected %s to reference secret my-secret/backend-dsn, got %v", bindplaneErrorsBackendDSNEnvVar, found[bindplaneErrorsBackendDSNEnvVar])
+	}
+	if ref, ok := found[bindplaneErrorsFrontendDSNEnvVar]; !ok || ref.Name != "my-secret" || ref.Key != "frontend-dsn" {
+		t.Errorf("expected %s to reference secret my-secret/frontend-dsn, got %v", bindplaneErrorsFrontendDSNEnvVar, found[bindplaneErrorsFrontendDSNEnvVar])
+	}
+}
+
+// TestGetErrorsConfigEnvVars_SecretRefPrecedence verifies that when both a plain value
+// and a SecretRef are provided, the SecretRef takes precedence.
+func TestGetErrorsConfigEnvVars_SecretRefPrecedence(t *testing.T) {
+	cfg := &bindplanev1alpha1.ErrorsConfig{
+		BackendDSN: "https://plain@sentry.io/123",
+		BackendDSNSecretRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "ref-secret"},
+			Key:                  "backend-dsn",
+		},
+	}
+	envVars := getErrorsConfigEnvVars(cfg)
+
+	for _, ev := range envVars {
+		if ev.Name == bindplaneErrorsBackendDSNEnvVar {
+			if ev.ValueFrom == nil || ev.ValueFrom.SecretKeyRef == nil {
+				t.Errorf("expected SecretRef to take precedence, but got plain value %q", ev.Value)
+			}
+			if ev.ValueFrom.SecretKeyRef.Name != "ref-secret" {
+				t.Errorf("expected SecretKeyRef name ref-secret, got %s", ev.ValueFrom.SecretKeyRef.Name)
+			}
+			return
+		}
+	}
+	t.Errorf("env var %s not found", bindplaneErrorsBackendDSNEnvVar)
+}

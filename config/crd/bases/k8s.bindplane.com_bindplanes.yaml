@@ -12227,6 +12227,10 @@ spec:
                             required:
                             - address
                             type: object
+                            x-kubernetes-validations:
+                            - message: exactly one of password or passwordSecretRef
+                                must be set
+                              rule: '!(has(self.password) && has(self.passwordSecretRef))'
                           type:
                             enum:
                             - redis
@@ -12476,7 +12480,15 @@ spec:
                                 type: object
                                 x-kubernetes-map-type: atomic
                             type: object
+                            x-kubernetes-validations:
+                            - message: exactly one of clientSecret or clientSecretSecretRef
+                                must be set
+                              rule: '!(has(self.clientSecret) && has(self.clientSecretSecretRef))'
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of managementClientSecret or managementClientSecretSecretRef
+                            must be set
+                          rule: '!(has(self.managementClientSecret) && has(self.managementClientSecretSecretRef))'
                       ldap:
                         properties:
                           baseDN:
@@ -12535,6 +12547,13 @@ spec:
                           tlsSkipVerify:
                             type: boolean
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of bindUser or bindUserSecretRef must
+                            be set
+                          rule: '!(has(self.bindUser) && has(self.bindUserSecretRef))'
+                        - message: exactly one of bindPassword or bindPasswordSecretRef
+                            must be set
+                          rule: '!(has(self.bindPassword) && has(self.bindPasswordSecretRef))'
                       oidc:
                         properties:
                           clientID:
@@ -12576,6 +12595,13 @@ spec:
                               type: string
                             type: array
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of clientID or clientIDSecretRef must
+                            be set
+                          rule: '!(has(self.clientID) && has(self.clientIDSecretRef))'
+                        - message: exactly one of clientSecret or clientSecretSecretRef
+                            must be set
+                          rule: '!(has(self.clientSecret) && has(self.clientSecretSecretRef))'
                       password:
                         type: string
                       passwordSecretRef:
@@ -12632,6 +12658,18 @@ spec:
                         type: object
                         x-kubernetes-map-type: atomic
                     type: object
+                    x-kubernetes-validations:
+                    - message: exactly one of username or usernameSecretRef must be
+                        set
+                      rule: '!(has(self.username) && has(self.usernameSecretRef))'
+                    - message: exactly one of password or passwordSecretRef must be
+                        set
+                      rule: '!(has(self.password) && has(self.passwordSecretRef))'
+                    - message: exactly one of sessionSecret or sessionSecretSecretRef
+                        must be set
+                      rule: '!(has(self.sessionSecret) && has(self.sessionSecretSecretRef))'
+                    - message: exactly one of apiKey or apiKeySecretRef must be set
+                      rule: '!(has(self.apiKey) && has(self.apiKeySecretRef))'
                   encryptionProvider:
                     properties:
                       cache:
@@ -12662,6 +12700,19 @@ spec:
                     properties:
                       backendDSN:
                         type: string
+                      backendDSNSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       debug:
                         type: boolean
                       enabled:
@@ -12670,11 +12721,31 @@ spec:
                         type: string
                       frontendDSN:
                         type: string
+                      frontendDSNSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       release:
                         type: string
                       tracesSampleRate:
                         type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: exactly one of backendDSN or backendDSNSecretRef must
+                        be set
+                      rule: '!(has(self.backendDSN) && has(self.backendDSNSecretRef))'
+                    - message: exactly one of frontendDSN or frontendDSNSecretRef
+                        must be set
+                      rule: '!(has(self.frontendDSN) && has(self.frontendDSNSecretRef))'
                   eventBus:
                     properties:
                       health:
@@ -12783,6 +12854,13 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of projectAPIKey or projectAPIKeySecretRef
+                            must be set
+                          rule: '!(has(self.projectAPIKey) && has(self.projectAPIKeySecretRef))'
+                        - message: exactly one of personalAPIKey or personalAPIKeySecretRef
+                            must be set
+                          rule: '!(has(self.personalAPIKey) && has(self.personalAPIKeySecretRef))'
                       type:
                         enum:
                         - posthog
@@ -12824,6 +12902,10 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of apiKey or apiKeySecretRef must be
+                            set
+                          rule: '!(has(self.apiKey) && has(self.apiKeySecretRef))'
                       gemini:
                         properties:
                           credentialsFile:
@@ -12872,6 +12954,10 @@ spec:
                           url:
                             type: string
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of apiKey or apiKeySecretRef must be
+                            set
+                          rule: '!(has(self.apiKey) && has(self.apiKeySecretRef))'
                       openai:
                         properties:
                           apiKey:
@@ -12890,6 +12976,10 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of apiKey or apiKeySecretRef must be
+                            set
+                          rule: '!(has(self.apiKey) && has(self.apiKeySecretRef))'
                     type: object
                   logging:
                     properties:
@@ -12952,6 +13042,10 @@ spec:
                           username:
                             type: string
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of password or passwordSecretRef must
+                            be set
+                          rule: '!(has(self.password) && has(self.passwordSecretRef))'
                       type:
                         default: prometheus
                         enum:
@@ -13185,9 +13279,23 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of secretKey or secretKeySecretRef
+                            must be set
+                          rule: '!(has(self.secretKey) && has(self.secretKeySecretRef))'
+                        - message: exactly one of publishableKey or publishableKeySecretRef
+                            must be set
+                          rule: '!(has(self.publishableKey) && has(self.publishableKeySecretRef))'
+                        - message: exactly one of webhookSecret or webhookSecretSecretRef
+                            must be set
+                          rule: '!(has(self.webhookSecret) && has(self.webhookSecretSecretRef))'
                       useStagePublicRSAKey:
                         type: boolean
                     type: object
+                    x-kubernetes-validations:
+                    - message: exactly one of licenseServerAPIKey or licenseServerAPIKeySecretRef
+                        must be set
+                      rule: '!(has(self.licenseServerAPIKey) && has(self.licenseServerAPIKeySecretRef))'
                   status:
                     properties:
                       enabled:
@@ -13301,6 +13409,13 @@ spec:
                         required:
                         - host
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of username or usernameSecretRef must
+                            be set
+                          rule: '!(has(self.username) && has(self.usernameSecretRef))'
+                        - message: exactly one of password or passwordSecretRef must
+                            be set
+                          rule: '!(has(self.password) && has(self.passwordSecretRef))'
                       summaryRollupRetentionDays:
                         default: 365
                         type: integer
@@ -13327,6 +13442,10 @@ spec:
                             type: object
                             x-kubernetes-map-type: atomic
                         type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of apiKey or apiKeySecretRef must be
+                            set
+                          rule: '!(has(self.apiKey) && has(self.apiKeySecretRef))'
                       otlp:
                         properties:
                           endpoint:

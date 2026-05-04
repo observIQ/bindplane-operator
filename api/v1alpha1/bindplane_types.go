@@ -436,6 +436,7 @@ type BindplaneConfigSpec struct {
 }
 
 // SaaSConfig configures Bindplane SaaS-specific functionality.
+// +kubebuilder:validation:XValidation:rule="!(has(self.licenseServerAPIKey) && has(self.licenseServerAPIKeySecretRef))",message="exactly one of licenseServerAPIKey or licenseServerAPIKeySecretRef must be set"
 type SaaSConfig struct {
 	// Enabled toggles SaaS mode.
 	// +optional
@@ -464,6 +465,9 @@ type SaaSConfig struct {
 }
 
 // SaaSStripeConfig configures Stripe billing for Bindplane SaaS.
+// +kubebuilder:validation:XValidation:rule="!(has(self.secretKey) && has(self.secretKeySecretRef))",message="exactly one of secretKey or secretKeySecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.publishableKey) && has(self.publishableKeySecretRef))",message="exactly one of publishableKey or publishableKeySecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.webhookSecret) && has(self.webhookSecretSecretRef))",message="exactly one of webhookSecret or webhookSecretSecretRef must be set"
 type SaaSStripeConfig struct {
 	// Enabled toggles Stripe integration.
 	// +optional
@@ -604,6 +608,8 @@ type FeaturesConfig struct {
 }
 
 // PostHogConfig configures PostHog as the feature flag backend.
+// +kubebuilder:validation:XValidation:rule="!(has(self.projectAPIKey) && has(self.projectAPIKeySecretRef))",message="exactly one of projectAPIKey or projectAPIKeySecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.personalAPIKey) && has(self.personalAPIKeySecretRef))",message="exactly one of personalAPIKey or personalAPIKeySecretRef must be set"
 type PostHogConfig struct {
 	// ProjectAPIKey is the PostHog project API key (plain value; prefer projectAPIKeySecretRef in production).
 	// +optional
@@ -742,18 +748,32 @@ type FeatureOverridesConfig struct {
 }
 
 // ErrorsConfig configures error tracking for Bindplane.
+// +kubebuilder:validation:XValidation:rule="!(has(self.backendDSN) && has(self.backendDSNSecretRef))",message="exactly one of backendDSN or backendDSNSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.frontendDSN) && has(self.frontendDSNSecretRef))",message="exactly one of frontendDSN or frontendDSNSecretRef must be set"
 type ErrorsConfig struct {
 	// Enabled enables error tracking.
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
 
 	// BackendDSN is the DSN (Data Source Name) for the backend error tracking service.
+	// DSNs may contain authentication tokens; prefer backendDSNSecretRef in production.
 	// +optional
 	BackendDSN string `json:"backendDSN,omitempty"`
 
+	// BackendDSNSecretRef references a Kubernetes Secret containing the backend DSN.
+	// Takes precedence over BackendDSN when both are set.
+	// +optional
+	BackendDSNSecretRef *corev1.SecretKeySelector `json:"backendDSNSecretRef,omitempty"`
+
 	// FrontendDSN is the DSN for the frontend error tracking service.
+	// DSNs may contain authentication tokens; prefer frontendDSNSecretRef in production.
 	// +optional
 	FrontendDSN string `json:"frontendDSN,omitempty"`
+
+	// FrontendDSNSecretRef references a Kubernetes Secret containing the frontend DSN.
+	// Takes precedence over FrontendDSN when both are set.
+	// +optional
+	FrontendDSNSecretRef *corev1.SecretKeySelector `json:"frontendDSNSecretRef,omitempty"`
 
 	// Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging").
 	// +optional
@@ -828,6 +848,7 @@ type VectorSearchRedisConfig struct {
 }
 
 // LangsmithConfig configures LangSmith LLM call tracing.
+// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
 type LangsmithConfig struct {
 	// Enabled enables LangSmith tracing.
 	// +optional
@@ -860,6 +881,7 @@ type LangsmithConfig struct {
 }
 
 // OpenAIConfig configures OpenAI integration.
+// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
 type OpenAIConfig struct {
 	// APIKey is the OpenAI API key (plain value; prefer apiKeySecretRef in production).
 	// +optional
@@ -871,6 +893,7 @@ type OpenAIConfig struct {
 }
 
 // AnthropicConfig configures Anthropic integration.
+// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
 type AnthropicConfig struct {
 	// APIKey is the Anthropic API key (plain value; prefer apiKeySecretRef in production).
 	// +optional
@@ -1241,6 +1264,7 @@ type AdvancedCacheConfig struct {
 }
 
 // AdvancedCacheRedisConfig configures a Redis cache backend.
+// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
 type AdvancedCacheRedisConfig struct {
 	// Address is the Redis server address in host:port form (e.g. "redis.default.svc:6379").
 	Address string `json:"address"`
@@ -1565,6 +1589,7 @@ type TracingConfig struct {
 }
 
 // TracingHoneycombConfig defines Honeycomb tracing configuration.
+// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
 type TracingHoneycombConfig struct {
 	// APIKey is the Honeycomb API key (plain text). Use APIKeySecretRef instead for sensitive values.
 	// +optional
@@ -1610,6 +1635,7 @@ type MetricsConfig struct {
 }
 
 // MetricsPrometheusConfig defines Prometheus metrics configuration
+// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
 type MetricsPrometheusConfig struct {
 	// Endpoint is the HTTP path to serve metrics on (e.g. /metrics).
 	// +optional
@@ -1838,6 +1864,10 @@ type PodTemplateSpec struct {
 }
 
 // AuthConfig defines authentication configuration
+// +kubebuilder:validation:XValidation:rule="!(has(self.username) && has(self.usernameSecretRef))",message="exactly one of username or usernameSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.sessionSecret) && has(self.sessionSecretSecretRef))",message="exactly one of sessionSecret or sessionSecretSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
 type AuthConfig struct {
 	// Type specifies the authentication type.
 	// +optional
@@ -1898,6 +1928,7 @@ type AuthConfig struct {
 }
 
 // Auth0Config configures Auth0 as the Bindplane authentication provider.
+// +kubebuilder:validation:XValidation:rule="!(has(self.managementClientSecret) && has(self.managementClientSecretSecretRef))",message="exactly one of managementClientSecret or managementClientSecretSecretRef must be set"
 type Auth0Config struct {
 	// ClientID is the Auth0 application client ID.
 	// +optional
@@ -1949,6 +1980,7 @@ type Auth0SSOConfig struct {
 }
 
 // Auth0WIFConfig configures Workload Identity Federation for Auth0.
+// +kubebuilder:validation:XValidation:rule="!(has(self.clientSecret) && has(self.clientSecretSecretRef))",message="exactly one of clientSecret or clientSecretSecretRef must be set"
 type Auth0WIFConfig struct {
 	// ClientID is the WIF client ID.
 	// +optional
@@ -1969,6 +2001,8 @@ type Auth0WIFConfig struct {
 }
 
 // LDAPConfig defines LDAP and Active Directory authentication configuration
+// +kubebuilder:validation:XValidation:rule="!(has(self.bindUser) && has(self.bindUserSecretRef))",message="exactly one of bindUser or bindUserSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.bindPassword) && has(self.bindPasswordSecretRef))",message="exactly one of bindPassword or bindPasswordSecretRef must be set"
 type LDAPConfig struct {
 	// Protocol to use when connecting to the LDAP server. One of: ldap|ldaps
 	// +optional
@@ -2091,6 +2125,8 @@ type PostgresTLSConfig struct {
 }
 
 // OIDCConfig defines OpenID Connect authentication configuration
+// +kubebuilder:validation:XValidation:rule="!(has(self.clientID) && has(self.clientIDSecretRef))",message="exactly one of clientID or clientIDSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.clientSecret) && has(self.clientSecretSecretRef))",message="exactly one of clientSecret or clientSecretSecretRef must be set"
 type OIDCConfig struct {
 	// ClientID is the OIDC OAuth2 client ID
 	// +optional
@@ -2203,6 +2239,8 @@ type StoreConfig struct {
 }
 
 // PostgresConfig defines PostgreSQL store configuration
+// +kubebuilder:validation:XValidation:rule="!(has(self.username) && has(self.usernameSecretRef))",message="exactly one of username or usernameSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
 type PostgresConfig struct {
 	// Host specifies the PostgreSQL host
 	Host string `json:"host"`
