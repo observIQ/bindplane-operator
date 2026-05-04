@@ -160,10 +160,8 @@ type BindplaneComponentSpec struct {
 	// This is the supported way to add custom environment variables. Setting
 	// env on podTemplate.spec.containers[<name>] is intentionally ignored.
 	//
-	// Common uses:
-	//   - HTTP_PROXY / HTTPS_PROXY / NO_PROXY for egress proxies
-	//   - OTEL_EXPORTER_OTLP_* for third-party observability
-	//   - Cloud SDK credentials paths (e.g. GOOGLE_APPLICATION_CREDENTIALS)
+	// Environment variable names starting with BINDPLANE_ are rejected by the
+	// validating webhook unless the operator is started with --allow-bindplane-extra-env=true.
 	//
 	// +optional
 	// +listType=map
@@ -195,10 +193,8 @@ type BindplaneJobsComponentSpec struct {
 	// This is the supported way to add custom environment variables. Setting
 	// env on podTemplate.spec.containers[<name>] is intentionally ignored.
 	//
-	// Common uses:
-	//   - HTTP_PROXY / HTTPS_PROXY / NO_PROXY for egress proxies
-	//   - OTEL_EXPORTER_OTLP_* for third-party observability
-	//   - Cloud SDK credentials paths (e.g. GOOGLE_APPLICATION_CREDENTIALS)
+	// Environment variable names starting with BINDPLANE_ are rejected by the
+	// validating webhook unless the operator is started with --allow-bindplane-extra-env=true.
 	//
 	// +optional
 	// +listType=map
@@ -231,10 +227,8 @@ type BindplaneJobsMigrateComponentSpec struct {
 	// This is the supported way to add custom environment variables. Setting
 	// env on podTemplate.spec.containers[<name>] is intentionally ignored.
 	//
-	// Common uses:
-	//   - HTTP_PROXY / HTTPS_PROXY / NO_PROXY for egress proxies
-	//   - OTEL_EXPORTER_OTLP_* for third-party observability
-	//   - Cloud SDK credentials paths (e.g. GOOGLE_APPLICATION_CREDENTIALS)
+	// Environment variable names starting with BINDPLANE_ are rejected by the
+	// validating webhook unless the operator is started with --allow-bindplane-extra-env=true.
 	//
 	// +optional
 	// +listType=map
@@ -1476,10 +1470,8 @@ type TransformAgentComponentSpec struct {
 	// This is the supported way to add custom environment variables. Setting
 	// env on podTemplate.spec.containers[<name>] is intentionally ignored.
 	//
-	// Common uses:
-	//   - HTTP_PROXY / HTTPS_PROXY / NO_PROXY for egress proxies
-	//   - OTEL_EXPORTER_OTLP_* for third-party observability
-	//   - Cloud SDK credentials paths (e.g. GOOGLE_APPLICATION_CREDENTIALS)
+	// Environment variable names starting with BINDPLANE_ are rejected by the
+	// validating webhook unless the operator is started with --allow-bindplane-extra-env=true.
 	//
 	// +optional
 	// +listType=map
@@ -1520,10 +1512,8 @@ type TSDBComponentSpec struct {
 	// This is the supported way to add custom environment variables. Setting
 	// env on podTemplate.spec.containers[<name>] is intentionally ignored.
 	//
-	// Common uses:
-	//   - HTTP_PROXY / HTTPS_PROXY / NO_PROXY for egress proxies
-	//   - OTEL_EXPORTER_OTLP_* for third-party observability
-	//   - Cloud SDK credentials paths (e.g. GOOGLE_APPLICATION_CREDENTIALS)
+	// Environment variable names starting with BINDPLANE_ are rejected by the
+	// validating webhook unless the operator is started with --allow-bindplane-extra-env=true.
 	//
 	// +optional
 	// +listType=map
@@ -1564,10 +1554,8 @@ type NatsComponentSpec struct {
 	// This is the supported way to add custom environment variables. Setting
 	// env on podTemplate.spec.containers[<name>] is intentionally ignored.
 	//
-	// Common uses:
-	//   - HTTP_PROXY / HTTPS_PROXY / NO_PROXY for egress proxies
-	//   - OTEL_EXPORTER_OTLP_* for third-party observability
-	//   - Cloud SDK credentials paths (e.g. GOOGLE_APPLICATION_CREDENTIALS)
+	// Environment variable names starting with BINDPLANE_ are rejected by the
+	// validating webhook unless the operator is started with --allow-bindplane-extra-env=true.
 	//
 	// +optional
 	// +listType=map
