@@ -298,6 +298,11 @@ type BindplaneConfigSpec struct {
 	// When omitted, LLM features are disabled.
 	// +optional
 	LLM *LLMConfig `json:"llm,omitempty"`
+
+	// Quotas configures usage quota enforcement.
+	// When omitted, Bindplane uses its own defaults.
+	// +optional
+	Quotas *QuotasConfig `json:"quotas,omitempty"`
 }
 
 // SaaSConfig configures Bindplane SaaS-specific functionality.
@@ -633,6 +638,32 @@ type AnthropicConfig struct {
 	// APIKeySecretRef references a Kubernetes Secret containing the Anthropic API key.
 	// +optional
 	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
+}
+
+// QuotasConfig configures usage quota enforcement.
+type QuotasConfig struct {
+	// Enabled enables quota enforcement globally.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Enforced causes quota violations to be enforced (rejected) rather than only logged.
+	// +optional
+	Enforced bool `json:"enforced,omitempty"`
+
+	// Projects configures per-project quota enforcement.
+	// +optional
+	Projects *QuotasTierConfig `json:"projects,omitempty"`
+}
+
+// QuotasTierConfig configures quota enforcement for a specific tier.
+type QuotasTierConfig struct {
+	// Enabled enables quota enforcement for this tier.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Enforced causes quota violations for this tier to be enforced (rejected) rather than only logged.
+	// +optional
+	Enforced bool `json:"enforced,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.

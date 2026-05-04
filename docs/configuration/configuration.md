@@ -46,6 +46,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Feature overrides](#feature-overrides)
 - [Errors](#errors)
 - [LLM](#llm)
+- [Quotas](#quotas)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1314,6 +1315,19 @@ The `spec.config.llm` section configures large language model integrations. When
 
 For `apiKey` and `apiKeySecretRef`, the Secret reference takes precedence when both are set. Prefer Secret references in production.
 
+## Quotas
+
+The `spec.config.quotas` section configures usage quota enforcement. When omitted, Bindplane uses its own defaults.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.quotas.enabled` | `BINDPLANE_QUOTAS_ENABLED` | `false` | No |
+| `spec.config.quotas.enforced` | `BINDPLANE_QUOTAS_ENFORCED` | `false` | No |
+| `spec.config.quotas.projects.enabled` | `BINDPLANE_QUOTAS_PROJECTS_ENABLED` | `false` | No |
+| `spec.config.quotas.projects.enforced` | `BINDPLANE_QUOTAS_PROJECTS_ENFORCED` | `false` | No |
+
+`enabled` activates quota tracking; `enforced` causes violations to be rejected rather than only logged. The same semantics apply to `projects` (per-project quotas).
+
 ```yaml
 spec:
   config:
@@ -1418,6 +1432,12 @@ spec:
         apiKeySecretRef:
           name: llm-secrets
           key: anthropic-api-key
+    quotas:
+      enabled: true
+      enforced: true
+      projects:
+        enabled: true
+        enforced: false
 ```
 
 ## Scope
