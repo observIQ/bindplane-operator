@@ -383,6 +383,7 @@ _Appears in:_
 | `features` _[FeaturesConfig](#featuresconfig)_ | Features configures the feature flag backend and feature overrides.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `errors` _[ErrorsConfig](#errorsconfig)_ | Errors configures error tracking (e.g., BetterStack, Sentry).<br />When omitted, error tracking is disabled. |  | Optional: \{\} <br /> |
 | `llm` _[LLMConfig](#llmconfig)_ | LLM configures large language model integrations.<br />When omitted, LLM features are disabled. |  | Optional: \{\} <br /> |
+| `quotas` _[QuotasConfig](#quotasconfig)_ | Quotas configures usage quota enforcement.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsComponentSpec
 
@@ -930,6 +931,31 @@ _Appears in:_
 | `noHeap` _boolean_ | NoHeap disables heap profiling. | false | Optional: \{\} <br /> |
 | `noGoroutine` _boolean_ | NoGoroutine disables goroutine profiling. | false | Optional: \{\} <br /> |
 | `mutex` _boolean_ | Mutex enables mutex profiling (disabled by default in Bindplane). | false | Optional: \{\} <br /> |
+
+#### QuotasConfig
+
+QuotasConfig configures usage quota enforcement.
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled enables quota enforcement globally. |  | Optional: \{\} <br /> |
+| `enforced` _boolean_ | Enforced causes quota violations to be enforced (rejected) rather than only logged. |  | Optional: \{\} <br /> |
+| `projects` _[QuotasTierConfig](#quotastierconfig)_ | Projects configures per-project quota enforcement. |  | Optional: \{\} <br /> |
+
+#### QuotasTierConfig
+
+QuotasTierConfig configures quota enforcement for a specific tier.
+
+_Appears in:_
+- [QuotasConfig](#quotasconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled enables quota enforcement for this tier. |  | Optional: \{\} <br /> |
+| `enforced` _boolean_ | Enforced causes quota violations for this tier to be enforced (rejected) rather than only logged. |  | Optional: \{\} <br /> |
 
 #### SaaSConfig
 

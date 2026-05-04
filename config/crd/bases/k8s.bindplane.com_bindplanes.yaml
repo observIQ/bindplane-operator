@@ -12712,6 +12712,20 @@ spec:
                     x-kubernetes-validations:
                     - message: projectID is required when profiling is enabled
                       rule: '!self.enabled || (size(self.projectID) > 0)'
+                  quotas:
+                    properties:
+                      enabled:
+                        type: boolean
+                      enforced:
+                        type: boolean
+                      projects:
+                        properties:
+                          enabled:
+                            type: boolean
+                          enforced:
+                            type: boolean
+                        type: object
+                    type: object
                   saas:
                     properties:
                       enabled:
