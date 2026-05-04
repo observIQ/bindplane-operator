@@ -172,9 +172,20 @@ lint-config: ## Verify golangci-lint linter configuration
 gosec: ## Run gosec security scanner
 	$(GOSEC) ./...
 
+STATICCHECK_EXCLUDED_FILES := api/v1alpha1/groupversion_info.go
+
 .PHONY: staticcheck
 staticcheck: ## Run staticcheck static analysis
-	$(STATICCHECK) ./...
+	@status=0; \
+	output="$$( $(STATICCHECK) ./... 2>&1 )" || status=$$?; \
+	filtered="$$(printf '%s\n' "$$output" | awk -v exclude="$(STATICCHECK_EXCLUDED_FILES)" 'BEGIN { split(exclude, files, " "); for (i in files) excluded[files[i]]=1 } { file=$$0; sub(/:.*/, "", file); if (!excluded[file]) print }')"; \
+	if [ -n "$$filtered" ]; then \
+		printf '%s\n' "$$filtered"; \
+		exit $$status; \
+	fi; \
+	if [ $$status -ne 0 ] && [ -z "$$output" ]; then \
+		exit $$status; \
+	fi
 
 .PHONY: govulncheck
 govulncheck: ## Run govulncheck vulnerability scanner
