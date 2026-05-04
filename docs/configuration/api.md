@@ -350,7 +350,6 @@ _Appears in:_
 | `strategy` _[DeploymentStrategy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#deploymentstrategy-v1-apps)_ | Strategy defines the rollout strategy for the Bindplane Node Deployment.<br />When omitted, defaults to RollingUpdate with maxSurge=1 and maxUnavailable=0,<br />ensuring a replacement pod is running before the old pod is removed. |  | Optional: \{\} <br /> |
 | `autoscaling` _[NodeAutoscalingSpec](#nodeautoscalingspec)_ | Autoscaling configures optional horizontal pod autoscaling for Bindplane Node.<br />When autoscaling is enabled, spec.bindplane.replicas is ignored and the<br />HorizontalPodAutoscaler controls the replica count. |  | Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
-| `opamp` _[OpAMPComponentSpec](#opampcomponentspec)_ | OpAMP, when enabled, runs a dedicated Deployment for OpAMP/agent traffic<br />alongside the primary Node deployment. The primary Node deployment continues<br />to handle frontend (UI/API) traffic. When disabled (the default), the primary<br />Node deployment serves both. |  | Optional: \{\} <br /> |
 
 #### BindplaneConfigSpec
 
@@ -432,6 +431,7 @@ _Appears in:_
 | `transformAgent` _[TransformAgentComponentSpec](#transformagentcomponentspec)_ | Transform Agent pod specification | \{  \} | Optional: \{\} <br /> |
 | `tsdb` _[TSDBComponentSpec](#tsdbcomponentspec)_ | TSDB pod specification |  | Optional: \{\} <br /> |
 | `nats` _[NatsComponentSpec](#natscomponentspec)_ | NATS pod specification | \{  \} | Optional: \{\} <br /> |
+| `opamp` _[OpAMPComponentSpec](#opampcomponentspec)_ | OpAMP, when enabled, runs a dedicated Deployment for OpAMP/agent traffic<br />alongside the primary Node deployment. When nil or disabled (the default),<br />the primary Node deployment serves both frontend and OpAMP traffic. |  | Optional: \{\} <br /> |
 
 #### CertManagerTLSIssuerRef
 
@@ -832,7 +832,7 @@ the frontend (UI/API), for example when you have a large fleet of agents but
 modest UI traffic.
 
 _Appears in:_
-- [BindplaneComponentSpec](#bindplanecomponentspec)
+- [BindplaneSpec](#bindplanespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |

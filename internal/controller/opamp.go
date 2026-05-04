@@ -56,7 +56,7 @@ const (
 // is a delete-if-exists pass to clean up resources from a previously enabled
 // OpAMP deployment.
 func (r *BindplaneReconciler) reconcileOpAMP(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	if bindplane.Spec.Bindplane.OpAMP == nil || !bindplane.Spec.Bindplane.OpAMP.Enabled {
+	if bindplane.Spec.OpAMP == nil || !bindplane.Spec.OpAMP.Enabled {
 		return r.deleteOpAMPResourcesIfExist(ctx, bindplane, log)
 	}
 
@@ -79,7 +79,7 @@ func (r *BindplaneReconciler) reconcileOpAMP(ctx context.Context, bindplane *bin
 	}
 
 	// Reconcile PodDisruptionBudget
-	if !bindplane.Spec.Bindplane.OpAMP.DisablePodDisruptionBudget {
+	if !bindplane.Spec.OpAMP.DisablePodDisruptionBudget {
 		pdb := newPodDisruptionBudget(bindplane, opampComponent)
 		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
 			return err
@@ -148,7 +148,7 @@ func (r *BindplaneReconciler) opampServiceAccount(bindplane *bindplanev1alpha1.B
 }
 
 func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
-	cfg := bindplane.Spec.Bindplane.OpAMP
+	cfg := bindplane.Spec.OpAMP
 
 	// When autoscaling is enabled, do not set Replicas on the Deployment so the
 	// HorizontalPodAutoscaler has exclusive control over the replica count.
@@ -320,18 +320,18 @@ func getOpAMPOverrideEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.En
 	}
 
 	// Per-deployment override for max simultaneous connections.
-	if bindplane.Spec.Bindplane.OpAMP != nil && bindplane.Spec.Bindplane.OpAMP.MaxSimultaneousConnections != nil {
+	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.MaxSimultaneousConnections != nil {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  bindplaneAgentsMaxSimultaneousConnectionsEnvVar,
-			Value: fmt.Sprintf("%d", *bindplane.Spec.Bindplane.OpAMP.MaxSimultaneousConnections),
+			Value: fmt.Sprintf("%d", *bindplane.Spec.OpAMP.MaxSimultaneousConnections),
 		})
 	}
 
 	// Per-deployment override for OpAMP shutdown grace period target.
-	if bindplane.Spec.Bindplane.OpAMP != nil && bindplane.Spec.Bindplane.OpAMP.ShutdownGracePeriodTarget != "" {
+	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.ShutdownGracePeriodTarget != "" {
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar,
-			Value: bindplane.Spec.Bindplane.OpAMP.ShutdownGracePeriodTarget,
+			Value: bindplane.Spec.OpAMP.ShutdownGracePeriodTarget,
 		})
 	}
 
@@ -346,7 +346,7 @@ func (r *BindplaneReconciler) opampService(bindplane *bindplanev1alpha1.Bindplan
 // When autoscaling is disabled (or the Autoscaling field is nil), any existing HPA is deleted
 // so that the static replica count from the Deployment takes effect.
 func (r *BindplaneReconciler) reconcileOpAMPHPA(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	if bindplane.Spec.Bindplane.OpAMP == nil || bindplane.Spec.Bindplane.OpAMP.Autoscaling == nil || !bindplane.Spec.Bindplane.OpAMP.Autoscaling.Enabled {
+	if bindplane.Spec.OpAMP == nil || bindplane.Spec.OpAMP.Autoscaling == nil || !bindplane.Spec.OpAMP.Autoscaling.Enabled {
 		return r.deleteHPAIfExists(ctx, bindplane, opampComponent, log)
 	}
 
@@ -357,7 +357,7 @@ func (r *BindplaneReconciler) reconcileOpAMPHPA(ctx context.Context, bindplane *
 // opampHPA builds the HorizontalPodAutoscaler for the OpAMP deployment, merging user-provided
 // overrides with the same defaults used for the Node HPA.
 func (r *BindplaneReconciler) opampHPA(bindplane *bindplanev1alpha1.Bindplane) *autoscalingv2.HorizontalPodAutoscaler {
-	cfg := bindplane.Spec.Bindplane.OpAMP.Autoscaling
+	cfg := bindplane.Spec.OpAMP.Autoscaling
 	labels := getLabels(bindplane, opampComponent)
 
 	minReplicas := nodeHPADefaultMinReplicas

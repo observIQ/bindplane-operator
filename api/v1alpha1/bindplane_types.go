@@ -64,6 +64,12 @@ type BindplaneSpec struct {
 	// +optional
 	// +kubebuilder:default={}
 	Nats *NatsComponentSpec `json:"nats,omitempty"`
+
+	// OpAMP, when enabled, runs a dedicated Deployment for OpAMP/agent traffic
+	// alongside the primary Node deployment. When nil or disabled (the default),
+	// the primary Node deployment serves both frontend and OpAMP traffic.
+	// +optional
+	OpAMP *OpAMPComponentSpec `json:"opamp,omitempty"`
 }
 
 // NodeAutoscalingSpec configures horizontal pod autoscaling for Bindplane Node.
@@ -167,13 +173,6 @@ type BindplaneComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
-
-	// OpAMP, when enabled, runs a dedicated Deployment for OpAMP/agent traffic
-	// alongside the primary Node deployment. The primary Node deployment continues
-	// to handle frontend (UI/API) traffic. When disabled (the default), the primary
-	// Node deployment serves both.
-	// +optional
-	OpAMP *OpAMPComponentSpec `json:"opamp,omitempty"`
 }
 
 // OpAMPComponentSpec defines an optional dedicated Bindplane Deployment that

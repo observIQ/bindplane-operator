@@ -49,7 +49,7 @@ func findEnvVar(envVars []corev1.EnvVar, name string) *corev1.EnvVar {
 // newTestBindplaneWithOpAMP returns a test Bindplane CR with OpAMP enabled.
 func newTestBindplaneWithOpAMP(name, namespace string) *bindplanev1alpha1.Bindplane {
 	bp := newTestBindplane(name, namespace)
-	bp.Spec.Bindplane.OpAMP = &bindplanev1alpha1.OpAMPComponentSpec{
+	bp.Spec.OpAMP = &bindplanev1alpha1.OpAMPComponentSpec{
 		Enabled: true,
 	}
 	return bp
@@ -92,20 +92,20 @@ var _ = Describe("opampDeployment", func() {
 
 	It("uses the user-specified replicas", func() {
 		replicas := int32(5)
-		bindplane.Spec.Bindplane.OpAMP.Replicas = &replicas
+		bindplane.Spec.OpAMP.Replicas = &replicas
 		dep := r.opampDeployment(bindplane)
 		Expect(dep.Spec.Replicas).NotTo(BeNil())
 		Expect(*dep.Spec.Replicas).To(Equal(int32(5)))
 	})
 
 	It("sets replicas to nil when autoscaling is enabled", func() {
-		bindplane.Spec.Bindplane.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		bindplane.Spec.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
 		dep := r.opampDeployment(bindplane)
 		Expect(dep.Spec.Replicas).To(BeNil())
 	})
 
 	It("uses the user-specified resources", func() {
-		bindplane.Spec.Bindplane.OpAMP.Resources = &corev1.ResourceRequirements{
+		bindplane.Spec.OpAMP.Resources = &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("500m"),
 				corev1.ResourceMemory: resource.MustParse("512Mi"),
@@ -123,14 +123,14 @@ var _ = Describe("opampDeployment", func() {
 
 	It("uses the user-specified strategy", func() {
 		recreate := appsv1.RecreateDeploymentStrategyType
-		bindplane.Spec.Bindplane.OpAMP.Strategy = &appsv1.DeploymentStrategy{Type: recreate}
+		bindplane.Spec.OpAMP.Strategy = &appsv1.DeploymentStrategy{Type: recreate}
 		dep := r.opampDeployment(bindplane)
 		Expect(dep.Spec.Strategy.Type).To(Equal(recreate))
 	})
 
 	It("uses the user-specified minReadySeconds", func() {
 		mrs := int32(120)
-		bindplane.Spec.Bindplane.OpAMP.MinReadySeconds = &mrs
+		bindplane.Spec.OpAMP.MinReadySeconds = &mrs
 		dep := r.opampDeployment(bindplane)
 		Expect(dep.Spec.MinReadySeconds).To(Equal(int32(120)))
 	})
@@ -182,7 +182,7 @@ var _ = Describe("getOpAMPOverrideEnvVars", func() {
 
 	It("sets max simultaneous connections when configured", func() {
 		maxConn := int64(2000)
-		bindplane.Spec.Bindplane.OpAMP.MaxSimultaneousConnections = &maxConn
+		bindplane.Spec.OpAMP.MaxSimultaneousConnections = &maxConn
 		envVars := getOpAMPOverrideEnvVars(bindplane)
 		connVar := findEnvVar(envVars, bindplaneAgentsMaxSimultaneousConnectionsEnvVar)
 		Expect(connVar).NotTo(BeNil())
@@ -196,7 +196,7 @@ var _ = Describe("getOpAMPOverrideEnvVars", func() {
 	})
 
 	It("sets shutdown grace period target when configured", func() {
-		bindplane.Spec.Bindplane.OpAMP.ShutdownGracePeriodTarget = "0.6"
+		bindplane.Spec.OpAMP.ShutdownGracePeriodTarget = "0.6"
 		envVars := getOpAMPOverrideEnvVars(bindplane)
 		graceVar := findEnvVar(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar)
 		Expect(graceVar).NotTo(BeNil())
@@ -230,7 +230,7 @@ var _ = Describe("opampDeployment env ordering", func() {
 		}
 		// Set the OpAMP-specific override
 		maxConn := int64(2000)
-		bindplane.Spec.Bindplane.OpAMP.MaxSimultaneousConnections = &maxConn
+		bindplane.Spec.OpAMP.MaxSimultaneousConnections = &maxConn
 
 		dep := r.opampDeployment(bindplane)
 		envVars := dep.Spec.Template.Spec.Containers[0].Env
@@ -340,7 +340,7 @@ var _ = Describe("Reconcile - OpAMP", func() {
 	It("does not create OpAMP resources when enabled=false", func() {
 		name := "bp-opamp-disabled"
 		bp := newTestBindplane(name, testNamespace)
-		bp.Spec.Bindplane.OpAMP = &bindplanev1alpha1.OpAMPComponentSpec{Enabled: false}
+		bp.Spec.OpAMP = &bindplanev1alpha1.OpAMPComponentSpec{Enabled: false}
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()
@@ -394,7 +394,7 @@ var _ = Describe("Reconcile - OpAMP", func() {
 	It("creates HPA when autoscaling is enabled", func() {
 		name := "bp-opamp-hpa"
 		bp := newTestBindplaneWithOpAMP(name, testNamespace)
-		bp.Spec.Bindplane.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		bp.Spec.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()
@@ -424,7 +424,7 @@ var _ = Describe("Reconcile - OpAMP", func() {
 	It("deletes HPA when autoscaling is disabled after being enabled", func() {
 		name := "bp-opamp-hpa-del"
 		bp := newTestBindplaneWithOpAMP(name, testNamespace)
-		bp.Spec.Bindplane.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		bp.Spec.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()
@@ -436,7 +436,7 @@ var _ = Describe("Reconcile - OpAMP", func() {
 		// Disable autoscaling
 		updated := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
-		updated.Spec.Bindplane.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: false}
+		updated.Spec.OpAMP.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: false}
 		Expect(k8sClient.Update(testCtx, updated)).To(Succeed())
 
 		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
@@ -462,7 +462,7 @@ var _ = Describe("Reconcile - OpAMP", func() {
 		// Disable OpAMP
 		updated := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
-		updated.Spec.Bindplane.OpAMP.Enabled = false
+		updated.Spec.OpAMP.Enabled = false
 		Expect(k8sClient.Update(testCtx, updated)).To(Succeed())
 
 		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
@@ -492,7 +492,7 @@ var _ = Describe("Reconcile - OpAMP", func() {
 		// Remove the OpAMP block entirely
 		updated := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
-		updated.Spec.Bindplane.OpAMP = nil
+		updated.Spec.OpAMP = nil
 		Expect(k8sClient.Update(testCtx, updated)).To(Succeed())
 
 		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
@@ -532,7 +532,7 @@ var _ = Describe("Reconcile - OpAMP", func() {
 	It("does not create PDB when disablePodDisruptionBudget=true", func() {
 		name := "bp-opamp-no-pdb"
 		bp := newTestBindplaneWithOpAMP(name, testNamespace)
-		bp.Spec.Bindplane.OpAMP.DisablePodDisruptionBudget = true
+		bp.Spec.OpAMP.DisablePodDisruptionBudget = true
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()

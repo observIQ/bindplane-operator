@@ -1508,22 +1508,22 @@ The `podTemplate` field gives access to the full Kubernetes pod spec (toleration
 
 By default, the Bindplane Node deployment serves both the frontend (UI and REST API) and OpAMP/agent traffic on the same pods. When you have a large fleet of agents but modest UI traffic, you can scale agent handling independently by enabling a dedicated OpAMP deployment.
 
-When `spec.bindplane.opamp.enabled` is `true`, the operator provisions a second Deployment (`<name>-opamp`) running the same Bindplane EE image in `node` mode. Both Deployments share the same configuration (license, store, event bus, auth). A separate Service (`<name>-opamp`) exposes the OpAMP pods.
+When `spec.opamp.enabled` is `true`, the operator provisions a second Deployment (`<name>-opamp`) running the same Bindplane EE image in `node` mode. Both Deployments share the same configuration (license, store, event bus, auth). A separate Service (`<name>-opamp`) exposes the OpAMP pods.
 
-> **Warning:** The OpAMP deployment shares the same Bindplane configuration as the primary Node deployment (license, store, event bus, auth). Changing `spec.bindplane.opamp.maxSimultaneousConnections` overrides `spec.config.agents.maxSimultaneousConnections` for the OpAMP pods only; the frontend (Node) pods continue to use the shared value.
+> **Warning:** The OpAMP deployment shares the same Bindplane configuration as the primary Node deployment (license, store, event bus, auth). Changing `spec.opamp.maxSimultaneousConnections` overrides `spec.config.agents.maxSimultaneousConnections` for the OpAMP pods only; the frontend (Node) pods continue to use the shared value.
 
 | CRD Field | Default | Description |
 |---|---|---|
-| `spec.bindplane.opamp.enabled` | `false` | Enables the dedicated OpAMP deployment |
-| `spec.bindplane.opamp.replicas` | `3` | Number of OpAMP replicas (ignored when autoscaling is enabled) |
-| `spec.bindplane.opamp.resources` | 2 CPU / 2 GiB | Compute resources for the OpAMP container |
-| `spec.bindplane.opamp.podTemplate` | — | Pod template overrides (same merge rules as other components) |
-| `spec.bindplane.opamp.disablePodDisruptionBudget` | `false` | Disables the operator-managed PDB |
-| `spec.bindplane.opamp.minReadySeconds` | termination grace period | Minimum seconds a pod must be ready before considered available |
-| `spec.bindplane.opamp.strategy` | RollingUpdate maxSurge=1 maxUnavailable=0 | Rollout strategy |
-| `spec.bindplane.opamp.autoscaling` | — | HPA configuration (same structure as `spec.bindplane.autoscaling`) |
-| `spec.bindplane.opamp.maxSimultaneousConnections` | shared value | Per-deployment override for `BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS` |
-| `spec.bindplane.opamp.shutdownGracePeriodTarget` | — | Fraction (0–1) of shutdown grace period for OpAMP drain |
+| `spec.opamp.enabled` | `false` | Enables the dedicated OpAMP deployment |
+| `spec.opamp.replicas` | `3` | Number of OpAMP replicas (ignored when autoscaling is enabled) |
+| `spec.opamp.resources` | 2 CPU / 2 GiB | Compute resources for the OpAMP container |
+| `spec.opamp.podTemplate` | — | Pod template overrides (same merge rules as other components) |
+| `spec.opamp.disablePodDisruptionBudget` | `false` | Disables the operator-managed PDB |
+| `spec.opamp.minReadySeconds` | termination grace period | Minimum seconds a pod must be ready before considered available |
+| `spec.opamp.strategy` | RollingUpdate maxSurge=1 maxUnavailable=0 | Rollout strategy |
+| `spec.opamp.autoscaling` | — | HPA configuration (same structure as `spec.bindplane.autoscaling`) |
+| `spec.opamp.maxSimultaneousConnections` | shared value | Per-deployment override for `BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS` |
+| `spec.opamp.shutdownGracePeriodTarget` | — | Fraction (0–1) of shutdown grace period for OpAMP drain |
 
 ### Example: enabling OpAMP split with HPA
 
@@ -1546,20 +1546,20 @@ spec:
         memory: "1024Mi"
       limits:
         memory: "1024Mi"
-    opamp:
+  opamp:
+    enabled: true
+    resources:
+      requests:
+        cpu: "2000m"
+        memory: "2048Mi"
+      limits:
+        memory: "2048Mi"
+    maxSimultaneousConnections: 2000
+    shutdownGracePeriodTarget: "0.6"
+    autoscaling:
       enabled: true
-      resources:
-        requests:
-          cpu: "2000m"
-          memory: "2048Mi"
-        limits:
-          memory: "2048Mi"
-      maxSimultaneousConnections: 2000
-      shutdownGracePeriodTarget: "0.6"
-      autoscaling:
-        enabled: true
-        minReplicas: 3
-        maxReplicas: 20
+      minReplicas: 3
+      maxReplicas: 20
 ```
 
 ### Ingress routing guidance
