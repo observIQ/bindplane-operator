@@ -420,10 +420,63 @@ const (
 	bindplaneLLMAnthropicAPIKeyEnvVar                  = "BINDPLANE_LLM_ANTHROPIC_API_KEY" // #nosec G101 -- env var name, not a credential
 
 	// Quotas configuration
-	bindplaneQuotasEnabledEnvVar          = "BINDPLANE_QUOTAS_ENABLED"
-	bindplaneQuotasEnforcedEnvVar         = "BINDPLANE_QUOTAS_ENFORCED"
-	bindplaneQuotasProjectsEnabledEnvVar  = "BINDPLANE_QUOTAS_PROJECTS_ENABLED"
-	bindplaneQuotasProjectsEnforcedEnvVar = "BINDPLANE_QUOTAS_PROJECTS_ENFORCED"
+	bindplaneQuotasEnabledEnvVar                       = "BINDPLANE_QUOTAS_ENABLED"
+	bindplaneQuotasEnforcedEnvVar                      = "BINDPLANE_QUOTAS_ENFORCED"
+	bindplaneQuotasProjectsEnabledEnvVar               = "BINDPLANE_QUOTAS_PROJECTS_ENABLED"
+	bindplaneQuotasProjectsEnforcedEnvVar              = "BINDPLANE_QUOTAS_PROJECTS_ENFORCED"
+	bindplaneQuotasOrganizationsEnabledEnvVar          = "BINDPLANE_QUOTAS_ORGANIZATIONS_ENABLED"
+	bindplaneQuotasOrganizationsEnforcedEnvVar         = "BINDPLANE_QUOTAS_ORGANIZATIONS_ENFORCED"
+	bindplaneQuotasOrganizationsDefaultMaxAgentsEnvVar = "BINDPLANE_QUOTAS_ORGANIZATIONS_DEFAULT_MAX_AGENTS"
+	bindplaneQuotasProjectsDefaultMaxAgentsEnvVar      = "BINDPLANE_QUOTAS_PROJECTS_DEFAULT_MAX_AGENTS"
+
+	// OIDC additional configuration
+	bindplaneOIDCDisableInvitationsEnvVar = "BINDPLANE_OIDC_DISABLE_INVITATIONS"
+
+	// Errors additional configuration
+	bindplaneErrorsReleaseEnvVar          = "BINDPLANE_ERRORS_RELEASE"
+	bindplaneErrorsTracesSampleRateEnvVar = "BINDPLANE_ERRORS_TRACES_SAMPLE_RATE"
+	bindplaneErrorsDebugEnvVar            = "BINDPLANE_ERRORS_DEBUG"
+
+	// LLM additional configuration
+	bindplaneLLMGeminiCredentialsFileEnvVar    = "BINDPLANE_LLM_GEMINI_CREDENTIALS_FILE" // #nosec G101 -- env var name, not a credential
+	bindplaneLLMGeminiMaxTokensEnvVar          = "BINDPLANE_LLM_GEMINI_MAX_TOKENS"       // #nosec G101 -- env var name, not a credential
+	bindplaneLLMLangsmithURLEnvVar             = "BINDPLANE_LLM_LANGSMITH_URL"
+	bindplaneLLMLangsmithSanitizeContentEnvVar = "BINDPLANE_LLM_LANGSMITH_SANITIZE_CONTENT"
+	bindplaneLLMLangsmithTagsEnvVar            = "BINDPLANE_LLM_LANGSMITH_TAGS"
+
+	// Features additional configuration
+	bindplaneFeaturesPostHogFeatureFlagRequestTimeoutEnvVar                = "BINDPLANE_FEATURES_POSTHOG_FEATURE_FLAG_REQUEST_TIMEOUT"
+	bindplaneFeaturesOverridesSecopsGCSIntegrationEnvVar                   = "BINDPLANE_FEATURES_OVERRIDES_SECOPS_GCS_INTEGRATION"
+	bindplaneFeaturesOverridesSnapshotPipelineIntelligenceEnvVar           = "BINDPLANE_FEATURES_OVERRIDES_SNAPSHOT_PIPELINE_INTELLIGENCE"
+	bindplaneFeaturesOverridesPipelineIntelligenceSplunkConfigImportEnvVar = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SPLUNK_CONFIG_IMPORT"
+	bindplaneFeaturesOverridesRawLogMetricViewsEnvVar                      = "BINDPLANE_FEATURES_OVERRIDES_RAW_LOG_METRIC_VIEWS"
+	bindplaneFeaturesOverridesVaultEnvVar                                  = "BINDPLANE_FEATURES_OVERRIDES_VAULT"
+	bindplaneFeaturesOverridesAuth0SSOEnvVar                               = "BINDPLANE_FEATURES_OVERRIDES_AUTH0_SSO"
+	bindplaneFeaturesOverridesAixPlatformEnvVar                            = "BINDPLANE_FEATURES_OVERRIDES_AIX_PLATFORM"
+	bindplaneFeaturesOverridesAdvancedPipelineEditorEnvVar                 = "BINDPLANE_FEATURES_OVERRIDES_ADVANCED_PIPELINE_EDITOR"
+	bindplaneFeaturesOverridesIdentityTablesDualWriteEnvVar                = "BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_DUAL_WRITE"
+	bindplaneFeaturesOverridesIdentityTablesCutoverEnvVar                  = "BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_CUTOVER"
+	bindplaneFeaturesOverridesV2ConfigurationEnvVar                        = "BINDPLANE_FEATURES_OVERRIDES_V2_CONFIGURATION"
+	bindplaneFeaturesOverridesV2ConnectorsEnvVar                           = "BINDPLANE_FEATURES_OVERRIDES_V2_CONNECTORS"
+	bindplaneFeaturesOverridesBindplaneBlueprintsEnvVar                    = "BINDPLANE_FEATURES_OVERRIDES_BINDPLANE_BLUEPRINTS"
+	bindplaneFeaturesOverridesFleetsEnvVar                                 = "BINDPLANE_FEATURES_OVERRIDES_FLEETS"
+
+	// EncryptionProvider cache configuration
+	bindplaneEncryptionProviderCacheCapacityEnvVar     = "BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CAPACITY"
+	bindplaneEncryptionProviderCacheCacheTimeoutEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CACHE_TIMEOUT"
+
+	// SaaS Stripe additional configuration
+	bindplaneSaaSStripeMeterReportIntervalEnvVar = "BINDPLANE_SAAS_STRIPE_METER_REPORT_INTERVAL"
+
+	// NATS TLS additional configuration
+	bindplaneNatsTLSSkipVerifyEnvVar = "BINDPLANE_NATS_TLS_SKIP_VERIFY"
+
+	// Advanced agent configuration
+	bindplaneAdvancedAgentTelemetryPortEnvVar = "BINDPLANE_ADVANCED_AGENT_TELEMETRY_PORT"
+
+	// Advanced rollout additional configuration
+	bindplaneAdvancedRolloutRetryIntervalEnvVar     = "BINDPLANE_ADVANCED_ROLLOUT_RETRY_INTERVAL"
+	bindplaneAdvancedRolloutUpdateWorkerCountEnvVar = "BINDPLANE_ADVANCED_ROLLOUT_UPDATE_WORKER_COUNT"
 )
 
 const (

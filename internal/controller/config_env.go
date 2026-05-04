@@ -106,6 +106,9 @@ func getOIDCEnvVars(oidc *bindplanev1alpha1.OIDCConfig) []corev1.EnvVar {
 	if len(oidc.Scopes) > 0 {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCScopesEnvVar, Value: strings.Join(oidc.Scopes, ",")})
 	}
+	if oidc.DisableInvitations {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCDisableInvitationsEnvVar, Value: "true"})
+	}
 	return envVars
 }
 
@@ -570,12 +573,16 @@ func getNatsTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 		return nil
 	}
 	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
-	return []corev1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{Name: bindplaneNatsEnableTLSEnvVar, Value: "true"},
 		{Name: bindplaneNatsTLSCertEnvVar, Value: internalTLSNatsMountPath + "/" + certKey},
 		{Name: bindplaneNatsTLSKeyEnvVar, Value: internalTLSNatsMountPath + "/" + keyKey},
 		{Name: bindplaneNatsTLSCAEnvVar, Value: internalTLSNatsMountPath + "/" + caKey},
 	}
+	if bindplane.Spec.Config.Nats != nil && bindplane.Spec.Config.Nats.TLS != nil && bindplane.Spec.Config.Nats.TLS.SkipVerify {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneNatsTLSSkipVerifyEnvVar, Value: "true"})
+	}
+	return envVars
 }
 
 // getTransformAgentTLSEnvVars returns env vars for Transform Agent TLS when cert-manager is enabled (spec.transformAgent.tls.certManager).
@@ -1020,6 +1027,9 @@ func getSaaSStripeEnvVars(stripe *bindplanev1alpha1.SaaSStripeConfig) []corev1.E
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesCollectorsEnvVar, Value: mn.Collectors})
 		}
 	}
+	if stripe.MeterReportInterval != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeMeterReportIntervalEnvVar, Value: stripe.MeterReportInterval})
+	}
 	return envVars
 }
 
@@ -1042,6 +1052,20 @@ func getQuotasConfigEnvVars(q *bindplanev1alpha1.QuotasConfig) []corev1.EnvVar {
 		}
 		if q.Projects.Enforced {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasProjectsEnforcedEnvVar, Value: "true"})
+		}
+		if q.Projects.Default != nil && q.Projects.Default.MaxAgents > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasProjectsDefaultMaxAgentsEnvVar, Value: strconv.Itoa(q.Projects.Default.MaxAgents)})
+		}
+	}
+	if q.Organizations != nil {
+		if q.Organizations.Enabled {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasOrganizationsEnabledEnvVar, Value: "true"})
+		}
+		if q.Organizations.Enforced {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasOrganizationsEnforcedEnvVar, Value: "true"})
+		}
+		if q.Organizations.Default != nil && q.Organizations.Default.MaxAgents > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasOrganizationsDefaultMaxAgentsEnvVar, Value: strconv.Itoa(q.Organizations.Default.MaxAgents)})
 		}
 	}
 	return envVars
@@ -1078,6 +1102,9 @@ func getPostHogEnvVars(ph *bindplanev1alpha1.PostHogConfig) []corev1.EnvVar {
 	}
 	if ph.DefaultFeatureFlagsPollingInterval != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesPostHogPollingIntervalEnvVar, Value: ph.DefaultFeatureFlagsPollingInterval})
+	}
+	if ph.FeatureFlagRequestTimeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesPostHogFeatureFlagRequestTimeoutEnvVar, Value: ph.FeatureFlagRequestTimeout})
 	}
 	return envVars
 }
@@ -1193,6 +1220,14 @@ func getEncryptionProviderEnvVars(ep *bindplanev1alpha1.EncryptionProviderConfig
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSKeyRotationPeriodEnvVar, Value: kms.KeyRotationPeriod})
 		}
 	}
+	if ep.Cache != nil {
+		if ep.Cache.Capacity > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderCacheCapacityEnvVar, Value: strconv.Itoa(ep.Cache.Capacity)})
+		}
+		if ep.Cache.CacheTimeout != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderCacheCacheTimeoutEnvVar, Value: ep.Cache.CacheTimeout})
+		}
+	}
 	return envVars
 }
 
@@ -1239,6 +1274,48 @@ func getFeatureOverridesEnvVars(o *bindplanev1alpha1.FeatureOverridesConfig) []c
 	if o.Notifications {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesNotificationsEnvVar, Value: "true"})
 	}
+	if o.SecopsGcsIntegration {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSecopsGCSIntegrationEnvVar, Value: "true"})
+	}
+	if o.SnapshotPipelineIntelligence {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSnapshotPipelineIntelligenceEnvVar, Value: "true"})
+	}
+	if o.PipelineIntelligenceSplunkConfigImport {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceSplunkConfigImportEnvVar, Value: "true"})
+	}
+	if o.RawLogMetricViews {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesRawLogMetricViewsEnvVar, Value: "true"})
+	}
+	if o.Vault {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesVaultEnvVar, Value: "true"})
+	}
+	if o.Auth0SSO {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesAuth0SSOEnvVar, Value: "true"})
+	}
+	if o.AixPlatform {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesAixPlatformEnvVar, Value: "true"})
+	}
+	if o.AdvancedPipelineEditor {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesAdvancedPipelineEditorEnvVar, Value: "true"})
+	}
+	if o.IdentityTablesDualWrite {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesIdentityTablesDualWriteEnvVar, Value: "true"})
+	}
+	if o.IdentityTablesCutover {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesIdentityTablesCutoverEnvVar, Value: "true"})
+	}
+	if o.V2Configuration {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesV2ConfigurationEnvVar, Value: "true"})
+	}
+	if o.V2Connectors {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesV2ConnectorsEnvVar, Value: "true"})
+	}
+	if o.BindplaneBlueprints {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesBindplaneBlueprintsEnvVar, Value: "true"})
+	}
+	if o.Fleets {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesFleetsEnvVar, Value: "true"})
+	}
 	return envVars
 }
 
@@ -1261,6 +1338,14 @@ func getErrorsConfigEnvVars(e *bindplanev1alpha1.ErrorsConfig) []corev1.EnvVar {
 	if e.Environment != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnvironmentEnvVar, Value: e.Environment})
 	}
+	if e.Release != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsReleaseEnvVar, Value: e.Release})
+	}
+	if e.TracesSampleRate != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsTracesSampleRateEnvVar, Value: e.TracesSampleRate})
+	}
+	// Always emit Debug when errors is configured; false is a meaningful value
+	envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsDebugEnvVar, Value: strconv.FormatBool(e.Debug)})
 	return envVars
 }
 
@@ -1279,6 +1364,12 @@ func getLLMConfigEnvVars(llm *bindplanev1alpha1.LLMConfig) []corev1.EnvVar {
 		}
 		if g.Location != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiLocationEnvVar, Value: g.Location})
+		}
+		if g.CredentialsFile != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiCredentialsFileEnvVar, Value: g.CredentialsFile})
+		}
+		if g.MaxTokens > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiMaxTokensEnvVar, Value: strconv.Itoa(g.MaxTokens)})
 		}
 		if g.VectorSearchRedis != nil {
 			vsr := g.VectorSearchRedis
@@ -1301,6 +1392,15 @@ func getLLMConfigEnvVars(llm *bindplanev1alpha1.LLMConfig) []corev1.EnvVar {
 		}
 		if ls.ProjectName != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithProjectNameEnvVar, Value: ls.ProjectName})
+		}
+		if ls.URL != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithURLEnvVar, Value: ls.URL})
+		}
+		if ls.SanitizeContent != nil {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithSanitizeContentEnvVar, Value: strconv.FormatBool(*ls.SanitizeContent)})
+		}
+		if len(ls.Tags) > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithTagsEnvVar, Value: strings.Join(ls.Tags, ",")})
 		}
 	}
 
@@ -1331,8 +1431,16 @@ func getAdvancedConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []c
 	if adv.Store != nil {
 		envVars = append(envVars, getAdvancedStoreStatsEnvVars(adv.Store.Stats)...)
 	}
-	if adv.Rollout != nil && adv.Rollout.DisableUpdater {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutDisableUpdaterEnvVar, Value: "true"})
+	if adv.Rollout != nil {
+		if adv.Rollout.DisableUpdater {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutDisableUpdaterEnvVar, Value: "true"})
+		}
+		if adv.Rollout.RetryInterval != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutRetryIntervalEnvVar, Value: adv.Rollout.RetryInterval})
+		}
+		if adv.Rollout.UpdateWorkerCount > 0 {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutUpdateWorkerCountEnvVar, Value: strconv.Itoa(adv.Rollout.UpdateWorkerCount)})
+		}
 	}
 	envVars = append(envVars, getAdvancedServerEnvVars(adv.Server)...)
 	if adv.Cache != nil {
@@ -1341,6 +1449,9 @@ func getAdvancedConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []c
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheTypeEnvVar, Value: c.Type})
 		}
 		envVars = append(envVars, getAdvancedCacheRedisEnvVars(c.Redis)...)
+	}
+	if adv.Agent != nil && adv.Agent.TelemetryPort != nil {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedAgentTelemetryPortEnvVar, Value: strconv.Itoa(int(*adv.Agent.TelemetryPort))})
 	}
 
 	return envVars

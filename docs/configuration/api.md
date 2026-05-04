@@ -10,6 +10,17 @@ Package v1alpha1 contains API Schema definitions for the bindplane v1alpha1 API 
 ### Resource Types
 - [Bindplane](#bindplane)
 
+#### AdvancedAgentConfig
+
+AdvancedAgentConfig contains advanced agent configuration options.
+
+_Appears in:_
+- [AdvancedConfig](#advancedconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `telemetryPort` _integer_ | TelemetryPort is the port used for agent telemetry collection. Defaults to 8888. |  | Maximum: 65535 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+
 #### AdvancedCacheConfig
 
 AdvancedCacheConfig configures the distributed cache.
@@ -68,6 +79,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `store` _[AdvancedStoreConfig](#advancedstoreconfig)_ | Store contains advanced store configuration options. |  | Optional: \{\} <br /> |
 | `server` _[AdvancedServerConfig](#advancedserverconfig)_ | Server contains advanced server configuration options. |  | Optional: \{\} <br /> |
+| `agent` _[AdvancedAgentConfig](#advancedagentconfig)_ | Agent contains advanced agent telemetry configuration options. |  | Optional: \{\} <br /> |
 | `cache` _[AdvancedCacheConfig](#advancedcacheconfig)_ | Cache contains advanced cache configuration options. |  | Optional: \{\} <br /> |
 | `rollout` _[AdvancedRolloutConfig](#advancedrolloutconfig)_ | Rollout contains advanced rollout configuration options. |  | Optional: \{\} <br /> |
 
@@ -81,20 +93,21 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `disableUpdater` _boolean_ | DisableUpdater disables the background rollout updater. |  | Optional: \{\} <br /> |
+| `retryInterval` _string_ | RetryInterval is the duration to retry configuring pending agents (e.g., "30s"). Defaults to 30s. |  | Optional: \{\} <br /> |
+| `updateWorkerCount` _integer_ | UpdateWorkerCount is the number of workers used for updating rollouts. Defaults to 10. |  | Minimum: 1 <br />Optional: \{\} <br /> |
 
 #### AdvancedServerConfig
 
 AdvancedServerConfig contains advanced HTTP/OpAMP server options.
-All fields are optional; when omitted Bindplane uses its own defaults.
 
 _Appears in:_
 - [AdvancedConfig](#advancedconfig)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `maxRequestBytes` _integer_ | MaxRequestBytes is the maximum request body size the server accepts, excluding offline<br />agent uploads. When omitted, Bindplane defaults to 10485760 (10 MiB). |  | Optional: \{\} <br /> |
-| `shutdownGracePeriod` _string_ | ShutdownGracePeriod is the total time the server waits for in-flight requests and<br />connections to finish before forceful shutdown (e.g. "5m"). When omitted, Bindplane<br />uses its own default. |  | Optional: \{\} <br /> |
-| `opampShutdownGracePeriodTarget` _string_ | OpAMPShutdownGracePeriodTarget is the fraction (0.1–1.0) of ShutdownGracePeriod<br />that the OpAMP server is given to drain agents (e.g. "0.6"). When omitted, Bindplane<br />uses its own default. |  | Optional: \{\} <br /> |
+| `maxRequestBytes` _integer_ | MaxRequestBytes is the maximum request body size the server accepts, excluding offline<br />agent uploads. Defaults to 10485760 (10 MiB). |  | Optional: \{\} <br /> |
+| `shutdownGracePeriod` _string_ | ShutdownGracePeriod is the total time the server waits for in-flight requests and<br />connections to finish before forceful shutdown (e.g. "5m"). Defaults to 2m. |  | Optional: \{\} <br /> |
+| `opampShutdownGracePeriodTarget` _string_ | OpAMPShutdownGracePeriodTarget is the fraction (0.1–1.0) of ShutdownGracePeriod<br />that the OpAMP server is given to drain agents (e.g. "0.25"). Defaults to 0.25. |  | Optional: \{\} <br /> |
 
 #### AdvancedStoreConfig
 
@@ -110,7 +123,6 @@ _Appears in:_
 #### AdvancedStoreStatsConfig
 
 AdvancedStoreStatsConfig tunes measurement pipeline performance.
-All fields are optional; when omitted Bindplane uses its own defaults.
 
 _Appears in:_
 - [AdvancedStoreConfig](#advancedstoreconfig)
@@ -134,13 +146,13 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enableMiddleware` _boolean_ | EnableMiddleware enables the duplication prevention middleware. |  | Optional: \{\} <br /> |
 | `reassignID` _boolean_ | ReassignID reassigns the agent ID when a duplicate is detected. |  | Optional: \{\} <br /> |
-| `detectionStrategy` _string_ | DetectionStrategy is the strategy used to detect duplicate connections.<br />Valid values: grace_period. |  | Enum: [grace_period] <br />Optional: \{\} <br /> |
-| `detectionGracePeriod` _string_ | DetectionGracePeriod is how long after the first claim failure to wait before treating<br />subsequent failures as true duplicates (e.g. "3m"). Used with the grace_period strategy.<br />Must be >= connectionRegistryStaleDuration. When omitted, Bindplane defaults to 3m. |  | Optional: \{\} <br /> |
-| `minGracePeriodFailures` _integer_ | MinGracePeriodFailures is the minimum number of claim failures required before the<br />grace_period strategy confirms a duplicate. Both the time (grace period) and count<br />must be satisfied. When omitted, Bindplane defaults to 3. |  | Minimum: 1 <br />Optional: \{\} <br /> |
-| `retryAfter` _string_ | RetryAfter is the Retry-After duration sent to the agent when rejecting connections<br />during the grace period (e.g. "30s"). When omitted, Bindplane defaults to 30s. |  | Optional: \{\} <br /> |
-| `maxReassignmentAttempts` _integer_ | MaxReassignmentAttempts is the maximum number of times an agent can reconnect with<br />the same ID after being assigned a new ID before being permanently rejected (1–10).<br />When omitted, Bindplane defaults to 3. |  | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
-| `reassignmentCacheTTL` _string_ | ReassignmentCacheTTL is how long to remember reassignment attempts (e.g. "24h").<br />Maximum 7d. When omitted, Bindplane defaults to 24h. |  | Optional: \{\} <br /> |
-| `reassignmentRetryAfter` _string_ | ReassignmentRetryAfter is the Retry-After duration sent to an agent when it is<br />permanently rejected after exceeding maxReassignmentAttempts (e.g. "5m").<br />Maximum 1h. When omitted, Bindplane defaults to 5m. |  | Optional: \{\} <br /> |
+| `detectionStrategy` _string_ | DetectionStrategy is the strategy used to detect duplicate connections.<br />Valid values: grace_period. Defaults to grace_period. | grace_period | Enum: [grace_period] <br />Optional: \{\} <br /> |
+| `detectionGracePeriod` _string_ | DetectionGracePeriod is how long after the first claim failure to wait before treating<br />subsequent failures as true duplicates (e.g. "3m"). Used with the grace_period strategy.<br />Must be >= connectionRegistryStaleDuration. Defaults to 3m. | 3m | Optional: \{\} <br /> |
+| `minGracePeriodFailures` _integer_ | MinGracePeriodFailures is the minimum number of claim failures required before the<br />grace_period strategy confirms a duplicate. Both the time (grace period) and count<br />must be satisfied. Defaults to 3. | 3 | Minimum: 1 <br />Optional: \{\} <br /> |
+| `retryAfter` _string_ | RetryAfter is the Retry-After duration sent to the agent when rejecting connections<br />during the grace period (e.g. "30s"). Defaults to 30s. | 30s | Optional: \{\} <br /> |
+| `maxReassignmentAttempts` _integer_ | MaxReassignmentAttempts is the maximum number of times an agent can reconnect with<br />the same ID after being assigned a new ID before being permanently rejected (1–10).<br />Defaults to 3. | 3 | Maximum: 10 <br />Minimum: 1 <br />Optional: \{\} <br /> |
+| `reassignmentCacheTTL` _string_ | ReassignmentCacheTTL is how long to remember reassignment attempts (e.g. "24h").<br />Maximum 7d. Defaults to 24h. | 24h | Optional: \{\} <br /> |
+| `reassignmentRetryAfter` _string_ | ReassignmentRetryAfter is the Retry-After duration sent to an agent when it is<br />permanently rejected after exceeding maxReassignmentAttempts (e.g. "5m").<br />Maximum 1h. Defaults to 5m. | 5m | Optional: \{\} <br /> |
 | `enableDuplicateNotifications` _boolean_ | EnableDuplicateNotifications enables sending notifications when duplicate connections are detected. |  | Optional: \{\} <br /> |
 | `enablePerOrgEnforcement` _boolean_ | EnablePerOrgEnforcement enables per-organization enforcement of duplicate prevention. |  | Optional: \{\} <br /> |
 
@@ -153,7 +165,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `syncInterval` _string_ | SyncInterval is the interval at which to sync agent versions (e.g. "2h").<br />Must be at least 1h. When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `syncInterval` _string_ | SyncInterval is the interval at which to sync agent versions (e.g. "2h").<br />Must be at least 1h. Defaults to 1h. | 1h | Optional: \{\} <br /> |
 | `clients` _string array_ | Clients is a deprecated list of version client types (e.g. ["bdot", "github"]).<br />Version clients are now configured per-agent-type via AgentType resources. |  | Optional: \{\} <br /> |
 
 #### AgentsAuthConfig
@@ -165,7 +177,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _string_ | Type specifies the authentication method(s) for agent connections.<br />Can be a single method or a comma-separated list (e.g. "oauth,secretKey").<br />Valid values: secretKey, oauth. When omitted, Bindplane defaults to secretKey. |  | Optional: \{\} <br /> |
+| `type` _string_ | Type specifies the authentication method(s) for agent connections.<br />Can be a single method or a comma-separated list (e.g. "oauth,secretKey").<br />Valid values: secretKey, oauth. Defaults to secretKey. | secretKey | Optional: \{\} <br /> |
 | `secretKey` _[AgentsAuthSecretKeyConfig](#agentsauthsecretkeyconfig)_ | SecretKey configures the secret key authentication method. |  | Optional: \{\} <br /> |
 | `oauth` _[AgentsAuthOAuthConfig](#agentsauthoauthconfig)_ | OAuth configures the OAuth authentication method. |  | Optional: \{\} <br /> |
 
@@ -182,7 +194,7 @@ _Appears in:_
 | `audiences` _string array_ | Audiences is the list of valid audience values. The token's aud claim must match<br />at least one of these values. |  | Optional: \{\} <br /> |
 | `requiredClaims` _string array_ | RequiredClaims is the list of claim names that must be present in the token. |  | Optional: \{\} <br /> |
 | `requiredScopes` _string array_ | RequiredScopes is the list of scopes that must all be present in the token. |  | Optional: \{\} <br /> |
-| `cacheTTL` _string_ | CacheTTL is the duration a valid OAuth token is cached (e.g. "1h").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `cacheTTL` _string_ | CacheTTL is the duration a valid OAuth token is cached (e.g. "1h"). Defaults to 1h. | 1h | Optional: \{\} <br /> |
 
 #### AgentsAuthSecretKeyConfig
 
@@ -193,7 +205,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `headers` _string array_ | Headers is the list of HTTP headers to read the secret key from.<br />When omitted, Bindplane defaults to ["X-Bindplane-Authorization", "Authorization"]. |  | Optional: \{\} <br /> |
+| `headers` _string array_ | Headers is the list of HTTP headers to read the secret key from.<br />Defaults to ["X-Bindplane-Authorization", "Authorization"]. |  | Optional: \{\} <br /> |
 
 #### AgentsConfig
 
@@ -205,18 +217,18 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `auth` _[AgentsAuthConfig](#agentsauthconfig)_ | Auth configures authentication for agent connections. |  | Optional: \{\} <br /> |
-| `heartbeatInterval` _string_ | HeartbeatInterval is the interval on which to perform a heartbeat over agent connections (e.g. "30s").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
-| `heartbeatTTL` _string_ | HeartbeatTTL is the amount of time between agent-initiated heartbeat messages before an agent<br />connection expires (e.g. "1m"). When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
-| `heartbeatExpiryInterval` _string_ | HeartbeatExpiryInterval is the interval between reaping expired agents (e.g. "30s").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
-| `rebalanceInterval` _string_ | RebalanceInterval is the interval between rebalancing agents (e.g. "1h").<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
-| `rebalancePercentage` _integer_ | RebalancePercentage is the percentage of agents to rebalance (0–100).<br />0 disables percentage-based rebalancing. When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
-| `rebalanceJitter` _integer_ | RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).<br />When omitted, Bindplane uses its own default. |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `heartbeatInterval` _string_ | HeartbeatInterval is the interval on which to perform a heartbeat over agent connections (e.g. "30s").<br />Defaults to 30s. | 30s | Optional: \{\} <br /> |
+| `heartbeatTTL` _string_ | HeartbeatTTL is the amount of time between agent-initiated heartbeat messages before an agent<br />connection expires (e.g. "1m"). Must be greater than HeartbeatInterval. Defaults to 1m. | 1m | Optional: \{\} <br /> |
+| `heartbeatExpiryInterval` _string_ | HeartbeatExpiryInterval is the interval between reaping expired agents (e.g. "30s").<br />Defaults to 30s. | 30s | Optional: \{\} <br /> |
+| `rebalanceInterval` _string_ | RebalanceInterval is the interval between rebalancing agents (e.g. "1h").<br />Defaults to 1h. | 1h | Optional: \{\} <br /> |
+| `rebalancePercentage` _integer_ | RebalancePercentage is the percentage of agents to rebalance (0–100).<br />0 disables percentage-based rebalancing. Defaults to 0 (disabled). |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
+| `rebalanceJitter` _integer_ | RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).<br />Defaults to 0 (no jitter). |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxSimultaneousConnections` _integer_ | MaxSimultaneousConnections is the maximum number of goroutines that will service<br />OpAMP connections concurrently. Generally set to the same value as<br />spec.config.maxConcurrency. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
 | `enableConnectionRegistryMiddleware` _boolean_ | EnableConnectionRegistryMiddleware enables the connection registry middleware. |  | Optional: \{\} <br /> |
-| `connectionRegistryHeartbeatInterval` _string_ | ConnectionRegistryHeartbeatInterval is the interval at which agents send heartbeats to<br />the connection registry (e.g. "15s"). When omitted, Bindplane defaults to 15s. |  | Optional: \{\} <br /> |
-| `connectionRegistryStaleDuration` _string_ | ConnectionRegistryStaleDuration is the duration after which an agent connection is<br />considered stale if no heartbeat is received (e.g. "45s"). Must be greater than<br />connectionRegistryHeartbeatInterval. When omitted, Bindplane defaults to 45s. |  | Optional: \{\} <br /> |
-| `connectionRegistryLockTimeout` _string_ | ConnectionRegistryLockTimeout is the PostgreSQL lock_timeout for connection registry<br />operations (e.g. "2s"). When omitted, Bindplane defaults to 2s. |  | Optional: \{\} <br /> |
-| `connectionClaimTimeout` _string_ | ConnectionClaimTimeout is the overall timeout for ClaimConnection operations (e.g. "3s").<br />Must be greater than connectionRegistryLockTimeout. When omitted, Bindplane defaults to 3s. |  | Optional: \{\} <br /> |
+| `connectionRegistryHeartbeatInterval` _string_ | ConnectionRegistryHeartbeatInterval is the interval at which agents send heartbeats to<br />the connection registry (e.g. "15s"). Defaults to 15s. | 15s | Optional: \{\} <br /> |
+| `connectionRegistryStaleDuration` _string_ | ConnectionRegistryStaleDuration is the duration after which an agent connection is<br />considered stale if no heartbeat is received (e.g. "45s"). Must be greater than<br />connectionRegistryHeartbeatInterval. Defaults to 45s. | 45s | Optional: \{\} <br /> |
+| `connectionRegistryLockTimeout` _string_ | ConnectionRegistryLockTimeout is the PostgreSQL lock_timeout for connection registry<br />operations (e.g. "2s"). Defaults to 2s. | 2s | Optional: \{\} <br /> |
+| `connectionClaimTimeout` _string_ | ConnectionClaimTimeout is the overall timeout for ClaimConnection operations (e.g. "3s").<br />Must be greater than connectionRegistryLockTimeout. Defaults to 3s. | 3s | Optional: \{\} <br /> |
 | `duplicationPrevention` _[AgentDuplicationPreventionConfig](#agentduplicationpreventionconfig)_ | DuplicationPrevention configures duplicate agent connection prevention. |  | Optional: \{\} <br /> |
 
 #### AnalyticsConfig
@@ -377,14 +389,14 @@ _Appears in:_
 | `analytics` _[AnalyticsConfig](#analyticsconfig)_ | Analytics configures Bindplane analytics reporting. |  | Optional: \{\} <br /> |
 | `logging` _[LoggingConfig](#loggingconfig)_ | Logging configures the Bindplane log level and output destination. |  | Optional: \{\} <br /> |
 | `advanced` _[AdvancedConfig](#advancedconfig)_ | Advanced configures advanced Bindplane options. These are typically used to<br />fine-tune behavior at scale and are not required for basic operation. |  | Optional: \{\} <br /> |
-| `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
-| `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
-| `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server<br />and Stripe billing. |  | Optional: \{\} <br /> |
+| `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options. |  | Optional: \{\} <br /> |
+| `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior. |  | Optional: \{\} <br /> |
+| `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server and Stripe billing. |  | Optional: \{\} <br /> |
 | `encryptionProvider` _[EncryptionProviderConfig](#encryptionproviderconfig)_ | EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.<br />When omitted, Bindplane uses its built-in encryption. |  | Optional: \{\} <br /> |
-| `features` _[FeaturesConfig](#featuresconfig)_ | Features configures the feature flag backend and feature overrides.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
+| `features` _[FeaturesConfig](#featuresconfig)_ | Features configures the feature flag backend and feature overrides. |  | Optional: \{\} <br /> |
 | `errors` _[ErrorsConfig](#errorsconfig)_ | Errors configures error tracking (e.g., BetterStack, Sentry).<br />When omitted, error tracking is disabled. |  | Optional: \{\} <br /> |
 | `llm` _[LLMConfig](#llmconfig)_ | LLM configures large language model integrations.<br />When omitted, LLM features are disabled. |  | Optional: \{\} <br /> |
-| `quotas` _[QuotasConfig](#quotasconfig)_ | Quotas configures usage quota enforcement.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
+| `quotas` _[QuotasConfig](#quotasconfig)_ | Quotas configures usage quota enforcement. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsComponentSpec
 
@@ -449,6 +461,18 @@ _Appears in:_
 | `kind` _string_ | Kind is the type of issuer. Either "Issuer" (namespaced) or "ClusterIssuer" (cluster-scoped). | Issuer | Enum: [Issuer ClusterIssuer] <br />Optional: \{\} <br /> |
 | `group` _string_ | Group is the API group of the issuer. Defaults to cert-manager.io. | cert-manager.io | Optional: \{\} <br /> |
 
+#### EncryptionProviderCacheConfig
+
+EncryptionProviderCacheConfig configures the in-memory cache for encryption keys.
+
+_Appears in:_
+- [EncryptionProviderConfig](#encryptionproviderconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `capacity` _integer_ | Capacity is the maximum number of entries in the encryption key cache. Defaults to 2000. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `cacheTimeout` _string_ | CacheTimeout is the TTL for cached encryption keys (e.g., "2m"). Defaults to 2m. |  | Optional: \{\} <br /> |
+
 #### EncryptionProviderConfig
 
 EncryptionProviderConfig configures the encryption provider for Bindplane.
@@ -460,6 +484,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `type` _string_ | Type is the encryption provider type. |  | Enum: [googleKMS] <br />Optional: \{\} <br /> |
 | `googleKMS` _[GoogleKMSConfig](#googlekmsconfig)_ | GoogleKMS configures Google Cloud KMS as the encryption provider. |  | Optional: \{\} <br /> |
+| `cache` _[EncryptionProviderCacheConfig](#encryptionprovidercacheconfig)_ | Cache configures the in-memory cache for encryption keys. |  | Optional: \{\} <br /> |
 
 #### ErrorsConfig
 
@@ -474,6 +499,9 @@ _Appears in:_
 | `backendDSN` _string_ | BackendDSN is the DSN (Data Source Name) for the backend error tracking service. |  | Optional: \{\} <br /> |
 | `frontendDSN` _string_ | FrontendDSN is the DSN for the frontend error tracking service. |  | Optional: \{\} <br /> |
 | `environment` _string_ | Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging"). |  | Optional: \{\} <br /> |
+| `release` _string_ | Release is the release version reported to the error tracking service (e.g., "1.2.3"). |  | Optional: \{\} <br /> |
+| `tracesSampleRate` _string_ | TracesSampleRate is the fraction of transactions to send for performance monitoring (0.0 to 1.0). |  | Optional: \{\} <br /> |
+| `debug` _boolean_ | Debug enables debug mode for the error tracking SDK. |  | Optional: \{\} <br /> |
 
 #### EventBusConfig
 
@@ -513,15 +541,29 @@ _Appears in:_
 | `growthLicense` _boolean_ | GrowthLicense forces the growth license feature on. |  | Optional: \{\} <br /> |
 | `secopsTheme` _boolean_ | SecopsTheme forces the SecOps theme on. |  | Optional: \{\} <br /> |
 | `secopsIntegration` _boolean_ | SecopsIntegration forces the SecOps integration feature on. |  | Optional: \{\} <br /> |
+| `secopsGcsIntegration` _boolean_ | SecopsGcsIntegration forces the SecOps GCS integration feature on. |  | Optional: \{\} <br /> |
 | `llmFeatures` _boolean_ | LLMFeatures forces LLM features on. |  | Optional: \{\} <br /> |
 | `pipelineIntelligence` _boolean_ | PipelineIntelligence forces the pipeline intelligence feature on. |  | Optional: \{\} <br /> |
+| `snapshotPipelineIntelligence` _boolean_ | SnapshotPipelineIntelligence forces the snapshot pipeline intelligence feature on. |  | Optional: \{\} <br /> |
 | `pipelineIntelligenceSnapshotLogTypes` _boolean_ | PipelineIntelligenceSnapshotLogTypes forces the pipeline intelligence snapshot log types feature on. |  | Optional: \{\} <br /> |
 | `pipelineIntelligenceOtelConfigImport` _boolean_ | PipelineIntelligenceOtelConfigImport forces the OpenTelemetry config import pipeline intelligence feature on. |  | Optional: \{\} <br /> |
 | `pipelineIntelligenceChronicleForwarderConfigImport` _boolean_ | PipelineIntelligenceChronicleForwarderConfigImport forces the Chronicle Forwarder config import feature on. |  | Optional: \{\} <br /> |
+| `pipelineIntelligenceSplunkConfigImport` _boolean_ | PipelineIntelligenceSplunkConfigImport forces the Splunk config import pipeline intelligence feature on. |  | Optional: \{\} <br /> |
 | `pipelineIntelligenceParseField` _boolean_ | PipelineIntelligenceParseField forces the parse field pipeline intelligence feature on. |  | Optional: \{\} <br /> |
 | `pipelineIntelligenceGenerateProcessors` _boolean_ | PipelineIntelligenceGenerateProcessors forces the generate processors pipeline intelligence feature on. |  | Optional: \{\} <br /> |
 | `rawConfigLegacy` _boolean_ | RawConfigLegacy forces the raw config legacy feature on. |  | Optional: \{\} <br /> |
+| `rawLogMetricViews` _boolean_ | RawLogMetricViews is deprecated and ignored; kept for backwards compatibility. |  | Optional: \{\} <br /> |
 | `notifications` _boolean_ | Notifications forces the notifications feature on. |  | Optional: \{\} <br /> |
+| `vault` _boolean_ | Vault forces the vault feature on. |  | Optional: \{\} <br /> |
+| `auth0SSO` _boolean_ | Auth0SSO forces the Auth0 SSO feature on. |  | Optional: \{\} <br /> |
+| `aixPlatform` _boolean_ | AixPlatform forces the AIX platform feature on. |  | Optional: \{\} <br /> |
+| `advancedPipelineEditor` _boolean_ | AdvancedPipelineEditor forces the advanced pipeline editor feature on. |  | Optional: \{\} <br /> |
+| `identityTablesDualWrite` _boolean_ | IdentityTablesDualWrite forces the identity tables dual write feature on. |  | Optional: \{\} <br /> |
+| `identityTablesCutover` _boolean_ | IdentityTablesCutover forces the identity tables cutover feature on. |  | Optional: \{\} <br /> |
+| `v2Configuration` _boolean_ | V2Configuration is deprecated and kept for backwards compatibility. |  | Optional: \{\} <br /> |
+| `v2Connectors` _boolean_ | V2Connectors is deprecated and kept for backwards compatibility. |  | Optional: \{\} <br /> |
+| `bindplaneBlueprints` _boolean_ | BindplaneBlueprints is deprecated and kept for backwards compatibility. |  | Optional: \{\} <br /> |
+| `fleets` _boolean_ | Fleets is deprecated and kept for backwards compatibility. |  | Optional: \{\} <br /> |
 
 #### FeaturesConfig
 
@@ -547,6 +589,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `projectID` _string_ | ProjectID is the Google Cloud project ID. |  | Optional: \{\} <br /> |
 | `location` _string_ | Location is the Google Cloud region for the Gemini API (e.g., "us-central1"). |  | Optional: \{\} <br /> |
+| `credentialsFile` _string_ | CredentialsFile is the path to the Google Cloud credentials file.<br />When running on GKE with Workload Identity, this is typically not needed. |  | Optional: \{\} <br /> |
+| `maxTokens` _integer_ | MaxTokens is the maximum number of tokens for responses from the Gemini API.<br />When omitted or 0, the Gemini API default is used. |  | Optional: \{\} <br /> |
 | `vectorSearchRedis` _[VectorSearchRedisConfig](#vectorsearchredisconfig)_ | VectorSearchRedis configures Redis for Gemini vector search. |  | Optional: \{\} <br /> |
 
 #### GoogleKMSConfig
@@ -627,6 +671,9 @@ _Appears in:_
 | `apiKey` _string_ | APIKey is the LangSmith API key (plain value; prefer apiKeySecretRef in production). |  | Optional: \{\} <br /> |
 | `apiKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | APIKeySecretRef references a Kubernetes Secret containing the LangSmith API key. |  | Optional: \{\} <br /> |
 | `projectName` _string_ | ProjectName is the LangSmith project name for tracing. |  | Optional: \{\} <br /> |
+| `url` _string_ | URL is the LangSmith API URL (e.g., "https://api.smith.langchain.com/api/v1"). |  | Optional: \{\} <br /> |
+| `sanitizeContent` _boolean_ | SanitizeContent controls whether input/output content is sanitized before sending to LangSmith<br />for privacy compliance. Defaults to true when omitted. |  | Optional: \{\} <br /> |
+| `tags` _string array_ | Tags is the list of default tags to apply to all LLM runs in LangSmith. |  | Optional: \{\} <br /> |
 
 #### LoggingConfig
 
@@ -652,7 +699,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `endpoint` _string_ | Endpoint is the gRPC endpoint to send logs to (e.g. localhost:4317). |  | Optional: \{\} <br /> |
 | `insecure` _boolean_ | Insecure disables TLS verification for the OTLP connection. |  | Optional: \{\} <br /> |
-| `interval` _string_ | Interval is the interval at which to export logs (e.g. 60s).<br />When omitted, Bindplane uses its own default. |  | Optional: \{\} <br /> |
+| `interval` _string_ | Interval is the interval at which to export logs (e.g. "1s"). Defaults to 1s. |  | Optional: \{\} <br /> |
 
 #### MetricsConfig
 
@@ -730,6 +777,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `certManager` _[CertManagerTLSIssuerRef](#certmanagertlsissuerref)_ | CertManager references a cert-manager Issuer or ClusterIssuer to issue the NATS certificate (used for client, cluster, and HTTP). |  | Optional: \{\} <br /> |
+| `skipVerify` _boolean_ | SkipVerify disables TLS certificate verification for NATS connections.<br />Not recommended for production use. |  | Optional: \{\} <br /> |
 
 #### NetworkConfig
 
@@ -817,6 +865,7 @@ _Appears in:_
 | `clientSecretSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | ClientSecretSecretRef references a Kubernetes Secret containing the OIDC client secret.<br />Takes precedence over ClientSecret if both are set. |  | Optional: \{\} <br /> |
 | `issuer` _string_ | Issuer is the URL of the OIDC provider |  | Optional: \{\} <br /> |
 | `scopes` _string array_ | Scopes is the list of OAuth2 scopes to request |  | Optional: \{\} <br /> |
+| `disableInvitations` _boolean_ | DisableInvitations disables the invitation flow for OIDC-authenticated users.<br />When true, users cannot be invited via email and must log in via OIDC directly. |  | Optional: \{\} <br /> |
 
 #### OpAMPComponentSpec
 
@@ -894,7 +943,8 @@ _Appears in:_
 | `personalAPIKey` _string_ | PersonalAPIKey is the PostHog personal API key (plain value; prefer personalAPIKeySecretRef in production). |  | Optional: \{\} <br /> |
 | `personalAPIKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | PersonalAPIKeySecretRef references a Kubernetes Secret containing the PostHog personal API key. |  | Optional: \{\} <br /> |
 | `endpoint` _string_ | Endpoint is the PostHog API endpoint URL. |  | Optional: \{\} <br /> |
-| `defaultFeatureFlagsPollingInterval` _string_ | DefaultFeatureFlagsPollingInterval is the polling interval for feature flags (e.g., "30s"). |  | Optional: \{\} <br /> |
+| `featureFlagRequestTimeout` _string_ | FeatureFlagRequestTimeout is the timeout for PostHog feature flag requests (e.g., "30s"). Defaults to 30s. |  | Optional: \{\} <br /> |
+| `defaultFeatureFlagsPollingInterval` _string_ | DefaultFeatureFlagsPollingInterval is the polling interval for feature flags (e.g., "5m"). Defaults to 5m. |  | Optional: \{\} <br /> |
 
 #### PostgresConfig
 
@@ -979,11 +1029,12 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled enables quota enforcement globally. |  | Optional: \{\} <br /> |
 | `enforced` _boolean_ | Enforced causes quota violations to be enforced (rejected) rather than only logged. |  | Optional: \{\} <br /> |
+| `organizations` _[QuotasTierConfig](#quotastierconfig)_ | Organizations configures per-organization quota enforcement. |  | Optional: \{\} <br /> |
 | `projects` _[QuotasTierConfig](#quotastierconfig)_ | Projects configures per-project quota enforcement. |  | Optional: \{\} <br /> |
 
 #### QuotasTierConfig
 
-QuotasTierConfig configures quota enforcement for a specific tier.
+QuotasTierConfig configures quota enforcement for a specific tier (organizations or projects).
 
 _Appears in:_
 - [QuotasConfig](#quotasconfig)
@@ -992,6 +1043,18 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `enabled` _boolean_ | Enabled enables quota enforcement for this tier. |  | Optional: \{\} <br /> |
 | `enforced` _boolean_ | Enforced causes quota violations for this tier to be enforced (rejected) rather than only logged. |  | Optional: \{\} <br /> |
+| `default` _[QuotasTierDefaultConfig](#quotastierdefaultconfig)_ | Default configures default quota limits for this tier. |  | Optional: \{\} <br /> |
+
+#### QuotasTierDefaultConfig
+
+QuotasTierDefaultConfig configures default quota limits for a quota tier.
+
+_Appears in:_
+- [QuotasTierConfig](#quotastierconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `maxAgents` _integer_ | MaxAgents is the default maximum number of agents allowed for this tier.<br />When omitted or 0, no default limit is applied. |  | Minimum: 0 <br />Optional: \{\} <br /> |
 
 #### SaaSConfig
 
@@ -1027,6 +1090,7 @@ _Appears in:_
 | `webhookSecretSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | WebhookSecretSecretRef references a Secret containing the Stripe webhook secret.<br />Takes precedence over WebhookSecret when both are set. |  | Optional: \{\} <br /> |
 | `growthPlanIDs` _[SaaSStripeGrowthPlanIDsConfig](#saasstripegrowthplanidsconfig)_ | GrowthPlanIDs configures Stripe plan identifiers for the growth tier. |  | Optional: \{\} <br /> |
 | `growthPlanMeterNames` _[SaaSStripeGrowthPlanMeterNamesConfig](#saasstripegrowthplanmeternamesconfig)_ | GrowthPlanMeterNames configures Stripe meter names for the growth tier. |  | Optional: \{\} <br /> |
+| `meterReportInterval` _string_ | MeterReportInterval is the interval at which usage metrics are reported to Stripe (e.g., "6h"). Defaults to 6h. |  | Optional: \{\} <br /> |
 
 #### SaaSStripeGrowthPlanIDsConfig
 
@@ -1075,9 +1139,9 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `postgres` _[PostgresConfig](#postgresconfig)_ | Postgres configuration |  |  |
-| `maxEvents` _integer_ | MaxEvents is the maximum number of events to merge into a single event.<br />When omitted, Bindplane defaults to 100. |  | Optional: \{\} <br /> |
-| `eventMergeWindow` _string_ | EventMergeWindow is the window during which events are merged (e.g. "100ms").<br />When omitted, Bindplane defaults to 100ms. |  | Optional: \{\} <br /> |
-| `summaryRollupRetentionDays` _integer_ | SummaryRollupRetentionDays is the number of days to retain daily rollup data.<br />0 means indefinite retention (rollups are never deleted).<br />When omitted, Bindplane defaults to 365. |  | Optional: \{\} <br /> |
+| `maxEvents` _integer_ | MaxEvents is the maximum number of events to merge into a single event. Defaults to 100. | 100 | Optional: \{\} <br /> |
+| `eventMergeWindow` _string_ | EventMergeWindow is the window during which events are merged (e.g. "100ms"). Defaults to 100ms. | 100ms | Optional: \{\} <br /> |
+| `summaryRollupRetentionDays` _integer_ | SummaryRollupRetentionDays is the number of days to retain daily rollup data.<br />0 means indefinite retention (rollups are never deleted). Defaults to 365. | 365 | Optional: \{\} <br /> |
 
 #### TSDBComponentSpec
 

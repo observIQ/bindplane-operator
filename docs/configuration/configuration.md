@@ -30,6 +30,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Store stats](#store-stats)
   - [Server](#server)
   - [Rollout](#rollout)
+  - [Agent](#agent)
   - [Cache](#cache)
     - [Redis](#redis)
 - [Agents](#agents)
@@ -251,6 +252,7 @@ Client ID and client secret can be set as direct values or via Secret references
 | `spec.config.auth.oidc.clientSecretSecretRef` | `BINDPLANE_OIDC_OAUTH2_CLIENT_SECRET` | — | Yes |
 | `spec.config.auth.oidc.issuer` | `BINDPLANE_OIDC_ISSUER` | — | Yes |
 | `spec.config.auth.oidc.scopes` | `BINDPLANE_OIDC_SCOPES` | — | Yes (comma-separated) |
+| `spec.config.auth.oidc.disableInvitations` | `BINDPLANE_OIDC_DISABLE_INVITATIONS` | `false` | No |
 
 Example (direct values):
 
@@ -975,8 +977,12 @@ The rollout section controls the background rollout updater.
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.advanced.rollout.disableUpdater` | `BINDPLANE_ADVANCED_ROLLOUT_DISABLE_UPDATER` | `false` | No |
+| `spec.config.advanced.rollout.retryInterval` | `BINDPLANE_ADVANCED_ROLLOUT_RETRY_INTERVAL` | `30s` | No |
+| `spec.config.advanced.rollout.updateWorkerCount` | `BINDPLANE_ADVANCED_ROLLOUT_UPDATE_WORKER_COUNT` | `10` | No |
 
 - `disableUpdater`: When `true`, disables the background rollout updater process.
+- `retryInterval`: How long to wait before retrying pending agent rollout configuration.
+- `updateWorkerCount`: Number of workers used for processing rollout updates.
 
 Example:
 
@@ -987,6 +993,16 @@ spec:
       rollout:
         disableUpdater: true
 ```
+
+### Agent
+
+The agent section configures advanced agent-related settings.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.advanced.agent.telemetryPort` | `BINDPLANE_ADVANCED_AGENT_TELEMETRY_PORT` | `8888` | No |
+
+- `telemetryPort`: The port used for agent telemetry collection.
 
 ### Cache
 
@@ -1226,6 +1242,7 @@ When omitted, SaaS mode is disabled.
 | `spec.config.saas.stripe.growthPlanMeterNames.metrics` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_METRICS` | — | No |
 | `spec.config.saas.stripe.growthPlanMeterNames.traces` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_TRACES` | — | No |
 | `spec.config.saas.stripe.growthPlanMeterNames.collectors` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_COLLECTORS` | — | No |
+| `spec.config.saas.stripe.meterReportInterval` | `BINDPLANE_SAAS_STRIPE_METER_REPORT_INTERVAL` | `6h` | No |
 
 Secret references for Stripe keys take precedence over plain-value fields when both are set. Prefer Secret references in production.
 
@@ -1252,6 +1269,7 @@ PostHog is the supported feature flag backend. When `type: posthog` is set, conf
 | `spec.config.features.postHog.personalAPIKeySecretRef` | `BINDPLANE_FEATURES_POSTHOG_PERSONAL_API_KEY` | — | No |
 | `spec.config.features.postHog.endpoint` | `BINDPLANE_FEATURES_POSTHOG_ENDPOINT` | — | No |
 | `spec.config.features.postHog.defaultFeatureFlagsPollingInterval` | `BINDPLANE_FEATURES_POSTHOG_DEFAULT_FEATURE_FLAGS_POLLING_INTERVAL` | — | No |
+| `spec.config.features.postHog.featureFlagRequestTimeout` | `BINDPLANE_FEATURES_POSTHOG_FEATURE_FLAG_REQUEST_TIMEOUT` | `30s` | No |
 
 ### Feature overrides
 
@@ -1272,6 +1290,20 @@ All override fields are boolean and default to `false`.
 | `spec.config.features.overrides.pipelineIntelligenceGenerateProcessors` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_GENERATE_PROCESSORS` | `false` | No |
 | `spec.config.features.overrides.rawConfigLegacy` | `BINDPLANE_FEATURES_OVERRIDES_RAW_CONFIG_LEGACY` | `false` | No |
 | `spec.config.features.overrides.notifications` | `BINDPLANE_FEATURES_OVERRIDES_NOTIFICATIONS` | `false` | No |
+| `spec.config.features.overrides.secopsGcsIntegration` | `BINDPLANE_FEATURES_OVERRIDES_SECOPS_GCS_INTEGRATION` | `false` | No |
+| `spec.config.features.overrides.snapshotPipelineIntelligence` | `BINDPLANE_FEATURES_OVERRIDES_SNAPSHOT_PIPELINE_INTELLIGENCE` | `false` | No |
+| `spec.config.features.overrides.pipelineIntelligenceSplunkConfigImport` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SPLUNK_CONFIG_IMPORT` | `false` | No |
+| `spec.config.features.overrides.rawLogMetricViews` | `BINDPLANE_FEATURES_OVERRIDES_RAW_LOG_METRIC_VIEWS` | `false` | No |
+| `spec.config.features.overrides.vault` | `BINDPLANE_FEATURES_OVERRIDES_VAULT` | `false` | No |
+| `spec.config.features.overrides.auth0SSO` | `BINDPLANE_FEATURES_OVERRIDES_AUTH0_SSO` | `false` | No |
+| `spec.config.features.overrides.aixPlatform` | `BINDPLANE_FEATURES_OVERRIDES_AIX_PLATFORM` | `false` | No |
+| `spec.config.features.overrides.advancedPipelineEditor` | `BINDPLANE_FEATURES_OVERRIDES_ADVANCED_PIPELINE_EDITOR` | `false` | No |
+| `spec.config.features.overrides.identityTablesDualWrite` | `BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_DUAL_WRITE` | `false` | No |
+| `spec.config.features.overrides.identityTablesCutover` | `BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_CUTOVER` | `false` | No |
+| `spec.config.features.overrides.v2Configuration` | `BINDPLANE_FEATURES_OVERRIDES_V2_CONFIGURATION` | `false` | No |
+| `spec.config.features.overrides.v2Connectors` | `BINDPLANE_FEATURES_OVERRIDES_V2_CONNECTORS` | `false` | No |
+| `spec.config.features.overrides.bindplaneBlueprints` | `BINDPLANE_FEATURES_OVERRIDES_BINDPLANE_BLUEPRINTS` | `false` | No |
+| `spec.config.features.overrides.fleets` | `BINDPLANE_FEATURES_OVERRIDES_FLEETS` | `false` | No |
 
 ## Errors
 
@@ -1283,6 +1315,9 @@ The `spec.config.errors` section configures error tracking (e.g., BetterStack). 
 | `spec.config.errors.backendDSN` | `BINDPLANE_ERRORS_BACKEND_DSN` | — | No |
 | `spec.config.errors.frontendDSN` | `BINDPLANE_ERRORS_FRONTEND_DSN` | — | No |
 | `spec.config.errors.environment` | `BINDPLANE_ERRORS_ENVIRONMENT` | — | No |
+| `spec.config.errors.release` | `BINDPLANE_ERRORS_RELEASE` | — | No |
+| `spec.config.errors.tracesSampleRate` | `BINDPLANE_ERRORS_TRACES_SAMPLE_RATE` | — | No |
+| `spec.config.errors.debug` | `BINDPLANE_ERRORS_DEBUG` | `false` | No |
 
 `backendDSN` and `frontendDSN` are service-specific DSNs (e.g., BetterStack ingest DSN). `environment` is reported to the error tracking service (e.g., `"production"`, `"staging"`).
 ## LLM
@@ -1295,6 +1330,8 @@ The `spec.config.llm` section configures large language model integrations. When
 |---|---|---|---|
 | `spec.config.llm.gemini.projectID` | `BINDPLANE_LLM_GEMINI_PROJECT_ID` | — | No |
 | `spec.config.llm.gemini.location` | `BINDPLANE_LLM_GEMINI_LOCATION` | — | No |
+| `spec.config.llm.gemini.credentialsFile` | `BINDPLANE_LLM_GEMINI_CREDENTIALS_FILE` | — | No |
+| `spec.config.llm.gemini.maxTokens` | `BINDPLANE_LLM_GEMINI_MAX_TOKENS` | — | No |
 | `spec.config.llm.gemini.vectorSearchRedis.address` | `BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ADDRESS` | — | No |
 | `spec.config.llm.gemini.vectorSearchRedis.enableTLS` | `BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ENABLE_TLS` | `false` | No |
 
@@ -1306,6 +1343,9 @@ The `spec.config.llm` section configures large language model integrations. When
 | `spec.config.llm.langsmith.apiKey` | `BINDPLANE_LLM_LANGSMITH_API_KEY` | — | No |
 | `spec.config.llm.langsmith.apiKeySecretRef` | `BINDPLANE_LLM_LANGSMITH_API_KEY` | — | No |
 | `spec.config.llm.langsmith.projectName` | `BINDPLANE_LLM_LANGSMITH_PROJECT_NAME` | — | No |
+| `spec.config.llm.langsmith.url` | `BINDPLANE_LLM_LANGSMITH_URL` | — | No |
+| `spec.config.llm.langsmith.sanitizeContent` | `BINDPLANE_LLM_LANGSMITH_SANITIZE_CONTENT` | `true` | No |
+| `spec.config.llm.langsmith.tags` | `BINDPLANE_LLM_LANGSMITH_TAGS` | — | No |
 
 ### OpenAI
 
@@ -1333,8 +1373,12 @@ The `spec.config.quotas` section configures usage quota enforcement. When omitte
 | `spec.config.quotas.enforced` | `BINDPLANE_QUOTAS_ENFORCED` | `false` | No |
 | `spec.config.quotas.projects.enabled` | `BINDPLANE_QUOTAS_PROJECTS_ENABLED` | `false` | No |
 | `spec.config.quotas.projects.enforced` | `BINDPLANE_QUOTAS_PROJECTS_ENFORCED` | `false` | No |
+| `spec.config.quotas.projects.default.maxAgents` | `BINDPLANE_QUOTAS_PROJECTS_DEFAULT_MAX_AGENTS` | — | No |
+| `spec.config.quotas.organizations.enabled` | `BINDPLANE_QUOTAS_ORGANIZATIONS_ENABLED` | `false` | No |
+| `spec.config.quotas.organizations.enforced` | `BINDPLANE_QUOTAS_ORGANIZATIONS_ENFORCED` | `false` | No |
+| `spec.config.quotas.organizations.default.maxAgents` | `BINDPLANE_QUOTAS_ORGANIZATIONS_DEFAULT_MAX_AGENTS` | — | No |
 
-`enabled` activates quota tracking; `enforced` causes violations to be rejected rather than only logged. The same semantics apply to `projects` (per-project quotas).
+`enabled` activates quota tracking; `enforced` causes violations to be rejected rather than only logged. The same semantics apply to `projects` and `organizations`. `default.maxAgents` sets the maximum number of agents allowed per project or organization by default.
 
 ```yaml
 spec:
@@ -1377,6 +1421,8 @@ The `spec.config.encryptionProvider` section configures at-rest encryption of se
 | `spec.config.encryptionProvider.googleKMS.location` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_LOCATION` | — | No |
 | `spec.config.encryptionProvider.googleKMS.keyRotationPeriod` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_ROTATION_PERIOD` | — | No |
 | `spec.config.encryptionProvider.googleKMS.keyDeletionJob` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB` | `false` | No |
+| `spec.config.encryptionProvider.cache.capacity` | `BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CAPACITY` | — | No |
+| `spec.config.encryptionProvider.cache.cacheTimeout` | `BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CACHE_TIMEOUT` | `2m` | No |
 
 `type` must be `googleKMS` when set. `keyDeletionJob` is injected only into the **Jobs Migrate** workload — it is not set on Node, NATS, or Jobs.
 

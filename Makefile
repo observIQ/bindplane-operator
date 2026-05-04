@@ -173,6 +173,10 @@ lint-fix: ## Run golangci-lint linter and perform fixes
 lint-config: ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+.PHONY: shellcheck
+shellcheck: ## Run shellcheck against all shell scripts
+	shellcheck -x scripts/*.sh scripts/lib/*.sh .github/workflows/scripts/*.sh
+
 .PHONY: gosec
 gosec: ## Run gosec security scanner
 	$(GOSEC) ./...
