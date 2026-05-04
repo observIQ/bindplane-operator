@@ -379,7 +379,7 @@ _Appears in:_
 | `advanced` _[AdvancedConfig](#advancedconfig)_ | Advanced configures advanced Bindplane options. These are typically used to<br />fine-tune behavior at scale and are not required for basic operation. |  | Optional: \{\} <br /> |
 | `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
-| `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server,<br />Stripe billing, and janitor settings. |  | Optional: \{\} <br /> |
+| `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server<br />and Stripe billing. |  | Optional: \{\} <br /> |
 | `encryptionProvider` _[EncryptionProviderConfig](#encryptionproviderconfig)_ | EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.<br />When omitted, Bindplane uses its built-in encryption. |  | Optional: \{\} <br /> |
 | `features` _[FeaturesConfig](#featuresconfig)_ | Features configures the feature flag backend and feature overrides.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
 | `errors` _[ErrorsConfig](#errorsconfig)_ | Errors configures error tracking (e.g., BetterStack, Sentry).<br />When omitted, error tracking is disabled. |  | Optional: \{\} <br /> |
@@ -1006,7 +1006,6 @@ _Appears in:_
 | `licenseServerAddress` _string_ | LicenseServerAddress is the URL of the SaaS license server. |  | Optional: \{\} <br /> |
 | `licenseServerAPIKey` _string_ | LicenseServerAPIKey is a plain-text API key for the license server. |  | Optional: \{\} <br /> |
 | `licenseServerAPIKeySecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#secretkeyselector-v1-core)_ | LicenseServerAPIKeySecretRef references a Secret containing the license server API key.<br />Takes precedence over LicenseServerAPIKey when both are set. |  | Optional: \{\} <br /> |
-| `janitorOrganization` _string_ | JanitorOrganization is the organization used by the SaaS janitor job. |  | Optional: \{\} <br /> |
 | `useStagePublicRSAKey` _boolean_ | UseStagePublicRSAKey enables use of the staging RSA public key for token validation. |  | Optional: \{\} <br /> |
 | `stripe` _[SaaSStripeConfig](#saasstripeconfig)_ | Stripe configures Stripe billing integration. |  | Optional: \{\} <br /> |
 

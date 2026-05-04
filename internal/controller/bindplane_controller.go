@@ -362,7 +362,6 @@ const (
 	bindplaneSaaSEnabledEnvVar                          = "BINDPLANE_SAAS_ENABLED"
 	bindplaneSaaSLicenseServerAddressEnvVar             = "BINDPLANE_SAAS_LICENSE_SERVER_ADDRESS"
 	bindplaneSaaSLicenseServerAPIKeyEnvVar              = "BINDPLANE_SAAS_LICENSE_SERVER_API_KEY" // #nosec G101
-	bindplaneSaaSJanitorOrganizationEnvVar              = "BINDPLANE_SAAS_JANITOR_ORGANIZATION"
 	bindplaneSaaSUseStagePublicRSAKeyEnvVar             = "BINDPLANE_SAAS_USE_STAGE_PUBLIC_RSA_KEY"
 	bindplaneSaaSStripeEnabledEnvVar                    = "BINDPLANE_SAAS_STRIPE_ENABLED"
 	bindplaneSaaSStripeSecretKeyEnvVar                  = "BINDPLANE_SAAS_STRIPE_SECRET_KEY"      // #nosec G101
