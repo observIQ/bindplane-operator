@@ -548,6 +548,7 @@ type ErrorsConfig struct {
 	// +optional
 	Environment string `json:"environment,omitempty"`
 }
+
 // LLMConfig configures large language model integrations for Bindplane.
 type LLMConfig struct {
 	// Gemini configures Google Gemini integration.
