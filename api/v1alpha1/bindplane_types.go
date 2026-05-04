@@ -639,6 +639,7 @@ type AnthropicConfig struct {
 	// +optional
 	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
 }
+
 // QuotasConfig configures usage quota enforcement.
 type QuotasConfig struct {
 	// Enabled enables quota enforcement globally.
