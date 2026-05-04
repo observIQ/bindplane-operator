@@ -22,6 +22,23 @@ The following are configured via the Bindplane custom resource and documented in
 
 Details, field names, and examples for all of the above are in [Configuration](configuration.md).
 
+### Extra env vars and Secrets
+
+Each component exposes an `extraEnv` field (see [Configuration – Extra environment variables](configuration.md#extra-environment-variables)). Entries can reference Kubernetes Secrets directly using the standard `valueFrom.secretKeyRef` mechanism, which is the recommended way to inject sensitive values (for example, a proxy password or a cloud credentials path) without storing them in the `Bindplane` spec in plain text:
+
+```yaml
+spec:
+  bindplane:
+    extraEnv:
+      - name: MY_SECRET_ENV
+        valueFrom:
+          secretKeyRef:
+            name: my-secret
+            key: my-key
+```
+
+The Secret is **not** mounted as a volume by the operator; Kubernetes injects the value directly into the container environment at pod startup. Secret rotation requires a pod restart (for example, via a rolling update).
+
 ## Operator-generated Secrets
 
 ### TSDB basic auth (default Prometheus deployment)
@@ -141,4 +158,5 @@ This install path:
 | Transform Agent TLS / mTLS (cert-manager only) | Yes (opt-in) | `BINDPLANE_TRANSFORM_AGENT_TLS_*` | `spec.transformAgent.tls.certManager` | This document (cert-manager TLS) |
 | Redis TLS | Yes | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_*` | `spec.config.advanced.cache.redis.tls` | [Configuration – Advanced](configuration.md#advanced) |
 | Honeycomb API key | Yes | `BINDPLANE_TRACING_HONEYCOMB_API_KEY` | `spec.config.tracing.honeycomb.apiKey` or `apiKeySecretRef` | [Configuration – Tracing](configuration.md#tracing) |
+| Extra env Secret references | Yes (opt-in; `valueFrom.secretKeyRef`) | User-defined | `spec.<component>.extraEnv[*].valueFrom.secretKeyRef` | [Configuration – Extra environment variables](configuration.md#extra-environment-variables) |
 | Validating admission webhook TLS (operator install) | No (operator infrastructure) | — | `config/default` (cert-manager required); use `config/overlays/no-webhook` / `install-no-webhook.yaml` to disable | This document |

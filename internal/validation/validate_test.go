@@ -736,3 +736,64 @@ func TestValidateAgentVersionsConfig_AcceptsMoreThanOneHour(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+// ---- ValidateExtraEnv ----
+
+func TestValidateExtraEnv_RejectsReservedNames(t *testing.T) {
+	reserved := []string{
+		"KUBERNETES_NAMESPACE_NAME",
+		"KUBERNETES_POD_NAME",
+		"KUBERNETES_CONTAINER_NAME",
+		"GOMEMLIMIT",
+		"GOMAXPROCS",
+	}
+	for _, name := range reserved {
+		envVars := []corev1.EnvVar{{Name: name, Value: "x"}}
+		if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", envVars, false); err == nil {
+			t.Errorf("expected error for reserved name %q", name)
+		}
+		// Even with allowBindplanePrefix=true, these should still be rejected.
+		if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", envVars, true); err == nil {
+			t.Errorf("expected error for reserved name %q even with allowBindplanePrefix=true", name)
+		}
+	}
+}
+
+func TestValidateExtraEnv_RejectsBindplanePrefixByDefault(t *testing.T) {
+	envVars := []corev1.EnvVar{{Name: "BINDPLANE_CUSTOM_VAR", Value: "x"}}
+	if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", envVars, false); err == nil {
+		t.Error("expected error for BINDPLANE_ prefix when allowBindplanePrefix=false")
+	}
+}
+
+func TestValidateExtraEnv_AllowsBindplanePrefixWhenFlagSet(t *testing.T) {
+	envVars := []corev1.EnvVar{{Name: "BINDPLANE_CUSTOM_VAR", Value: "x"}}
+	if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", envVars, true); err != nil {
+		t.Errorf("unexpected error with allowBindplanePrefix=true: %v", err)
+	}
+}
+
+func TestValidateExtraEnv_AcceptsNonReservedNames(t *testing.T) {
+	envVars := []corev1.EnvVar{
+		{Name: "HTTP_PROXY", Value: "http://proxy.example.com:3128"},
+		{Name: "HTTPS_PROXY", Value: "http://proxy.example.com:3128"},
+		{Name: "NO_PROXY", Value: "localhost,127.0.0.1"},
+		{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: "/var/secrets/google/key.json"},
+		{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: "http://collector:4317"},
+	}
+	if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", envVars, false); err != nil {
+		t.Errorf("unexpected error for valid env vars: %v", err)
+	}
+}
+
+func TestValidateExtraEnv_AcceptsNil(t *testing.T) {
+	if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", nil, false); err != nil {
+		t.Errorf("unexpected error for nil extraEnv: %v", err)
+	}
+}
+
+func TestValidateExtraEnv_AcceptsEmpty(t *testing.T) {
+	if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", []corev1.EnvVar{}, false); err != nil {
+		t.Errorf("unexpected error for empty extraEnv: %v", err)
+	}
+}

@@ -23,8 +23,11 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strings"
 	"time"
 	"unicode"
+
+	corev1 "k8s.io/api/core/v1"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
@@ -35,6 +38,23 @@ const maxResourceNamePrefixLen = 63 - 1 - len("transform-agent") // 47
 
 // uuidRegex matches standard UUID format (case-insensitive).
 var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// reservedExtraEnvNames is the set of exact env var names that may never be set via extraEnv
+// because they are always managed by the operator.
+var reservedExtraEnvNames = map[string]struct{}{
+	"KUBERNETES_NAMESPACE_NAME": {},
+	"KUBERNETES_POD_NAME":       {},
+	"KUBERNETES_CONTAINER_NAME": {},
+	"GOMEMLIMIT":                {},
+	"GOMAXPROCS":                {},
+}
+
+// AllowBindplaneExtraEnv controls whether extraEnv entries with names starting with
+// "BINDPLANE_" are accepted. Set this once at operator startup via the
+// --allow-bindplane-extra-env flag; it is safe to read from concurrent goroutines
+// after initialization because it is written only once before any webhook or
+// controller goroutines are started.
+var AllowBindplaneExtraEnv bool
 
 // ValidateBindplane runs all validations for a Bindplane resource in order,
 // returning the first error encountered.
@@ -59,6 +79,10 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 		return fmt.Errorf("spec.transformAgent.replicas must be >= 1, got %d", *bindplane.Spec.TransformAgent.Replicas)
 	}
 	if err := ValidateTransformAgentTLSConfig(bindplane.Spec.TransformAgent); err != nil {
+		return err
+	}
+
+	if err := validateAllExtraEnv(bindplane); err != nil {
 		return err
 	}
 
@@ -93,6 +117,58 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 		return err
 	}
 
+	return nil
+}
+
+// validateAllExtraEnv validates extraEnv for every component in one call,
+// keeping ValidateBindplane under the cyclomatic-complexity threshold.
+func validateAllExtraEnv(bindplane *bindplanev1alpha1.Bindplane) error {
+	allow := AllowBindplaneExtraEnv
+	if err := ValidateExtraEnv("spec.bindplane.extraEnv", bindplane.Spec.Bindplane.ExtraEnv, allow); err != nil {
+		return err
+	}
+	if bindplane.Spec.BindplaneJobs != nil {
+		if err := ValidateExtraEnv("spec.bindplaneJobs.extraEnv", bindplane.Spec.BindplaneJobs.ExtraEnv, allow); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.BindplaneJobsMigrate != nil {
+		if err := ValidateExtraEnv("spec.bindplaneJobsMigrate.extraEnv", bindplane.Spec.BindplaneJobsMigrate.ExtraEnv, allow); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.TransformAgent != nil {
+		if err := ValidateExtraEnv("spec.transformAgent.extraEnv", bindplane.Spec.TransformAgent.ExtraEnv, allow); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.TSDB != nil {
+		if err := ValidateExtraEnv("spec.tsdb.extraEnv", bindplane.Spec.TSDB.ExtraEnv, allow); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.Nats != nil {
+		if err := ValidateExtraEnv("spec.nats.extraEnv", bindplane.Spec.Nats.ExtraEnv, allow); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateExtraEnv validates a list of extra environment variables.
+// fieldPath is used in error messages (e.g. "spec.bindplane.extraEnv").
+// allowBindplanePrefix, when false, rejects names starting with "BINDPLANE_" because
+// those vars are managed by the operator. Pass true only when the operator flag
+// --allow-bindplane-extra-env is set.
+func ValidateExtraEnv(fieldPath string, envVars []corev1.EnvVar, allowBindplanePrefix bool) error {
+	for i, ev := range envVars {
+		if _, reserved := reservedExtraEnvNames[ev.Name]; reserved {
+			return fmt.Errorf("%s[%d]: name %q is reserved and managed by the operator", fieldPath, i, ev.Name)
+		}
+		if !allowBindplanePrefix && strings.HasPrefix(ev.Name, "BINDPLANE_") {
+			return fmt.Errorf("%s[%d]: name %q starts with BINDPLANE_ which is reserved for operator-managed variables; use spec.config fields instead, or start the operator with --allow-bindplane-extra-env to override", fieldPath, i, ev.Name)
+		}
+	}
 	return nil
 }
 

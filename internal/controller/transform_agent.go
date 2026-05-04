@@ -141,7 +141,8 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: combineEnvVars(
+								Env: prependExtraEnv(
+									getTransformAgentExtraEnv(bindplane),
 									getKubernetesEnvVars(transformAgentContainerName),
 									getTransformAgentTLSEnvVars(bindplane),
 								),
@@ -208,6 +209,14 @@ func getTransformAgentAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.A
 func getTransformAgentPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
 	if bindplane.Spec.TransformAgent != nil {
 		return bindplane.Spec.TransformAgent.PodTemplate
+	}
+	return nil
+}
+
+// getTransformAgentExtraEnv returns the user-supplied extra env vars for Transform Agent, or nil.
+func getTransformAgentExtraEnv(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if bindplane.Spec.TransformAgent != nil {
+		return bindplane.Spec.TransformAgent.ExtraEnv
 	}
 	return nil
 }
