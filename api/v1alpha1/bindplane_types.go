@@ -288,6 +288,11 @@ type BindplaneConfigSpec struct {
 	// When omitted, Bindplane uses its own defaults.
 	// +optional
 	Features *FeaturesConfig `json:"features,omitempty"`
+
+	// Errors configures error tracking (e.g., BetterStack, Sentry).
+	// When omitted, error tracking is disabled.
+	// +optional
+	Errors *ErrorsConfig `json:"errors,omitempty"`
 }
 
 // SaaSConfig configures Bindplane SaaS-specific functionality.
@@ -518,6 +523,25 @@ type FeatureOverridesConfig struct {
 	// Notifications forces the notifications feature on.
 	// +optional
 	Notifications bool `json:"notifications,omitempty"`
+}
+
+// ErrorsConfig configures error tracking for Bindplane.
+type ErrorsConfig struct {
+	// Enabled enables error tracking.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// BackendDSN is the DSN (Data Source Name) for the backend error tracking service.
+	// +optional
+	BackendDSN string `json:"backendDSN,omitempty"`
+
+	// FrontendDSN is the DSN for the frontend error tracking service.
+	// +optional
+	FrontendDSN string `json:"frontendDSN,omitempty"`
+
+	// Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging").
+	// +optional
+	Environment string `json:"environment,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.

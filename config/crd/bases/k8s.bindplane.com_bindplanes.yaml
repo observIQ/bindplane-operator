@@ -12359,6 +12359,17 @@ spec:
                         - googleKMS
                         type: string
                     type: object
+                  errors:
+                    properties:
+                      backendDSN:
+                        type: string
+                      enabled:
+                        type: boolean
+                      environment:
+                        type: string
+                      frontendDSN:
+                        type: string
+                    type: object
                   eventBus:
                     properties:
                       health:

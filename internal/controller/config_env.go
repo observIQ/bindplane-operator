@@ -463,6 +463,7 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getSaaSConfigEnvVars(config.SaaS)...)
 	envVars = append(envVars, getEncryptionProviderEnvVars(config.EncryptionProvider)...)
 	envVars = append(envVars, getFeaturesConfigEnvVars(config.Features)...)
+	envVars = append(envVars, getErrorsConfigEnvVars(config.Errors)...)
 	return envVars
 }
 
@@ -1211,6 +1212,28 @@ func getFeatureOverridesEnvVars(o *bindplanev1alpha1.FeatureOverridesConfig) []c
 	}
 	if o.Notifications {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesNotificationsEnvVar, Value: "true"})
+	}
+	return envVars
+}
+
+// getErrorsConfigEnvVars returns env vars for spec.config.errors.
+// Returns nil when errors is nil (error tracking is disabled).
+func getErrorsConfigEnvVars(e *bindplanev1alpha1.ErrorsConfig) []corev1.EnvVar {
+	if e == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if e.Enabled {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnabledEnvVar, Value: "true"})
+	}
+	if e.BackendDSN != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsBackendDSNEnvVar, Value: e.BackendDSN})
+	}
+	if e.FrontendDSN != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsFrontendDSNEnvVar, Value: e.FrontendDSN})
+	}
+	if e.Environment != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnvironmentEnvVar, Value: e.Environment})
 	}
 	return envVars
 }

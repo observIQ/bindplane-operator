@@ -369,6 +369,7 @@ _Appears in:_
 | `saas` _[SaaSConfig](#saasconfig)_ | SaaS configures Bindplane SaaS-specific functionality including the license server,<br />Stripe billing, and janitor settings. |  | Optional: \{\} <br /> |
 | `encryptionProvider` _[EncryptionProviderConfig](#encryptionproviderconfig)_ | EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.<br />When omitted, Bindplane uses its built-in encryption. |  | Optional: \{\} <br /> |
 | `features` _[FeaturesConfig](#featuresconfig)_ | Features configures the feature flag backend and feature overrides.<br />When omitted, Bindplane uses its own defaults. |  | Optional: \{\} <br /> |
+| `errors` _[ErrorsConfig](#errorsconfig)_ | Errors configures error tracking (e.g., BetterStack, Sentry).<br />When omitted, error tracking is disabled. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsComponentSpec
 
@@ -441,6 +442,20 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `type` _string_ | Type is the encryption provider type. |  | Enum: [googleKMS] <br />Optional: \{\} <br /> |
 | `googleKMS` _[GoogleKMSConfig](#googlekmsconfig)_ | GoogleKMS configures Google Cloud KMS as the encryption provider. |  | Optional: \{\} <br /> |
+
+#### ErrorsConfig
+
+ErrorsConfig configures error tracking for Bindplane.
+
+_Appears in:_
+- [BindplaneConfigSpec](#bindplaneconfigspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled enables error tracking. |  | Optional: \{\} <br /> |
+| `backendDSN` _string_ | BackendDSN is the DSN (Data Source Name) for the backend error tracking service. |  | Optional: \{\} <br /> |
+| `frontendDSN` _string_ | FrontendDSN is the DSN for the frontend error tracking service. |  | Optional: \{\} <br /> |
+| `environment` _string_ | Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging"). |  | Optional: \{\} <br /> |
 
 #### EventBusConfig
 

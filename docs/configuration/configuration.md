@@ -44,6 +44,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Features](#features)
   - [PostHog](#posthog)
   - [Feature overrides](#feature-overrides)
+- [Errors](#errors)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1182,6 +1183,7 @@ spec:
         - github
 ```
 
+<<<<<<< HEAD
 ## SaaS
 
 The `spec.config.saas` section configures Bindplane SaaS-specific functionality including the license server, Stripe billing, and janitor settings.
@@ -1262,6 +1264,19 @@ All override fields are boolean and default to `false`.
 | `spec.config.features.overrides.rawConfigLegacy` | `BINDPLANE_FEATURES_OVERRIDES_RAW_CONFIG_LEGACY` | `false` | No |
 | `spec.config.features.overrides.notifications` | `BINDPLANE_FEATURES_OVERRIDES_NOTIFICATIONS` | `false` | No |
 
+## Errors
+
+The `spec.config.errors` section configures error tracking (e.g., BetterStack). When omitted, error tracking is disabled.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.errors.enabled` | `BINDPLANE_ERRORS_ENABLED` | `false` | No |
+| `spec.config.errors.backendDSN` | `BINDPLANE_ERRORS_BACKEND_DSN` | — | No |
+| `spec.config.errors.frontendDSN` | `BINDPLANE_ERRORS_FRONTEND_DSN` | — | No |
+| `spec.config.errors.environment` | `BINDPLANE_ERRORS_ENVIRONMENT` | — | No |
+
+`backendDSN` and `frontendDSN` are service-specific DSNs (e.g., BetterStack ingest DSN). `environment` is reported to the error tracking service (e.g., `"production"`, `"staging"`).
+
 ```yaml
 spec:
   config:
@@ -1335,6 +1350,16 @@ spec:
       overrides:
         growthLicense: true
         pipelineIntelligence: true
+```
+
+```yaml
+spec:
+  config:
+    errors:
+      enabled: true
+      backendDSN: "https://errors.example.com/backend-dsn"
+      frontendDSN: "https://errors.example.com/frontend-dsn"
+      environment: production
 ```
 
 ## Scope
