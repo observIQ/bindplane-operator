@@ -64,6 +64,12 @@ type BindplaneSpec struct {
 	// +optional
 	// +kubebuilder:default={}
 	Nats *NatsComponentSpec `json:"nats,omitempty"`
+
+	// OpAMP, when enabled, runs a dedicated Deployment for OpAMP/agent traffic
+	// alongside the primary Node deployment. When nil or disabled (the default),
+	// the primary Node deployment serves both frontend and OpAMP traffic.
+	// +optional
+	OpAMP *OpAMPComponentSpec `json:"opamp,omitempty"`
 }
 
 // NodeAutoscalingSpec configures horizontal pod autoscaling for Bindplane Node.
@@ -167,6 +173,84 @@ type BindplaneComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+}
+
+// OpAMPComponentSpec defines an optional dedicated Bindplane Deployment that
+// serves OpAMP/agent traffic. When enabled, the operator provisions a second
+// Deployment running BINDPLANE_MODE=node alongside the primary Node deployment.
+// Both Deployments share the same Bindplane configuration (license, store, auth,
+// event bus). They differ in resources, replicas, autoscaling, PDB, and
+// OpAMP-specific tuning environment variables.
+//
+// Use this when you want to scale agent-handling capacity independently from
+// the frontend (UI/API), for example when you have a large fleet of agents but
+// modest UI traffic.
+type OpAMPComponentSpec struct {
+	// Enabled enables the dedicated OpAMP deployment. When false (the default),
+	// the primary Node deployment serves both frontend and OpAMP traffic.
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Replicas specifies the number of replicas for the OpAMP deployment.
+	// Ignored when Autoscaling.Enabled is true.
+	// +optional
+	// +kubebuilder:default=3
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Resources defines compute resource requests and limits for the OpAMP
+	// primary container. If podTemplate.spec.containers[server].resources is
+	// also set, the podTemplate value takes precedence because it is more specific.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// PodTemplate defines pod template specification for the OpAMP deployment.
+	// Merged on top of operator-managed defaults using the same merge rules as
+	// other component podTemplates.
+	// +optional
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	PodTemplate *PodTemplateSpec `json:"podTemplate,omitempty"`
+
+	// DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget
+	// for the OpAMP deployment. When false (the default), the operator creates
+	// a PDB with minAvailable: 1.
+	// +optional
+	// +kubebuilder:default=false
+	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
+
+	// MinReadySeconds is the minimum number of seconds a newly created OpAMP pod
+	// must be ready before it is considered available. When omitted, the operator
+	// defaults this to the pod's termination grace period.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MinReadySeconds *int32 `json:"minReadySeconds,omitempty"`
+
+	// Strategy defines the rollout strategy for the OpAMP Deployment. When
+	// omitted, defaults to RollingUpdate with maxSurge=1 and maxUnavailable=0.
+	// +optional
+	Strategy *appsv1.DeploymentStrategy `json:"strategy,omitempty"`
+
+	// Autoscaling configures optional horizontal pod autoscaling for OpAMP.
+	// When enabled, spec.bindplane.opamp.replicas is ignored.
+	// +optional
+	Autoscaling *NodeAutoscalingSpec `json:"autoscaling,omitempty"`
+
+	// MaxSimultaneousConnections sets BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS
+	// for the OpAMP deployment only. When unset, falls back to
+	// spec.config.agents.maxSimultaneousConnections which is shared
+	// across all node-mode Deployments. Useful when you want OpAMP pods to handle
+	// a higher concurrency than the frontend pods.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	MaxSimultaneousConnections *int64 `json:"maxSimultaneousConnections,omitempty"`
+
+	// ShutdownGracePeriodTarget sets BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET
+	// for the OpAMP deployment. This is a 0-1 fraction (e.g. "0.6") of the OpAMP
+	// shutdown grace period after which the server stops accepting new OpAMP
+	// connections. Only applied when set.
+	// +optional
+	ShutdownGracePeriodTarget string `json:"shutdownGracePeriodTarget,omitempty"`
 }
 
 // BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification

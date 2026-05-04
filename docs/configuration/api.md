@@ -431,6 +431,7 @@ _Appears in:_
 | `transformAgent` _[TransformAgentComponentSpec](#transformagentcomponentspec)_ | Transform Agent pod specification | \{  \} | Optional: \{\} <br /> |
 | `tsdb` _[TSDBComponentSpec](#tsdbcomponentspec)_ | TSDB pod specification |  | Optional: \{\} <br /> |
 | `nats` _[NatsComponentSpec](#natscomponentspec)_ | NATS pod specification | \{  \} | Optional: \{\} <br /> |
+| `opamp` _[OpAMPComponentSpec](#opampcomponentspec)_ | OpAMP, when enabled, runs a dedicated Deployment for OpAMP/agent traffic<br />alongside the primary Node deployment. When nil or disabled (the default),<br />the primary Node deployment serves both frontend and OpAMP traffic. |  | Optional: \{\} <br /> |
 
 #### CertManagerTLSIssuerRef
 
@@ -791,6 +792,7 @@ stateful WebSocket (OpAMP) workload.
 
 _Appears in:_
 - [BindplaneComponentSpec](#bindplanecomponentspec)
+- [OpAMPComponentSpec](#opampcomponentspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -816,6 +818,35 @@ _Appears in:_
 | `issuer` _string_ | Issuer is the URL of the OIDC provider |  | Optional: \{\} <br /> |
 | `scopes` _string array_ | Scopes is the list of OAuth2 scopes to request |  | Optional: \{\} <br /> |
 
+#### OpAMPComponentSpec
+
+OpAMPComponentSpec defines an optional dedicated Bindplane Deployment that
+serves OpAMP/agent traffic. When enabled, the operator provisions a second
+Deployment running BINDPLANE_MODE=node alongside the primary Node deployment.
+Both Deployments share the same Bindplane configuration (license, store, auth,
+event bus). They differ in resources, replicas, autoscaling, PDB, and
+OpAMP-specific tuning environment variables.
+
+Use this when you want to scale agent-handling capacity independently from
+the frontend (UI/API), for example when you have a large fleet of agents but
+modest UI traffic.
+
+_Appears in:_
+- [BindplaneSpec](#bindplanespec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled enables the dedicated OpAMP deployment. When false (the default),<br />the primary Node deployment serves both frontend and OpAMP traffic. | false | Optional: \{\} <br /> |
+| `replicas` _integer_ | Replicas specifies the number of replicas for the OpAMP deployment.<br />Ignored when Autoscaling.Enabled is true. | 3 | Optional: \{\} <br /> |
+| `resources` _[ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#resourcerequirements-v1-core)_ | Resources defines compute resource requests and limits for the OpAMP<br />primary container. If podTemplate.spec.containers[server].resources is<br />also set, the podTemplate value takes precedence because it is more specific. |  | Optional: \{\} <br /> |
+| `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for the OpAMP deployment.<br />Merged on top of operator-managed defaults using the same merge rules as<br />other component podTemplates. |  | Type: object <br />Optional: \{\} <br /> |
+| `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget<br />for the OpAMP deployment. When false (the default), the operator creates<br />a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
+| `minReadySeconds` _integer_ | MinReadySeconds is the minimum number of seconds a newly created OpAMP pod<br />must be ready before it is considered available. When omitted, the operator<br />defaults this to the pod's termination grace period. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `strategy` _[DeploymentStrategy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#deploymentstrategy-v1-apps)_ | Strategy defines the rollout strategy for the OpAMP Deployment. When<br />omitted, defaults to RollingUpdate with maxSurge=1 and maxUnavailable=0. |  | Optional: \{\} <br /> |
+| `autoscaling` _[NodeAutoscalingSpec](#nodeautoscalingspec)_ | Autoscaling configures optional horizontal pod autoscaling for OpAMP.<br />When enabled, spec.bindplane.opamp.replicas is ignored. |  | Optional: \{\} <br /> |
+| `maxSimultaneousConnections` _integer_ | MaxSimultaneousConnections sets BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS<br />for the OpAMP deployment only. When unset, falls back to<br />spec.config.agents.maxSimultaneousConnections which is shared<br />across all node-mode Deployments. Useful when you want OpAMP pods to handle<br />a higher concurrency than the frontend pods. |  | Minimum: 1 <br />Optional: \{\} <br /> |
+| `shutdownGracePeriodTarget` _string_ | ShutdownGracePeriodTarget sets BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET<br />for the OpAMP deployment. This is a 0-1 fraction (e.g. "0.6") of the OpAMP<br />shutdown grace period after which the server stops accepting new OpAMP<br />connections. Only applied when set. |  | Optional: \{\} <br /> |
+
 #### OpenAIConfig
 
 OpenAIConfig configures OpenAI integration.
@@ -840,6 +871,7 @@ _Appears in:_
 - [BindplaneJobsComponentSpec](#bindplanejobscomponentspec)
 - [BindplaneJobsMigrateComponentSpec](#bindplanejobsmigratecomponentspec)
 - [NatsComponentSpec](#natscomponentspec)
+- [OpAMPComponentSpec](#opampcomponentspec)
 - [TSDBComponentSpec](#tsdbcomponentspec)
 - [TransformAgentComponentSpec](#transformagentcomponentspec)
 

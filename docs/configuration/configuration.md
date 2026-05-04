@@ -50,6 +50,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Extra environment variables](#extra-environment-variables)
   - [Reserved env names](#reserved-env-names)
   - [Pod template vs extraEnv](#pod-template-vs-extraenv)
+- [OpAMP deployment split](#opamp-deployment-split)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1502,6 +1503,110 @@ Names starting with `BINDPLANE_` are also rejected by default because they map t
 ### Pod template vs extraEnv
 
 The `podTemplate` field gives access to the full Kubernetes pod spec (tolerations, node selectors, affinity, security contexts, etc.). The operator intentionally **does not** merge environment variables from `podTemplate.spec.containers[*].env`—those entries are ignored for the primary container. Use `extraEnv` for all custom environment variable injection.
+
+## OpAMP deployment split
+
+By default, the Bindplane Node deployment serves both the frontend (UI and REST API) and OpAMP/agent traffic on the same pods. When you have a large fleet of agents but modest UI traffic, you can scale agent handling independently by enabling a dedicated OpAMP deployment.
+
+When `spec.opamp.enabled` is `true`, the operator provisions a second Deployment (`<name>-opamp`) running the same Bindplane EE image in `node` mode. Both Deployments share the same configuration (license, store, event bus, auth). A separate Service (`<name>-opamp`) exposes the OpAMP pods.
+
+> **Warning:** The OpAMP deployment shares the same Bindplane configuration as the primary Node deployment (license, store, event bus, auth). Changing `spec.opamp.maxSimultaneousConnections` overrides `spec.config.agents.maxSimultaneousConnections` for the OpAMP pods only; the frontend (Node) pods continue to use the shared value.
+
+| CRD Field | Default | Description |
+|---|---|---|
+| `spec.opamp.enabled` | `false` | Enables the dedicated OpAMP deployment |
+| `spec.opamp.replicas` | `3` | Number of OpAMP replicas (ignored when autoscaling is enabled) |
+| `spec.opamp.resources` | 2 CPU / 2 GiB | Compute resources for the OpAMP container |
+| `spec.opamp.podTemplate` | — | Pod template overrides (same merge rules as other components) |
+| `spec.opamp.disablePodDisruptionBudget` | `false` | Disables the operator-managed PDB |
+| `spec.opamp.minReadySeconds` | termination grace period | Minimum seconds a pod must be ready before considered available |
+| `spec.opamp.strategy` | RollingUpdate maxSurge=1 maxUnavailable=0 | Rollout strategy |
+| `spec.opamp.autoscaling` | — | HPA configuration (same structure as `spec.bindplane.autoscaling`) |
+| `spec.opamp.maxSimultaneousConnections` | shared value | Per-deployment override for `BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS` |
+| `spec.opamp.shutdownGracePeriodTarget` | — | Fraction (0–1) of shutdown grace period for OpAMP drain |
+
+### Example: enabling OpAMP split with HPA
+
+```yaml
+apiVersion: k8s.bindplane.com/v1alpha1
+kind: Bindplane
+metadata:
+  name: bindplane-sample
+spec:
+  config:
+    license: "my-license-key"
+    store:
+      postgres:
+        host: postgres.example.com
+  bindplane:
+    replicas: 3
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "1024Mi"
+      limits:
+        memory: "1024Mi"
+  opamp:
+    enabled: true
+    resources:
+      requests:
+        cpu: "2000m"
+        memory: "2048Mi"
+      limits:
+        memory: "2048Mi"
+    maxSimultaneousConnections: 2000
+    shutdownGracePeriodTarget: "0.6"
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+```
+
+### Ingress routing guidance
+
+Agents connect to Bindplane over WebSocket on `/v1/opamp` and HTTP on `/v1/agent/*`. When the OpAMP split is enabled, route those paths to the `<name>-opamp` Service and route all other traffic to `<name>-node`.
+
+Example Ingress (nginx ingress controller):
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bindplane
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  rules:
+  - host: bindplane.example.com
+    http:
+      paths:
+      - path: /v1/opamp
+        pathType: Prefix
+        backend:
+          service:
+            name: bindplane-sample-opamp
+            port:
+              number: 3001
+      - path: /v1/agent
+        pathType: Prefix
+        backend:
+          service:
+            name: bindplane-sample-opamp
+            port:
+              number: 3001
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: bindplane-sample-node
+            port:
+              number: 3001
+```
+
+> **Note:** If you use BindplaneGateway to expose Bindplane, configure it to route OpAMP traffic to the `<name>-opamp` Service. Refer to the BindplaneGateway documentation for routing configuration. The operator does not configure BindplaneGateway.
+
+> **Note:** The operator provisions a regular ClusterIP Service for the OpAMP deployment (`<name>-opamp`). A headless Service is not created because agents do not require pod-direct DNS — load balancing through the ClusterIP Service is sufficient.
 
 ## Scope
 
