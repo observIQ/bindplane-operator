@@ -679,6 +679,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile OpAMP resources (optional dedicated OpAMP deployment)
+	if err := r.reconcileOpAMP(ctx, bindplane, log); err != nil {
+		log.Error(err, "unable to reconcile OpAMP")
+		return ctrl.Result{}, err
+	}
+
 	// Mark as reconciled so any previous InvalidName condition is cleared
 	condition := metav1.Condition{
 		Type:               "Reconciled",
