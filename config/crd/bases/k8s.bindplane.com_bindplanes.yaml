@@ -29486,6 +29486,8 @@ spec:
                 - ApplyingChanges
                 - Ready
                 - Degraded
+                - Paused
+                - Deleting
                 type: string
               transformAgentReadyReplicas:
                 format: int32

@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -43,9 +44,31 @@ const (
 	transformAgentTLSCertSuffix = "transform-agent-tls"
 )
 
+// deleteCertificateIfExists deletes a cert-manager Certificate by name if it exists.
+// Returns nil when the Certificate does not exist (idempotent).
+// Also returns nil when cert-manager is not installed in the cluster (no CRD for Certificate)
+// so that clusters without cert-manager are not broken by the cleanup path.
+func (r *BindplaneReconciler) deleteCertificateIfExists(ctx context.Context, name, namespace string, log logr.Logger) error {
+	cert := &cmapi.Certificate{}
+	if err := r.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, cert); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		// If cert-manager CRDs are not installed, the API server returns a "no match" error.
+		// Treat this as a non-fatal no-op so clusters without cert-manager continue to work.
+		if meta.IsNoMatchError(err) {
+			return nil
+		}
+		return err
+	}
+	log.Info("Deleting Certificate (toggle disabled)", "name", name, "namespace", namespace)
+	return r.Delete(ctx, cert)
+}
+
 // reconcileInternalTLSCertificates reconciles cert-manager Certificate resources for
 // internal mTLS (Prometheus remote write). Run before Prometheus and Node/Jobs so issued secrets exist.
 // Server cert: when spec.tsdb.tls.certManager is set. Client cert: when spec.config.tsdb.tls.certManager is set.
+// When a toggle is unset, the corresponding Certificate is deleted if it exists.
 func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	// Server cert (Prometheus StatefulSet)
 	if isTSDBServerCertManagerTLSEnabled(bindplane) {
@@ -58,7 +81,16 @@ func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Conte
 		if err := r.reconcileTSDBProbeClientCert(ctx, bindplane, log); err != nil {
 			return err
 		}
+	} else {
+		// Toggle was unset — delete any previously-created server and probe client certs.
+		if err := r.deleteCertificateIfExists(ctx, getResourceName(bindplane, tsdbRemoteWriteServerCertSuffix), bindplane.Namespace, log); err != nil {
+			return err
+		}
+		if err := r.deleteCertificateIfExists(ctx, getResourceName(bindplane, tsdbProbeClientCertSuffix), bindplane.Namespace, log); err != nil {
+			return err
+		}
 	}
+
 	// Client cert (Bindplane Node, Jobs, NATS)
 	if isTSDBClientCertManagerTLSEnabled(bindplane) {
 		if err := validateTSDBTLSConfig(bindplane); err != nil {
@@ -67,7 +99,13 @@ func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Conte
 		if err := r.reconcileTSDBRemoteWriteClientCert(ctx, bindplane, log); err != nil {
 			return err
 		}
+	} else {
+		// Toggle was unset — delete any previously-created client cert.
+		if err := r.deleteCertificateIfExists(ctx, getResourceName(bindplane, tsdbRemoteWriteClientCertSuffix), bindplane.Namespace, log); err != nil {
+			return err
+		}
 	}
+
 	// NATS TLS (single cert for client, cluster, and HTTP)
 	if isNatsCertManagerTLSEnabled(bindplane) {
 		if err := validateNatsTLSConfig(bindplane); err != nil {
@@ -76,12 +114,23 @@ func (r *BindplaneReconciler) reconcileInternalTLSCertificates(ctx context.Conte
 		if err := r.reconcileNatsTLSCert(ctx, bindplane, log); err != nil {
 			return err
 		}
+	} else {
+		// Toggle was unset — delete any previously-created NATS cert.
+		if err := r.deleteCertificateIfExists(ctx, getResourceName(bindplane, natsTLSCertSuffix), bindplane.Namespace, log); err != nil {
+			return err
+		}
 	}
+
 	if isTransformAgentCertManagerTLSEnabled(bindplane) {
 		if err := validateTransformAgentTLSConfig(bindplane); err != nil {
 			return err
 		}
 		if err := r.reconcileTransformAgentTLSCert(ctx, bindplane, log); err != nil {
+			return err
+		}
+	} else {
+		// Toggle was unset — delete any previously-created Transform Agent cert.
+		if err := r.deleteCertificateIfExists(ctx, getResourceName(bindplane, transformAgentTLSCertSuffix), bindplane.Namespace, log); err != nil {
 			return err
 		}
 	}
