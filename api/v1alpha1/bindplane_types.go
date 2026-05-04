@@ -409,8 +409,8 @@ type BindplaneConfigSpec struct {
 	// +optional
 	AgentVersions *AgentVersionsConfig `json:"agentVersions,omitempty"`
 
-	// SaaS configures Bindplane SaaS-specific functionality including the license server,
-	// Stripe billing, and janitor settings.
+	// SaaS configures Bindplane SaaS-specific functionality including the license server
+	// and Stripe billing.
 	// +optional
 	SaaS *SaaSConfig `json:"saas,omitempty"`
 
@@ -458,10 +458,6 @@ type SaaSConfig struct {
 	// Takes precedence over LicenseServerAPIKey when both are set.
 	// +optional
 	LicenseServerAPIKeySecretRef *corev1.SecretKeySelector `json:"licenseServerAPIKeySecretRef,omitempty"`
-
-	// JanitorOrganization is the organization used by the SaaS janitor job.
-	// +optional
-	JanitorOrganization string `json:"janitorOrganization,omitempty"`
 
 	// UseStagePublicRSAKey enables use of the staging RSA public key for token validation.
 	// +optional

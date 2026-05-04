@@ -1191,7 +1191,7 @@ spec:
 
 ## SaaS
 
-The `spec.config.saas` section configures Bindplane SaaS-specific functionality including the license server, Stripe billing, and janitor settings.
+The `spec.config.saas` section configures Bindplane SaaS-specific functionality including the license server and Stripe billing.
 When omitted, SaaS mode is disabled.
 
 | CRD Field | Environment Variable | Default | Required |
@@ -1200,7 +1200,6 @@ When omitted, SaaS mode is disabled.
 | `spec.config.saas.licenseServerAddress` | `BINDPLANE_SAAS_LICENSE_SERVER_ADDRESS` | — | No |
 | `spec.config.saas.licenseServerAPIKey` | `BINDPLANE_SAAS_LICENSE_SERVER_API_KEY` | — | No |
 | `spec.config.saas.licenseServerAPIKeySecretRef` | `BINDPLANE_SAAS_LICENSE_SERVER_API_KEY` | — | No |
-| `spec.config.saas.janitorOrganization` | `BINDPLANE_SAAS_JANITOR_ORGANIZATION` | — | No |
 | `spec.config.saas.useStagePublicRSAKey` | `BINDPLANE_SAAS_USE_STAGE_PUBLIC_RSA_KEY` | `false` | No |
 
 `licenseServerAPIKeySecretRef` takes precedence over `licenseServerAPIKey` when both are set.

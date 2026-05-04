@@ -12988,8 +12988,6 @@ spec:
                     properties:
                       enabled:
                         type: boolean
-                      janitorOrganization:
-                        type: string
                       licenseServerAPIKey:
                         type: string
                       licenseServerAPIKeySecretRef:

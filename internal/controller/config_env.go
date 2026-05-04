@@ -970,9 +970,9 @@ func getSaaSConfigEnvVars(s *bindplanev1alpha1.SaaSConfig) []corev1.EnvVar {
 	if ev := secretOrValue(bindplaneSaaSLicenseServerAPIKeyEnvVar, s.LicenseServerAPIKey, s.LicenseServerAPIKeySecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
-	if s.JanitorOrganization != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSJanitorOrganizationEnvVar, Value: s.JanitorOrganization})
-	}
+	// NOTE: BINDPLANE_SAAS_JANITOR_ORGANIZATION is intentionally NOT exposed by
+	// the operator. Users who need to set it can do so via spec.bindplane.extraEnv
+	// with the operator started using --allow-bindplane-extra-env. See plans/05.
 	if s.UseStagePublicRSAKey {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSUseStagePublicRSAKeyEnvVar, Value: "true"})
 	}
