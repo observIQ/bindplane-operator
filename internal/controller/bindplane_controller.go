@@ -981,6 +981,23 @@ func combineEnvVars(envVarSlices ...[]corev1.EnvVar) []corev1.EnvVar {
 	return result
 }
 
+// prependExtraEnv places user-supplied extraEnv entries first, followed by the
+// operator-managed env var slices. Because Kubernetes honours the LAST occurrence
+// of a duplicate Name, putting operator vars last means operator values always win
+// over any colliding name the user might set in extraEnv.
+func prependExtraEnv(extraEnv []corev1.EnvVar, operatorEnv ...[]corev1.EnvVar) []corev1.EnvVar {
+	total := len(extraEnv)
+	for _, s := range operatorEnv {
+		total += len(s)
+	}
+	out := make([]corev1.EnvVar, 0, total)
+	out = append(out, extraEnv...)
+	for _, s := range operatorEnv {
+		out = append(out, s...)
+	}
+	return out
+}
+
 func getKubernetesEnvVars(containerName string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{

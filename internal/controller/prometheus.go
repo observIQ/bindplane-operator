@@ -445,7 +445,10 @@ func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env:          getKubernetesEnvVars(tsdbContainerName),
+								Env: prependExtraEnv(
+									getTSDBExtraEnv(bindplane),
+									getKubernetesEnvVars(tsdbContainerName),
+								),
 								Resources:    tsdbResources,
 								VolumeMounts: volumeMounts,
 								StartupProbe: &corev1.Probe{
@@ -697,6 +700,14 @@ func getTSDBAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
 func getTSDBPodTemplateSpec(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
 	if bindplane.Spec.TSDB != nil {
 		return bindplane.Spec.TSDB.PodTemplate
+	}
+	return nil
+}
+
+// getTSDBExtraEnv returns the user-supplied extra env vars for TSDB, or nil.
+func getTSDBExtraEnv(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if bindplane.Spec.TSDB != nil {
+		return bindplane.Spec.TSDB.ExtraEnv
 	}
 	return nil
 }

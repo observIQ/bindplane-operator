@@ -147,7 +147,8 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: combineEnvVars(
+								Env: prependExtraEnv(
+									getBindplaneJobsExtraEnv(bindplane),
 									getKubernetesEnvVars(bindplaneJobsContainerName),
 									[]corev1.EnvVar{
 										{
@@ -265,7 +266,8 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 							Image:        getBindplaneEEImage(bindplane),
 							Command:      []string{"/bindplane", "migrate", "-y"},
 							VolumeMounts: configMounts,
-							Env: combineEnvVars(
+							Env: prependExtraEnv(
+								getBindplaneJobsMigrateExtraEnv(bindplane),
 								getKubernetesEnvVars(bindplaneJobsContainerName),
 								[]corev1.EnvVar{{Name: bindplaneModeEnvVar, Value: bindplaneJobsMigrateModeValue}},
 								getBindplaneCommonEnvVars(bindplane, bindplaneJobsMigrateComponent),
@@ -468,6 +470,22 @@ func getBindplaneJobsMigrateAffinity(bindplane *bindplanev1alpha1.Bindplane) *co
 func getBindplaneJobsMigratePodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
 	if bindplane.Spec.BindplaneJobsMigrate != nil {
 		return bindplane.Spec.BindplaneJobsMigrate.PodTemplate
+	}
+	return nil
+}
+
+// getBindplaneJobsExtraEnv returns the user-supplied extra env vars for Bindplane Jobs, or nil.
+func getBindplaneJobsExtraEnv(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if bindplane.Spec.BindplaneJobs != nil {
+		return bindplane.Spec.BindplaneJobs.ExtraEnv
+	}
+	return nil
+}
+
+// getBindplaneJobsMigrateExtraEnv returns the user-supplied extra env vars for Bindplane Jobs Migrate, or nil.
+func getBindplaneJobsMigrateExtraEnv(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if bindplane.Spec.BindplaneJobsMigrate != nil {
+		return bindplane.Spec.BindplaneJobsMigrate.ExtraEnv
 	}
 	return nil
 }

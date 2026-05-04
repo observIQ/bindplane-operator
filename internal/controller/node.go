@@ -172,7 +172,8 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: combineEnvVars(
+								Env: prependExtraEnv(
+									bindplane.Spec.Bindplane.ExtraEnv,
 									getKubernetesEnvVars(nodeContainerName),
 									getNodeEnvVars(),
 									getBindplaneCommonEnvVars(bindplane, nodeComponent),

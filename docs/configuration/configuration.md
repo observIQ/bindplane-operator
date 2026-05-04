@@ -47,6 +47,9 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Errors](#errors)
 - [LLM](#llm)
 - [Quotas](#quotas)
+- [Extra environment variables](#extra-environment-variables)
+  - [Reserved env names](#reserved-env-names)
+  - [Pod template vs extraEnv](#pod-template-vs-extraenv)
 - [Scope](#scope)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1439,6 +1442,66 @@ spec:
         enabled: true
         enforced: false
 ```
+
+## Extra environment variables
+
+Each component exposes an `extraEnv` field that injects arbitrary environment variables into its primary container. These are prepended **before** the operator-managed variables. Because Kubernetes uses the **last** occurrence of a duplicate name, operator-managed values always win over any colliding name in `extraEnv`.
+
+| CRD Field | Description |
+|---|---|
+| `spec.bindplane.extraEnv` | Extra env vars for the Bindplane Node Deployment. |
+| `spec.bindplaneJobs.extraEnv` | Extra env vars for the Bindplane Jobs Deployment. |
+| `spec.bindplaneJobsMigrate.extraEnv` | Extra env vars for the Bindplane Jobs Migrate batch/v1 Job. |
+| `spec.transformAgent.extraEnv` | Extra env vars for the Transform Agent Deployment. |
+| `spec.tsdb.extraEnv` | Extra env vars for the TSDB (Prometheus) StatefulSet. |
+| `spec.nats.extraEnv` | Extra env vars for the NATS StatefulSet. |
+
+Each entry follows the standard Kubernetes `EnvVar` schema, which supports both inline values and references to Secrets or ConfigMaps via `valueFrom`.
+
+Example (egress proxy for all Bindplane Node pods):
+
+```yaml
+spec:
+  bindplane:
+    extraEnv:
+      - name: HTTP_PROXY
+        value: "http://proxy.corp.example.com:3128"
+      - name: HTTPS_PROXY
+        value: "http://proxy.corp.example.com:3128"
+      - name: NO_PROXY
+        value: "localhost,127.0.0.1,.svc.cluster.local"
+```
+
+Example (secret reference for a Google Application credentials path):
+
+```yaml
+spec:
+  bindplane:
+    extraEnv:
+      - name: GOOGLE_APPLICATION_CREDENTIALS
+        valueFrom:
+          secretKeyRef:
+            name: gcp-credentials
+            key: credentials-path
+```
+
+### Reserved env names
+
+The following names are **always** reserved and may never appear in `extraEnv` because they are injected by the operator at runtime:
+
+| Name | Reason |
+|---|---|
+| `KUBERNETES_NAMESPACE_NAME` | Injected via Downward API |
+| `KUBERNETES_POD_NAME` | Injected via Downward API |
+| `KUBERNETES_CONTAINER_NAME` | Injected by operator |
+| `GOMEMLIMIT` | Set by the operator's Go runtime tuning |
+| `GOMAXPROCS` | Set by the operator's Go runtime tuning |
+
+Names starting with `BINDPLANE_` are also rejected by default because they map to fields in `spec.config`—use the CRD fields instead. To override this restriction (for advanced/unsupported use cases), start the operator with the `--allow-bindplane-extra-env` flag.
+
+### Pod template vs extraEnv
+
+The `podTemplate` field gives access to the full Kubernetes pod spec (tolerations, node selectors, affinity, security contexts, etc.). The operator intentionally **does not** merge environment variables from `podTemplate.spec.containers[*].env`—those entries are ignored for the primary container. Use `extraEnv` for all custom environment variable injection.
 
 ## Scope
 

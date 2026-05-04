@@ -163,7 +163,8 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: combineEnvVars(
+								Env: prependExtraEnv(
+									getNatsExtraEnv(bindplane),
 									getKubernetesEnvVars(natsContainerName),
 									getNatsEnvVars(bindplane, headlessServiceName, replicas),
 									getBindplaneCommonEnvVars(bindplane, natsComponent),
@@ -364,6 +365,14 @@ func getNatsAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
 func getNatsPodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
 	if bindplane.Spec.Nats != nil {
 		return bindplane.Spec.Nats.PodTemplate
+	}
+	return nil
+}
+
+// getNatsExtraEnv returns the user-supplied extra env vars for NATS, or nil.
+func getNatsExtraEnv(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	if bindplane.Spec.Nats != nil {
+		return bindplane.Spec.Nats.ExtraEnv
 	}
 	return nil
 }
