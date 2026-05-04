@@ -30,6 +30,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -712,14 +713,19 @@ func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bind
 	nodeReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, nodeComponent), bindplane.Namespace)
 	natsReady := r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, natsComponent), bindplane.Namespace)
 	taReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, transformAgentComponent), bindplane.Namespace)
-	tsdbReady := r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, tsdbComponent), bindplane.Namespace)
 	jobsReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, bindplaneJobsComponent), bindplane.Namespace)
 
 	bindplane.Status.NodeReadyReplicas = nodeReady
 	bindplane.Status.NatsReadyReplicas = natsReady
 	bindplane.Status.TransformAgentReadyReplicas = taReady
-	bindplane.Status.TSDBReadyReplicas = tsdbReady
 	bindplane.Status.BindplaneJobsReadyReplicas = jobsReady
+
+	// Only report TSDB readiness when local TSDB is deployed (not when remote TSDB is enabled).
+	var tsdbReady int32
+	if !isTSDBRemoteEnabled(bindplane) {
+		tsdbReady = r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, tsdbComponent), bindplane.Namespace)
+	}
+	bindplane.Status.TSDBReadyReplicas = tsdbReady
 
 	nodeDesired := *bindplane.Spec.Bindplane.Replicas
 	var natsDesired int32
@@ -730,12 +736,34 @@ func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bind
 	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.Replicas != nil {
 		taDesired = *bindplane.Spec.TransformAgent.Replicas
 	}
+	// TSDB: desired is 1 replica when local, 0 when remote (already satisfied — remote means no local SS).
+	var tsdbDesired int32
+	if !isTSDBRemoteEnabled(bindplane) {
+		tsdbDesired = 1
+	}
 
-	if nodeReady >= nodeDesired && (natsDesired == 0 || natsReady >= natsDesired) && (taDesired == 0 || taReady >= taDesired) {
+	if r.allWorkloadsReady(nodeReady, nodeDesired, natsReady, natsDesired, taReady, taDesired, jobsReady, tsdbReady, tsdbDesired) {
 		bindplane.Status.Phase = "Ready"
 	} else {
 		bindplane.Status.Phase = "ApplyingChanges"
 	}
+}
+
+// allWorkloadsReady returns true when every workload has met its desired replica count.
+// Optional workloads (nats, transformAgent, tsdb) are considered ready when their desired count is zero.
+func (r *BindplaneReconciler) allWorkloadsReady(
+	nodeReady, nodeDesired int32,
+	natsReady, natsDesired int32,
+	taReady, taDesired int32,
+	jobsReady int32,
+	tsdbReady, tsdbDesired int32,
+) bool {
+	const jobsDesired int32 = 1
+	return nodeReady >= nodeDesired &&
+		(natsDesired == 0 || natsReady >= natsDesired) &&
+		(taDesired == 0 || taReady >= taDesired) &&
+		jobsReady >= jobsDesired &&
+		(tsdbDesired == 0 || tsdbReady >= tsdbDesired)
 }
 
 // deploymentReadyReplicas returns the ready replica count for a Deployment, or 0 if not found.
@@ -827,12 +855,12 @@ func (r *BindplaneReconciler) reconcileServiceAccount(ctx context.Context, bindp
 		return err
 	}
 
-	// ServiceAccount is mostly immutable, but we can update labels/annotations if needed
-	found.Labels = sa.Labels
-	if err := r.Update(ctx, found); err != nil {
-		return err
+	// ServiceAccount is mostly immutable; only update when labels have actually changed.
+	if equality.Semantic.DeepEqual(found.Labels, sa.Labels) {
+		return nil
 	}
-	return nil
+	found.Labels = sa.Labels
+	return r.Update(ctx, found)
 }
 
 func (r *BindplaneReconciler) reconcileDeployment(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, deployment *appsv1.Deployment, log logr.Logger) error {
@@ -849,13 +877,21 @@ func (r *BindplaneReconciler) reconcileDeployment(ctx context.Context, bindplane
 		return err
 	}
 
-	// Update deployment spec if needed
-	found.Spec = deployment.Spec
-	found.Labels = deployment.Labels
-	if err := r.Update(ctx, found); err != nil {
-		return err
+	// When the desired spec has Replicas=nil (HPA is managing scale), preserve the live
+	// replica count so we do not fight the HPA on every reconcile.
+	desired := deployment.Spec.DeepCopy()
+	if desired.Replicas == nil {
+		desired.Replicas = found.Spec.Replicas
 	}
-	return nil
+
+	// Skip the API call when nothing actually changed.
+	if equality.Semantic.DeepEqual(found.Spec, *desired) && equality.Semantic.DeepEqual(found.Labels, deployment.Labels) {
+		return nil
+	}
+
+	found.Spec = *desired
+	found.Labels = deployment.Labels
+	return r.Update(ctx, found)
 }
 
 func (r *BindplaneReconciler) reconcileStatefulSet(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, statefulSet *appsv1.StatefulSet, log logr.Logger) error {
@@ -872,14 +908,17 @@ func (r *BindplaneReconciler) reconcileStatefulSet(ctx context.Context, bindplan
 		return err
 	}
 
-	// Update statefulset spec if needed (be careful with StatefulSet updates)
+	// Skip the API call when the mutable fields haven't changed.
+	if equality.Semantic.DeepEqual(found.Spec.Replicas, statefulSet.Spec.Replicas) &&
+		equality.Semantic.DeepEqual(found.Spec.Template, statefulSet.Spec.Template) &&
+		equality.Semantic.DeepEqual(found.Labels, statefulSet.Labels) {
+		return nil
+	}
+
 	found.Spec.Replicas = statefulSet.Spec.Replicas
 	found.Spec.Template = statefulSet.Spec.Template
 	found.Labels = statefulSet.Labels
-	if err := r.Update(ctx, found); err != nil {
-		return err
-	}
-	return nil
+	return r.Update(ctx, found)
 }
 
 func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, service *corev1.Service, log logr.Logger) error {
@@ -896,23 +935,44 @@ func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *b
 		return err
 	}
 
-	// Update service spec (preserve clusterIP)
+	// Preserve immutable / API-server-managed fields so Kubernetes does not reject the Update.
+	service.Spec.ClusterIP = found.Spec.ClusterIP
+	service.Spec.ClusterIPs = found.Spec.ClusterIPs
+	service.Spec.IPFamilies = found.Spec.IPFamilies
+	service.Spec.IPFamilyPolicy = found.Spec.IPFamilyPolicy
+
+	// Skip the API call when nothing actually changed.
+	if equality.Semantic.DeepEqual(found.Spec.Ports, service.Spec.Ports) &&
+		equality.Semantic.DeepEqual(found.Spec.Selector, service.Spec.Selector) &&
+		equality.Semantic.DeepEqual(found.Labels, service.Labels) {
+		return nil
+	}
+
 	found.Spec.Ports = service.Spec.Ports
 	found.Spec.Selector = service.Spec.Selector
+	found.Spec.ClusterIP = service.Spec.ClusterIP
+	found.Spec.ClusterIPs = service.Spec.ClusterIPs
+	found.Spec.IPFamilies = service.Spec.IPFamilies
+	found.Spec.IPFamilyPolicy = service.Spec.IPFamilyPolicy
 	found.Labels = service.Labels
-	if err := r.Update(ctx, found); err != nil {
-		return err
-	}
-	return nil
+	return r.Update(ctx, found)
 }
 
 // handleDeletion performs cleanup when a Bindplane CR is being deleted.
-// Currently this is a no-op beyond removing the finalizer, since ownerReference
-// garbage collection handles all namespaced owned resources. This function exists
-// as a hook for future cleanup of resources not covered by ownerReference GC
-// (e.g., cluster-scoped resources or resources in other namespaces).
+// Sets Phase=Deleting in status before removing the finalizer so observers can
+// detect the in-progress deletion. All namespaced owned resources are garbage-
+// collected automatically via ownerReference GC; this function is a hook for
+// any resources that cannot carry an ownerReference (e.g., cluster-scoped).
 func (r *BindplaneReconciler) handleDeletion(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	log.Info("handling deletion, running cleanup before removing finalizer")
+
+	// Mark Phase=Deleting so status reflects the in-progress deletion.
+	bindplane.Status.Phase = "Deleting"
+	if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
+		log.Error(statusErr, "failed to update Bindplane status to Deleting")
+		// Non-fatal: proceed with finalizer removal even if status update fails.
+	}
+
 	// Future: add cleanup of any resources not covered by ownerReference GC here.
 	controllerutil.RemoveFinalizer(bindplane, bindplaneFinalizer)
 	return r.Update(ctx, bindplane)
@@ -948,6 +1008,10 @@ func (r *BindplaneReconciler) reconcilePodDisruptionBudget(ctx context.Context, 
 		return err
 	}
 
+	// Skip the API call when nothing has changed.
+	if equality.Semantic.DeepEqual(found.Spec, pdb.Spec) && equality.Semantic.DeepEqual(found.Labels, pdb.Labels) {
+		return nil
+	}
 	found.Spec = pdb.Spec
 	found.Labels = pdb.Labels
 	return r.Update(ctx, found)

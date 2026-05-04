@@ -209,11 +209,78 @@ func buildTSDBProbeHTTPConfigYAML(bindplane *bindplanev1alpha1.Bindplane) ([]byt
 	return yaml.Marshal(&cfg)
 }
 
+// deleteTSDBLocalResourcesIfExist deletes all operator-managed local TSDB (Prometheus) resources when the
+// user has switched to a remote TSDB backend (spec.config.tsdb.remote.enable=true). Follows the
+// deletePodDisruptionBudgetIfExists pattern: Get, return nil on IsNotFound, otherwise Delete.
+func (r *BindplaneReconciler) deleteTSDBLocalResourcesIfExist(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
+	// StatefulSet
+	ss := &appsv1.StatefulSet{}
+	ssName := getResourceName(bindplane, tsdbComponent)
+	if err := r.Get(ctx, types.NamespacedName{Name: ssName, Namespace: bindplane.Namespace}, ss); err == nil {
+		log.Info("Deleting local TSDB StatefulSet (remote TSDB enabled)", "name", ssName)
+		if err := r.Delete(ctx, ss); err != nil {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Service
+	svc := &corev1.Service{}
+	svcName := getResourceName(bindplane, tsdbComponent)
+	if err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: bindplane.Namespace}, svc); err == nil {
+		log.Info("Deleting local TSDB Service (remote TSDB enabled)", "name", svcName)
+		if err := r.Delete(ctx, svc); err != nil {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// ServiceAccount
+	sa := &corev1.ServiceAccount{}
+	saName := getResourceName(bindplane, tsdbComponent)
+	if err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: bindplane.Namespace}, sa); err == nil {
+		log.Info("Deleting local TSDB ServiceAccount (remote TSDB enabled)", "name", saName)
+		if err := r.Delete(ctx, sa); err != nil {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Basic-auth Secret
+	authSecret := &corev1.Secret{}
+	authSecretName := getResourceName(bindplane, tsdbBasicAuthSecretSuffix)
+	if err := r.Get(ctx, types.NamespacedName{Name: authSecretName, Namespace: bindplane.Namespace}, authSecret); err == nil {
+		log.Info("Deleting local TSDB basic-auth Secret (remote TSDB enabled)", "name", authSecretName)
+		if err := r.Delete(ctx, authSecret); err != nil {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Web-config ConfigMap
+	cm := &corev1.ConfigMap{}
+	cmName := getResourceName(bindplane, tsdbWebConfigConfigMapSuffix)
+	if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: bindplane.Namespace}, cm); err == nil {
+		log.Info("Deleting local TSDB web-config ConfigMap (remote TSDB enabled)", "name", cmName)
+		if err := r.Delete(ctx, cm); err != nil {
+			return err
+		}
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+
+	return nil
+}
+
 // reconcileTSDB reconciles all Prometheus resources
 func (r *BindplaneReconciler) reconcileTSDB(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	if isTSDBRemoteEnabled(bindplane) {
-		log.Info("Skipping operator-managed TSDB resources because spec.config.tsdb.remote.enable is true")
-		return nil
+		log.Info("Remote TSDB enabled; deleting any previously-created local TSDB resources")
+		return r.deleteTSDBLocalResourcesIfExist(ctx, bindplane, log)
 	}
 	// Reconcile Prometheus basic auth Secret first (create-only) so it exists for StatefulSet and Bindplane pods
 	if err := r.reconcileTSDBBasicAuthSecret(ctx, bindplane, log); err != nil {

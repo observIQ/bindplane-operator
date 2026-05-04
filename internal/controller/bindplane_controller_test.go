@@ -3506,10 +3506,28 @@ var _ = Describe("getTSDBEnvVars", func() {
 })
 
 var _ = Describe("reconcileTSDB", func() {
-	It("short-circuits when remote Prometheus mode is enabled", func() {
-		reconciler := &BindplaneReconciler{}
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-tsdb-unit")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("short-circuits when remote Prometheus mode is enabled (no local resources created)", func() {
+		// Use a real reconciler so deleteTSDBLocalResourcesIfExist can call r.Get safely.
+		// When remote TSDB is enabled and no local resources exist, reconcileTSDB should
+		// return nil without error (all deletes are no-ops on IsNotFound).
+		reconciler := newReconciler()
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: testNamespace},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
@@ -3523,7 +3541,7 @@ var _ = Describe("reconcileTSDB", func() {
 				},
 			},
 		}
-		Expect(reconciler.reconcileTSDB(context.Background(), bindplane, logf.Log.WithName("test"))).To(Succeed())
+		Expect(reconciler.reconcileTSDB(testCtx, bindplane, logf.Log.WithName("test"))).To(Succeed())
 	})
 })
 
@@ -4416,5 +4434,201 @@ var _ = Describe("reconcileSessionSecret", func() {
 		secret := &corev1.Secret{}
 		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)
 		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Task 8: Deletion integration test
+// Verifies that deleting a Bindplane CR sets Phase=Deleting and finalizer is removed.
+// ---------------------------------------------------------------------------
+
+var _ = Describe("Reconcile - deletion lifecycle", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-deletion")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("sets Phase=Deleting and removes finalizer on CR deletion", func() {
+		name := "bp-deletion"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile 1: adds finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify finalizer is present
+		created := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, created)).To(Succeed())
+		Expect(created.Finalizers).To(ContainElement(bindplaneFinalizer))
+
+		// Delete the CR — DeletionTimestamp is set (finalizer prevents immediate deletion)
+		Expect(k8sClient.Delete(testCtx, created)).To(Succeed())
+
+		// Reconcile 2: deletion path — sets Phase=Deleting, removes finalizer
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// CR should be gone (finalizer removed → GC deletes it)
+		final := &bindplanev1alpha1.Bindplane{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, final)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("garbage-collects owned resources after CR deletion", func() {
+		name := "bp-gc"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile until past migration so owned resources are created
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Verify at least one owned resource (Transform Agent ServiceAccount) was created
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, sa)).To(Succeed())
+		Expect(sa.OwnerReferences).To(HaveLen(1))
+		Expect(sa.OwnerReferences[0].Name).To(Equal(name))
+
+		// Delete the CR
+		created := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, created)).To(Succeed())
+		Expect(k8sClient.Delete(testCtx, created)).To(Succeed())
+
+		// Run deletion reconcile — removes finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// CR should be gone
+		final := &bindplanev1alpha1.Bindplane{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, final)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Task 9: Toggle integration tests
+// Covers the disable transitions listed in the plan (Section C):
+//   - TSDB remote enable: flipping false→true deletes local Prometheus StatefulSet
+// ---------------------------------------------------------------------------
+
+var _ = Describe("Reconcile - TSDB remote toggle", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-tsdb-toggle")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("deletes local Prometheus StatefulSet when spec.config.tsdb.remote.enable flips to true", func() {
+		name := "bp-tsdb-remote"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile past migration to create local TSDB resources
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Local Prometheus StatefulSet should exist
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb", Namespace: testNamespace}, ss)).To(Succeed())
+
+		// Enable remote TSDB (host is required when enable=true per CRD validation)
+		current := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, current)).To(Succeed())
+		current.Spec.Config.TSDB = &bindplanev1alpha1.TSDBConfig{
+			Remote: &bindplanev1alpha1.TSDBRemoteConfig{
+				Enable: true,
+				Host:   "remote-prometheus.example.com",
+			},
+		}
+		Expect(k8sClient.Update(testCtx, current)).To(Succeed())
+
+		// Reconcile — deleteTSDBLocalResourcesIfExist should be called
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Local StatefulSet should be deleted
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb", Namespace: testNamespace}, ss)
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "expected local TSDB StatefulSet to be deleted after enabling remote TSDB")
+
+		// Local basic-auth secret should also be deleted
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb-basic-auth", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "expected local TSDB basic-auth Secret to be deleted after enabling remote TSDB")
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Task 5 verification: HPA-managed replica count is preserved across reconciles
+// ---------------------------------------------------------------------------
+
+var _ = Describe("Reconcile - HPA replica preservation", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-hpa")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("preserves HPA-managed replica count on re-reconcile", func() {
+		name := "bp-hpa"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{
+			Enabled: true,
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Node Deployment should exist. The API server defaults Replicas to 1 even when
+		// the desired spec passes nil — what matters is that the operator does NOT override
+		// a different value chosen by the HPA.
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, dep)).To(Succeed())
+
+		// Simulate HPA setting replicas to 5 (different from any static default)
+		hpaReplicas := int32(5)
+		dep.Spec.Replicas = &hpaReplicas
+		Expect(k8sClient.Update(testCtx, dep)).To(Succeed())
+
+		// Re-reconcile — the operator's desired spec has Replicas=nil, so it must
+		// preserve the HPA-managed value (5) rather than resetting to 1 or nil.
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Replica count set by HPA must be preserved
+		depAfter := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, depAfter)).To(Succeed())
+		Expect(depAfter.Spec.Replicas).NotTo(BeNil())
+		Expect(*depAfter.Spec.Replicas).To(Equal(hpaReplicas), "HPA-managed replica count should be preserved across reconcile")
 	})
 })

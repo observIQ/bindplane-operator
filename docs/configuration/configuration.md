@@ -52,6 +52,11 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Pod template vs extraEnv](#pod-template-vs-extraenv)
 - [OpAMP deployment split](#opamp-deployment-split)
 - [Scope](#scope)
+- [Lifecycle](#lifecycle)
+  - [Pause annotation](#pause-annotation)
+  - [Finalizer and garbage collection](#finalizer-and-garbage-collection)
+  - [Conditions and phases](#conditions-and-phases)
+  - [Migration contract](#migration-contract)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
 
@@ -1627,6 +1632,79 @@ kubectl patch bindplane <name> -n <namespace> \
 ```
 
 The controller clears this annotation and resets `status.migratedImage` on the next reconcile, then creates a new Jobs Migrate Job via the normal image-change flow.
+
+## Lifecycle
+
+This section describes the operator's lifecycle contract for the `Bindplane` custom resource: how reconciliation is paused, how owned resources are cleaned up, how status phases are progressed, and how database migrations gate workload rollouts.
+
+### Pause annotation
+
+Set the annotation `k8s.bindplane.com/pause-reconciliation: "true"` on the `Bindplane` resource to suspend all operator reconciliation. While paused:
+
+- No resources are created, updated, or deleted.
+- The `Reconciled` condition is set to `False` with `Reason: Paused`.
+- The `status.phase` is set to `Paused`.
+
+Remove the annotation (or set it to `"false"`) to resume reconciliation. The operator will re-apply the current desired state on the next reconcile cycle.
+
+```bash
+# Pause reconciliation
+kubectl annotate bindplane <name> -n <namespace> \
+  k8s.bindplane.com/pause-reconciliation=true
+
+# Resume reconciliation
+kubectl annotate bindplane <name> -n <namespace> \
+  k8s.bindplane.com/pause-reconciliation-
+```
+
+### Finalizer and garbage collection
+
+The operator adds a finalizer (`k8s.bindplane.com/finalizer`) to every `Bindplane` CR on the first reconcile. This finalizer ensures the operator has a chance to run cleanup logic before Kubernetes removes the CR from etcd.
+
+When the CR is deleted:
+
+1. The operator sets `status.phase = Deleting` so observers know deletion is in progress.
+2. The finalizer is removed, allowing Kubernetes to proceed with object deletion.
+3. All namespaced resources owned by the CR (Deployments, StatefulSets, Services, ServiceAccounts, Secrets, ConfigMaps, PodDisruptionBudgets, HPAs, and cert-manager Certificates) are garbage-collected automatically via Kubernetes owner-reference GC — there is no need for explicit cleanup calls in the operator.
+
+Cluster-scoped resources (e.g., ClusterRole, ClusterRoleBinding) are install-time artifacts managed by the operator bundle; they are not owned by the `Bindplane` CR and are not affected by CR deletion.
+
+### Conditions and phases
+
+The operator reports overall state via `status.conditions` and the `status.phase` field.
+
+**Conditions**
+
+| Type | Status | Reason | Meaning |
+|------|--------|--------|---------|
+| `Reconciled` | `True` | `Reconciled` | All resources reconciled successfully |
+| `Reconciled` | `False` | `Paused` | Reconciliation suspended by annotation |
+| `Reconciled` | `False` | `Invalid` | CR failed validation; no resources were mutated |
+| `Reconciled` | `False` | `MigrationFailed` | The Jobs Migrate Job failed; downstream workloads are blocked |
+
+**Phases**
+
+| Phase | Meaning |
+|-------|---------|
+| `Pending` | CR was just created; first reconcile has not run yet |
+| `ApplyingChanges` | One or more workloads are not yet at their desired replica count |
+| `Ready` | All required workloads have their desired replica count ready |
+| `Degraded` | CR failed validation; no resources are being managed |
+| `Paused` | Reconciliation is suspended via the pause annotation |
+| `Deleting` | CR deletion is in progress; finalizer is being removed |
+
+The `status.observedGeneration` field is set to the `metadata.generation` of the CR after every successful reconcile, allowing GitOps tools and `kubectl wait` to detect when the operator has processed the latest spec version.
+
+### Migration contract
+
+When `spec.version` changes (or the `k8s.bindplane.com/force-migrate` annotation is set), the operator:
+
+1. Creates a new `Jobs Migrate` (`batch/v1 Job`) before updating any long-running workloads (Jobs, NATS, Node).
+2. Blocks all downstream workload updates until the Jobs Migrate Job completes successfully (requeues every 10 seconds while waiting).
+3. On success, records the migrated image in `status.migratedImage` and proceeds to roll out updated workloads.
+4. On failure, sets the `Reconciled` condition to `False` with `Reason: MigrationFailed` and halts the rollout until the Job is retried or force-migrate is set.
+
+This ordering guarantees that the database schema is always compatible with all running workloads before any new binary version is activated.
 
 ## Examples
 

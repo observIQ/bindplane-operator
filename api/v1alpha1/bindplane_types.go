@@ -2118,7 +2118,7 @@ type BindplaneStatus struct {
 
 	// Phase summarizes the overall deployment state.
 	// +optional
-	// +kubebuilder:validation:Enum=Pending;ApplyingChanges;Ready;Degraded
+	// +kubebuilder:validation:Enum=Pending;ApplyingChanges;Ready;Degraded;Paused;Deleting
 	Phase string `json:"phase,omitempty"`
 
 	// ObservedGeneration is the most recent generation observed by the controller.
