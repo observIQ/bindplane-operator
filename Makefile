@@ -139,9 +139,14 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 				$(KIND) create cluster --name $(KIND_CLUSTER) --image kindest/node:v$(KIND_K8S_VERSION), \
 				$(KIND) create cluster --name $(KIND_CLUSTER)) ;; \
 	esac
+	@$(KUBECTL) config use-context kind-$(KIND_CLUSTER)
+
+.PHONY: verify-e2e-context
+verify-e2e-context: ## Verify the current kubectl context is the expected Kind cluster for e2e tests
+	@scripts/verify-e2e-context.sh "$(KIND_CLUSTER)"
 
 .PHONY: run-test-e2e
-run-test-e2e:
+run-test-e2e: verify-e2e-context
 	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ $(E2E_GO_TEST_FLAGS) $(if $(strip $(E2E_LABEL_FILTER)),-ginkgo.label-filter="$(E2E_LABEL_FILTER)")
 
 .PHONY: test-e2e
@@ -240,30 +245,36 @@ endif
 
 .PHONY: install
 install: manifests ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	@bash -c 'source scripts/lib/context-guard.sh && context_guard::require_minikube' || exit 1
 	@$(KUSTOMIZE) build config/crd > /tmp/crds.yaml && \
 	($(KUBECTL) create -f /tmp/crds.yaml 2>/dev/null || $(KUBECTL) replace -f /tmp/crds.yaml) && \
 	rm -f /tmp/crds.yaml
 
 .PHONY: uninstall
 uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	@bash -c 'source scripts/lib/context-guard.sh && context_guard::require_minikube' || exit 1
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
 deploy: manifests ## Deploy controller to the K8s cluster specified in ~/.kube/config. Uses server-side apply to avoid CRD annotation size limit (262144 bytes).
+	@bash -c 'source scripts/lib/context-guard.sh && context_guard::require_minikube' || exit 1
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply --server-side --force-conflicts -f -
 
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
+	@bash -c 'source scripts/lib/context-guard.sh && context_guard::require_minikube' || exit 1
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy-no-webhook
 deploy-no-webhook: manifests ## Deploy controller without the validating webhook (no cert-manager required).
+	@bash -c 'source scripts/lib/context-guard.sh && context_guard::require_minikube' || exit 1
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/overlays/no-webhook | $(KUBECTL) apply --server-side --force-conflicts -f -
 
 .PHONY: install-postgres-operator
 install-postgres-operator: ## Install CloudNativePG operator and deploy a test PostgreSQL cluster in the postgres namespace.
+	@bash -c 'source scripts/lib/context-guard.sh && context_guard::require_minikube' || exit 1
 	@scripts/install-postgres-operator.sh
 
 ##@ Dependencies

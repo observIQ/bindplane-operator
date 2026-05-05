@@ -282,6 +282,19 @@ make deploy IMG=bindplane-operator:local
 - E2E tests: `make test-e2e`
 - Run controller locally: `make run`
 
+## kubectl Context Safety
+
+All e2e test targets and cluster-mutating helper scripts enforce context guards to prevent accidental mutations against the wrong cluster.
+
+**E2e tests** (`make test-e2e`, `make test-e2e-bindplane`, `make run-test-e2e`, `go test ./test/e2e/...`):
+- Require the current kubectl context to be `kind-$KIND_CLUSTER` (default: `kind-bindplane-operator-test-e2e`).
+- Fail immediately if the context doesn't match.
+- Override: `BINDPLANE_OPERATOR_E2E_ALLOW_ANY_CONTEXT=1` (use with caution).
+
+**Install / deploy / undeploy Makefile targets** and **scripts/install-certmanager.sh**, **scripts/install-postgres-operator.sh**, **scripts/minikube.sh**:
+- Require the current kubectl context to be `minikube`. Fail immediately if it is not.
+- Override (e2e suite only, after Kind context is already validated): `BINDPLANE_OPERATOR_E2E_ALLOW_ANY_CONTEXT=1`.
+
 ## Quality Checks (Required After Every Change)
 
 After making any code changes, always run the following in order and resolve all findings before finishing:

@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/context-guard.sh
+source "${SCRIPT_DIR}/lib/context-guard.sh"
+context_guard::require_minikube || exit 1
+
 set -ex
 
 NAMESPACE="postgres"

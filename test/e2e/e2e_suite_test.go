@@ -49,6 +49,11 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	By("verifying kubectl context is the expected Kind cluster")
+	ExpectWithOffset(1, verifyKubectlContext()).To(Succeed())
+	// Context validated — allow Makefile targets invoked by this suite to run on the Kind cluster.
+	Expect(os.Setenv("BINDPLANE_OPERATOR_E2E_ALLOW_ANY_CONTEXT", "1")).To(Succeed())
+
 	By("building the manager(Operator) image")
 	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
 	_, err := runCmd(cmd)

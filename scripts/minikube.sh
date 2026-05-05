@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 
-set -ex
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/context-guard.sh
+source "${SCRIPT_DIR}/lib/context-guard.sh"
 
 if [ -z "${BINDPLANE_LICENSE}" ]; then
   echo "BINDPLANE_LICENSE is not set. Set it in your shell and re-run." >&2
   exit 1
 fi
 
+set -x
+
 minikube delete
 minikube start
+
+context_guard::require_minikube || exit 1
+
 eval "$(minikube docker-env)"
 
 goreleaser release --snapshot --clean
@@ -17,7 +26,6 @@ docker tag \
   "ghcr.io/observiq/bindplane-operator:latest-${GOARCH}" \
   bindplane-operator:local
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 "${SCRIPT_DIR}/install-certmanager.sh"
 
 make install

@@ -655,3 +655,33 @@ func uninstallCertManager() {
 		warnError(err)
 	}
 }
+
+// verifyKubectlContext ensures the active kubectl context is the expected Kind
+// cluster before any cluster-mutating work begins. The expected context is
+// "kind-<KIND_CLUSTER>" (defaulting to "kind-bindplane-operator-test-e2e").
+// Set BINDPLANE_OPERATOR_E2E_ALLOW_ANY_CONTEXT=1 to skip this check.
+func verifyKubectlContext() error {
+	if os.Getenv("BINDPLANE_OPERATOR_E2E_ALLOW_ANY_CONTEXT") == "1" {
+		return nil
+	}
+	kindCluster := os.Getenv("KIND_CLUSTER")
+	if kindCluster == "" {
+		kindCluster = "bindplane-operator-test-e2e"
+	}
+	expected := "kind-" + kindCluster
+
+	cmd := exec.Command("kubectl", "config", "current-context") // #nosec G204 -- test utility
+	out, err := run(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to read kubectl current-context: %w", err)
+	}
+	actual := strings.TrimSpace(out)
+	if actual != expected {
+		return fmt.Errorf(
+			"refusing to run e2e suite: current kubectl context is %q but expected %q; "+
+				"run `kubectl config use-context %s` or set BINDPLANE_OPERATOR_E2E_ALLOW_ANY_CONTEXT=1",
+			actual, expected, expected,
+		)
+	}
+	return nil
+}
