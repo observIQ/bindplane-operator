@@ -400,17 +400,14 @@ type BindplaneConfigSpec struct {
 	Advanced *AdvancedConfig `json:"advanced,omitempty"`
 
 	// Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.
-	// When omitted, Bindplane uses its own defaults.
 	// +optional
 	Agents *AgentsConfig `json:"agents,omitempty"`
 
 	// AgentVersions configures agent version sync behavior.
-	// When omitted, Bindplane uses its own defaults.
 	// +optional
 	AgentVersions *AgentVersionsConfig `json:"agentVersions,omitempty"`
 
-	// SaaS configures Bindplane SaaS-specific functionality including the license server
-	// and Stripe billing.
+	// SaaS configures Bindplane SaaS-specific functionality including the license server and Stripe billing.
 	// +optional
 	SaaS *SaaSConfig `json:"saas,omitempty"`
 
@@ -420,7 +417,6 @@ type BindplaneConfigSpec struct {
 	EncryptionProvider *EncryptionProviderConfig `json:"encryptionProvider,omitempty"`
 
 	// Features configures the feature flag backend and feature overrides.
-	// When omitted, Bindplane uses its own defaults.
 	// +optional
 	Features *FeaturesConfig `json:"features,omitempty"`
 
@@ -435,7 +431,6 @@ type BindplaneConfigSpec struct {
 	LLM *LLMConfig `json:"llm,omitempty"`
 
 	// Quotas configures usage quota enforcement.
-	// When omitted, Bindplane uses its own defaults.
 	// +optional
 	Quotas *QuotasConfig `json:"quotas,omitempty"`
 }
@@ -508,6 +503,10 @@ type SaaSStripeConfig struct {
 	// GrowthPlanMeterNames configures Stripe meter names for the growth tier.
 	// +optional
 	GrowthPlanMeterNames *SaaSStripeGrowthPlanMeterNamesConfig `json:"growthPlanMeterNames,omitempty"`
+
+	// MeterReportInterval is the interval at which usage metrics are reported to Stripe (e.g., "6h"). Defaults to 6h.
+	// +optional
+	MeterReportInterval string `json:"meterReportInterval,omitempty"`
 }
 
 // SaaSStripeGrowthPlanIDsConfig configures Stripe plan IDs for the growth tier.
@@ -550,6 +549,22 @@ type EncryptionProviderConfig struct {
 	// GoogleKMS configures Google Cloud KMS as the encryption provider.
 	// +optional
 	GoogleKMS *GoogleKMSConfig `json:"googleKMS,omitempty"`
+
+	// Cache configures the in-memory cache for encryption keys.
+	// +optional
+	Cache *EncryptionProviderCacheConfig `json:"cache,omitempty"`
+}
+
+// EncryptionProviderCacheConfig configures the in-memory cache for encryption keys.
+type EncryptionProviderCacheConfig struct {
+	// Capacity is the maximum number of entries in the encryption key cache. Defaults to 2000.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	Capacity int `json:"capacity,omitempty"`
+
+	// CacheTimeout is the TTL for cached encryption keys (e.g., "2m"). Defaults to 2m.
+	// +optional
+	CacheTimeout string `json:"cacheTimeout,omitempty"`
 }
 
 // GoogleKMSConfig configures Google Cloud KMS as the encryption provider.
@@ -610,7 +625,11 @@ type PostHogConfig struct {
 	// +optional
 	Endpoint string `json:"endpoint,omitempty"`
 
-	// DefaultFeatureFlagsPollingInterval is the polling interval for feature flags (e.g., "30s").
+	// FeatureFlagRequestTimeout is the timeout for PostHog feature flag requests (e.g., "30s"). Defaults to 30s.
+	// +optional
+	FeatureFlagRequestTimeout string `json:"featureFlagRequestTimeout,omitempty"`
+
+	// DefaultFeatureFlagsPollingInterval is the polling interval for feature flags (e.g., "5m"). Defaults to 5m.
 	// +optional
 	DefaultFeatureFlagsPollingInterval string `json:"defaultFeatureFlagsPollingInterval,omitempty"`
 }
@@ -629,6 +648,10 @@ type FeatureOverridesConfig struct {
 	// +optional
 	SecopsIntegration bool `json:"secopsIntegration,omitempty"`
 
+	// SecopsGcsIntegration forces the SecOps GCS integration feature on.
+	// +optional
+	SecopsGcsIntegration bool `json:"secopsGcsIntegration,omitempty"`
+
 	// LLMFeatures forces LLM features on.
 	// +optional
 	LLMFeatures bool `json:"llmFeatures,omitempty"`
@@ -636,6 +659,10 @@ type FeatureOverridesConfig struct {
 	// PipelineIntelligence forces the pipeline intelligence feature on.
 	// +optional
 	PipelineIntelligence bool `json:"pipelineIntelligence,omitempty"`
+
+	// SnapshotPipelineIntelligence forces the snapshot pipeline intelligence feature on.
+	// +optional
+	SnapshotPipelineIntelligence bool `json:"snapshotPipelineIntelligence,omitempty"`
 
 	// PipelineIntelligenceSnapshotLogTypes forces the pipeline intelligence snapshot log types feature on.
 	// +optional
@@ -649,6 +676,10 @@ type FeatureOverridesConfig struct {
 	// +optional
 	PipelineIntelligenceChronicleForwarderConfigImport bool `json:"pipelineIntelligenceChronicleForwarderConfigImport,omitempty"`
 
+	// PipelineIntelligenceSplunkConfigImport forces the Splunk config import pipeline intelligence feature on.
+	// +optional
+	PipelineIntelligenceSplunkConfigImport bool `json:"pipelineIntelligenceSplunkConfigImport,omitempty"`
+
 	// PipelineIntelligenceParseField forces the parse field pipeline intelligence feature on.
 	// +optional
 	PipelineIntelligenceParseField bool `json:"pipelineIntelligenceParseField,omitempty"`
@@ -661,9 +692,53 @@ type FeatureOverridesConfig struct {
 	// +optional
 	RawConfigLegacy bool `json:"rawConfigLegacy,omitempty"`
 
+	// RawLogMetricViews is deprecated and ignored; kept for backwards compatibility.
+	// +optional
+	RawLogMetricViews bool `json:"rawLogMetricViews,omitempty"`
+
 	// Notifications forces the notifications feature on.
 	// +optional
 	Notifications bool `json:"notifications,omitempty"`
+
+	// Vault forces the vault feature on.
+	// +optional
+	Vault bool `json:"vault,omitempty"`
+
+	// Auth0SSO forces the Auth0 SSO feature on.
+	// +optional
+	Auth0SSO bool `json:"auth0SSO,omitempty"`
+
+	// AixPlatform forces the AIX platform feature on.
+	// +optional
+	AixPlatform bool `json:"aixPlatform,omitempty"`
+
+	// AdvancedPipelineEditor forces the advanced pipeline editor feature on.
+	// +optional
+	AdvancedPipelineEditor bool `json:"advancedPipelineEditor,omitempty"`
+
+	// IdentityTablesDualWrite forces the identity tables dual write feature on.
+	// +optional
+	IdentityTablesDualWrite bool `json:"identityTablesDualWrite,omitempty"`
+
+	// IdentityTablesCutover forces the identity tables cutover feature on.
+	// +optional
+	IdentityTablesCutover bool `json:"identityTablesCutover,omitempty"`
+
+	// V2Configuration is deprecated and kept for backwards compatibility.
+	// +optional
+	V2Configuration bool `json:"v2Configuration,omitempty"`
+
+	// V2Connectors is deprecated and kept for backwards compatibility.
+	// +optional
+	V2Connectors bool `json:"v2Connectors,omitempty"`
+
+	// BindplaneBlueprints is deprecated and kept for backwards compatibility.
+	// +optional
+	BindplaneBlueprints bool `json:"bindplaneBlueprints,omitempty"`
+
+	// Fleets is deprecated and kept for backwards compatibility.
+	// +optional
+	Fleets bool `json:"fleets,omitempty"`
 }
 
 // ErrorsConfig configures error tracking for Bindplane.
@@ -683,6 +758,18 @@ type ErrorsConfig struct {
 	// Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging").
 	// +optional
 	Environment string `json:"environment,omitempty"`
+
+	// Release is the release version reported to the error tracking service (e.g., "1.2.3").
+	// +optional
+	Release string `json:"release,omitempty"`
+
+	// TracesSampleRate is the fraction of transactions to send for performance monitoring (0.0 to 1.0).
+	// +optional
+	TracesSampleRate string `json:"tracesSampleRate,omitempty"`
+
+	// Debug enables debug mode for the error tracking SDK.
+	// +optional
+	Debug bool `json:"debug,omitempty"`
 }
 
 // LLMConfig configures large language model integrations for Bindplane.
@@ -713,6 +800,16 @@ type GeminiConfig struct {
 	// Location is the Google Cloud region for the Gemini API (e.g., "us-central1").
 	// +optional
 	Location string `json:"location,omitempty"`
+
+	// CredentialsFile is the path to the Google Cloud credentials file.
+	// When running on GKE with Workload Identity, this is typically not needed.
+	// +optional
+	CredentialsFile string `json:"credentialsFile,omitempty"`
+
+	// MaxTokens is the maximum number of tokens for responses from the Gemini API.
+	// When omitted or 0, the Gemini API default is used.
+	// +optional
+	MaxTokens int `json:"maxTokens,omitempty"`
 
 	// VectorSearchRedis configures Redis for Gemini vector search.
 	// +optional
@@ -747,6 +844,19 @@ type LangsmithConfig struct {
 	// ProjectName is the LangSmith project name for tracing.
 	// +optional
 	ProjectName string `json:"projectName,omitempty"`
+
+	// URL is the LangSmith API URL (e.g., "https://api.smith.langchain.com/api/v1").
+	// +optional
+	URL string `json:"url,omitempty"`
+
+	// SanitizeContent controls whether input/output content is sanitized before sending to LangSmith
+	// for privacy compliance. Defaults to true when omitted.
+	// +optional
+	SanitizeContent *bool `json:"sanitizeContent,omitempty"`
+
+	// Tags is the list of default tags to apply to all LLM runs in LangSmith.
+	// +optional
+	Tags []string `json:"tags,omitempty"`
 }
 
 // OpenAIConfig configures OpenAI integration.
@@ -781,12 +891,16 @@ type QuotasConfig struct {
 	// +optional
 	Enforced bool `json:"enforced,omitempty"`
 
+	// Organizations configures per-organization quota enforcement.
+	// +optional
+	Organizations *QuotasTierConfig `json:"organizations,omitempty"`
+
 	// Projects configures per-project quota enforcement.
 	// +optional
 	Projects *QuotasTierConfig `json:"projects,omitempty"`
 }
 
-// QuotasTierConfig configures quota enforcement for a specific tier.
+// QuotasTierConfig configures quota enforcement for a specific tier (organizations or projects).
 type QuotasTierConfig struct {
 	// Enabled enables quota enforcement for this tier.
 	// +optional
@@ -795,6 +909,19 @@ type QuotasTierConfig struct {
 	// Enforced causes quota violations for this tier to be enforced (rejected) rather than only logged.
 	// +optional
 	Enforced bool `json:"enforced,omitempty"`
+
+	// Default configures default quota limits for this tier.
+	// +optional
+	Default *QuotasTierDefaultConfig `json:"default,omitempty"`
+}
+
+// QuotasTierDefaultConfig configures default quota limits for a quota tier.
+type QuotasTierDefaultConfig struct {
+	// MaxAgents is the default maximum number of agents allowed for this tier.
+	// When omitted or 0, no default limit is applied.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MaxAgents int `json:"maxAgents,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.
@@ -804,34 +931,38 @@ type AgentsConfig struct {
 	Auth *AgentsAuthConfig `json:"auth,omitempty"`
 
 	// HeartbeatInterval is the interval on which to perform a heartbeat over agent connections (e.g. "30s").
-	// When omitted, Bindplane uses its own default.
+	// Defaults to 30s.
 	// +optional
+	// +kubebuilder:default="30s"
 	HeartbeatInterval string `json:"heartbeatInterval,omitempty"`
 
 	// HeartbeatTTL is the amount of time between agent-initiated heartbeat messages before an agent
-	// connection expires (e.g. "1m"). When omitted, Bindplane uses its own default.
+	// connection expires (e.g. "1m"). Must be greater than HeartbeatInterval. Defaults to 1m.
 	// +optional
+	// +kubebuilder:default="1m"
 	HeartbeatTTL string `json:"heartbeatTTL,omitempty"`
 
 	// HeartbeatExpiryInterval is the interval between reaping expired agents (e.g. "30s").
-	// When omitted, Bindplane uses its own default.
+	// Defaults to 30s.
 	// +optional
+	// +kubebuilder:default="30s"
 	HeartbeatExpiryInterval string `json:"heartbeatExpiryInterval,omitempty"`
 
 	// RebalanceInterval is the interval between rebalancing agents (e.g. "1h").
-	// When omitted, Bindplane uses its own default.
+	// Defaults to 1h.
 	// +optional
+	// +kubebuilder:default="1h"
 	RebalanceInterval string `json:"rebalanceInterval,omitempty"`
 
 	// RebalancePercentage is the percentage of agents to rebalance (0–100).
-	// 0 disables percentage-based rebalancing. When omitted, Bindplane uses its own default.
+	// 0 disables percentage-based rebalancing. Defaults to 0 (disabled).
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	RebalancePercentage *int `json:"rebalancePercentage,omitempty"`
 
 	// RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).
-	// When omitted, Bindplane uses its own default.
+	// Defaults to 0 (no jitter).
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
@@ -849,24 +980,28 @@ type AgentsConfig struct {
 	EnableConnectionRegistryMiddleware bool `json:"enableConnectionRegistryMiddleware,omitempty"`
 
 	// ConnectionRegistryHeartbeatInterval is the interval at which agents send heartbeats to
-	// the connection registry (e.g. "15s"). When omitted, Bindplane defaults to 15s.
+	// the connection registry (e.g. "15s"). Defaults to 15s.
 	// +optional
+	// +kubebuilder:default="15s"
 	ConnectionRegistryHeartbeatInterval string `json:"connectionRegistryHeartbeatInterval,omitempty"`
 
 	// ConnectionRegistryStaleDuration is the duration after which an agent connection is
 	// considered stale if no heartbeat is received (e.g. "45s"). Must be greater than
-	// connectionRegistryHeartbeatInterval. When omitted, Bindplane defaults to 45s.
+	// connectionRegistryHeartbeatInterval. Defaults to 45s.
 	// +optional
+	// +kubebuilder:default="45s"
 	ConnectionRegistryStaleDuration string `json:"connectionRegistryStaleDuration,omitempty"`
 
 	// ConnectionRegistryLockTimeout is the PostgreSQL lock_timeout for connection registry
-	// operations (e.g. "2s"). When omitted, Bindplane defaults to 2s.
+	// operations (e.g. "2s"). Defaults to 2s.
 	// +optional
+	// +kubebuilder:default="2s"
 	ConnectionRegistryLockTimeout string `json:"connectionRegistryLockTimeout,omitempty"`
 
 	// ConnectionClaimTimeout is the overall timeout for ClaimConnection operations (e.g. "3s").
-	// Must be greater than connectionRegistryLockTimeout. When omitted, Bindplane defaults to 3s.
+	// Must be greater than connectionRegistryLockTimeout. Defaults to 3s.
 	// +optional
+	// +kubebuilder:default="3s"
 	ConnectionClaimTimeout string `json:"connectionClaimTimeout,omitempty"`
 
 	// DuplicationPrevention configures duplicate agent connection prevention.
@@ -885,46 +1020,53 @@ type AgentDuplicationPreventionConfig struct {
 	ReassignID bool `json:"reassignID,omitempty"`
 
 	// DetectionStrategy is the strategy used to detect duplicate connections.
-	// Valid values: grace_period.
+	// Valid values: grace_period. Defaults to grace_period.
 	// +optional
 	// +kubebuilder:validation:Enum=grace_period
+	// +kubebuilder:default=grace_period
 	DetectionStrategy string `json:"detectionStrategy,omitempty"`
 
 	// DetectionGracePeriod is how long after the first claim failure to wait before treating
 	// subsequent failures as true duplicates (e.g. "3m"). Used with the grace_period strategy.
-	// Must be >= connectionRegistryStaleDuration. When omitted, Bindplane defaults to 3m.
+	// Must be >= connectionRegistryStaleDuration. Defaults to 3m.
 	// +optional
+	// +kubebuilder:default="3m"
 	DetectionGracePeriod string `json:"detectionGracePeriod,omitempty"`
 
 	// MinGracePeriodFailures is the minimum number of claim failures required before the
 	// grace_period strategy confirms a duplicate. Both the time (grace period) and count
-	// must be satisfied. When omitted, Bindplane defaults to 3.
+	// must be satisfied. Defaults to 3.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=3
 	MinGracePeriodFailures int `json:"minGracePeriodFailures,omitempty"`
 
 	// RetryAfter is the Retry-After duration sent to the agent when rejecting connections
-	// during the grace period (e.g. "30s"). When omitted, Bindplane defaults to 30s.
+	// during the grace period (e.g. "30s"). Defaults to 30s.
 	// +optional
+	// +kubebuilder:default="30s"
 	RetryAfter string `json:"retryAfter,omitempty"`
 
 	// MaxReassignmentAttempts is the maximum number of times an agent can reconnect with
 	// the same ID after being assigned a new ID before being permanently rejected (1–10).
-	// When omitted, Bindplane defaults to 3.
+	// Defaults to 3.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=10
+	// +kubebuilder:default=3
 	MaxReassignmentAttempts int `json:"maxReassignmentAttempts,omitempty"`
 
 	// ReassignmentCacheTTL is how long to remember reassignment attempts (e.g. "24h").
-	// Maximum 7d. When omitted, Bindplane defaults to 24h.
+	// Maximum 7d. Defaults to 24h.
 	// +optional
+	// +kubebuilder:default="24h"
 	ReassignmentCacheTTL string `json:"reassignmentCacheTTL,omitempty"`
 
 	// ReassignmentRetryAfter is the Retry-After duration sent to an agent when it is
 	// permanently rejected after exceeding maxReassignmentAttempts (e.g. "5m").
-	// Maximum 1h. When omitted, Bindplane defaults to 5m.
+	// Maximum 1h. Defaults to 5m.
 	// +optional
+	// +kubebuilder:default="5m"
 	ReassignmentRetryAfter string `json:"reassignmentRetryAfter,omitempty"`
 
 	// EnableDuplicateNotifications enables sending notifications when duplicate connections are detected.
@@ -939,8 +1081,9 @@ type AgentDuplicationPreventionConfig struct {
 // AgentVersionsConfig configures how Bindplane syncs agent versions.
 type AgentVersionsConfig struct {
 	// SyncInterval is the interval at which to sync agent versions (e.g. "2h").
-	// Must be at least 1h. When omitted, Bindplane uses its own default.
+	// Must be at least 1h. Defaults to 1h.
 	// +optional
+	// +kubebuilder:default="1h"
 	SyncInterval string `json:"syncInterval,omitempty"`
 
 	// Clients is a deprecated list of version client types (e.g. ["bdot", "github"]).
@@ -953,8 +1096,9 @@ type AgentVersionsConfig struct {
 type AgentsAuthConfig struct {
 	// Type specifies the authentication method(s) for agent connections.
 	// Can be a single method or a comma-separated list (e.g. "oauth,secretKey").
-	// Valid values: secretKey, oauth. When omitted, Bindplane defaults to secretKey.
+	// Valid values: secretKey, oauth. Defaults to secretKey.
 	// +optional
+	// +kubebuilder:default=secretKey
 	Type string `json:"type,omitempty"`
 
 	// SecretKey configures the secret key authentication method.
@@ -969,7 +1113,7 @@ type AgentsAuthConfig struct {
 // AgentsAuthSecretKeyConfig configures secret key authentication for agent connections.
 type AgentsAuthSecretKeyConfig struct {
 	// Headers is the list of HTTP headers to read the secret key from.
-	// When omitted, Bindplane defaults to ["X-Bindplane-Authorization", "Authorization"].
+	// Defaults to ["X-Bindplane-Authorization", "Authorization"].
 	// +optional
 	Headers []string `json:"headers,omitempty"`
 }
@@ -993,9 +1137,9 @@ type AgentsAuthOAuthConfig struct {
 	// +optional
 	RequiredScopes []string `json:"requiredScopes,omitempty"`
 
-	// CacheTTL is the duration a valid OAuth token is cached (e.g. "1h").
-	// When omitted, Bindplane uses its own default.
+	// CacheTTL is the duration a valid OAuth token is cached (e.g. "1h"). Defaults to 1h.
 	// +optional
+	// +kubebuilder:default="1h"
 	CacheTTL string `json:"cacheTTL,omitempty"`
 }
 
@@ -1007,6 +1151,9 @@ type AdvancedConfig struct {
 	// Server contains advanced server configuration options.
 	// +optional
 	Server *AdvancedServerConfig `json:"server,omitempty"`
+	// Agent contains advanced agent telemetry configuration options.
+	// +optional
+	Agent *AdvancedAgentConfig `json:"agent,omitempty"`
 	// Cache contains advanced cache configuration options.
 	// +optional
 	Cache *AdvancedCacheConfig `json:"cache,omitempty"`
@@ -1015,11 +1162,29 @@ type AdvancedConfig struct {
 	Rollout *AdvancedRolloutConfig `json:"rollout,omitempty"`
 }
 
+// AdvancedAgentConfig contains advanced agent configuration options.
+type AdvancedAgentConfig struct {
+	// TelemetryPort is the port used for agent telemetry collection. Defaults to 8888.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	TelemetryPort *int32 `json:"telemetryPort,omitempty"`
+}
+
 // AdvancedRolloutConfig contains advanced rollout configuration options.
 type AdvancedRolloutConfig struct {
 	// DisableUpdater disables the background rollout updater.
 	// +optional
 	DisableUpdater bool `json:"disableUpdater,omitempty"`
+
+	// RetryInterval is the duration to retry configuring pending agents (e.g., "30s"). Defaults to 30s.
+	// +optional
+	RetryInterval string `json:"retryInterval,omitempty"`
+
+	// UpdateWorkerCount is the number of workers used for updating rollouts. Defaults to 10.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	UpdateWorkerCount int `json:"updateWorkerCount,omitempty"`
 }
 
 // AdvancedStoreConfig contains advanced store configuration options.
@@ -1030,7 +1195,6 @@ type AdvancedStoreConfig struct {
 }
 
 // AdvancedStoreStatsConfig tunes measurement pipeline performance.
-// All fields are optional; when omitted Bindplane uses its own defaults.
 type AdvancedStoreStatsConfig struct {
 	// BatchFlushInterval is the interval at which to flush measurement batches (e.g. "1s").
 	// +optional
@@ -1050,20 +1214,17 @@ type AdvancedStoreStatsConfig struct {
 }
 
 // AdvancedServerConfig contains advanced HTTP/OpAMP server options.
-// All fields are optional; when omitted Bindplane uses its own defaults.
 type AdvancedServerConfig struct {
 	// MaxRequestBytes is the maximum request body size the server accepts, excluding offline
-	// agent uploads. When omitted, Bindplane defaults to 10485760 (10 MiB).
+	// agent uploads. Defaults to 10485760 (10 MiB).
 	// +optional
 	MaxRequestBytes int64 `json:"maxRequestBytes,omitempty"`
 	// ShutdownGracePeriod is the total time the server waits for in-flight requests and
-	// connections to finish before forceful shutdown (e.g. "5m"). When omitted, Bindplane
-	// uses its own default.
+	// connections to finish before forceful shutdown (e.g. "5m"). Defaults to 2m.
 	// +optional
 	ShutdownGracePeriod string `json:"shutdownGracePeriod,omitempty"`
 	// OpAMPShutdownGracePeriodTarget is the fraction (0.1–1.0) of ShutdownGracePeriod
-	// that the OpAMP server is given to drain agents (e.g. "0.6"). When omitted, Bindplane
-	// uses its own default.
+	// that the OpAMP server is given to drain agents (e.g. "0.25"). Defaults to 0.25.
 	// +optional
 	OpAMPShutdownGracePeriodTarget string `json:"opampShutdownGracePeriodTarget,omitempty"`
 }
@@ -1350,6 +1511,11 @@ type NatsTLSConfig struct {
 	// CertManager references a cert-manager Issuer or ClusterIssuer to issue the NATS certificate (used for client, cluster, and HTTP).
 	// +optional
 	CertManager *CertManagerTLSIssuerRef `json:"certManager,omitempty"`
+
+	// SkipVerify disables TLS certificate verification for NATS connections.
+	// Not recommended for production use.
+	// +optional
+	SkipVerify bool `json:"skipVerify,omitempty"`
 }
 
 // TransformAgentTLSConfig defines TLS for the Transform Agent. Only cert-manager is supported; no secretName.
@@ -1474,8 +1640,7 @@ type LoggingOTLPConfig struct {
 	// +optional
 	Insecure bool `json:"insecure,omitempty"`
 
-	// Interval is the interval at which to export logs (e.g. 60s).
-	// When omitted, Bindplane uses its own default.
+	// Interval is the interval at which to export logs (e.g. "1s"). Defaults to 1s.
 	// +optional
 	Interval string `json:"interval,omitempty"`
 }
@@ -1952,6 +2117,11 @@ type OIDCConfig struct {
 	// Scopes is the list of OAuth2 scopes to request
 	// +optional
 	Scopes []string `json:"scopes,omitempty"`
+
+	// DisableInvitations disables the invitation flow for OIDC-authenticated users.
+	// When true, users cannot be invited via email and must log in via OIDC directly.
+	// +optional
+	DisableInvitations bool `json:"disableInvitations,omitempty"`
 }
 
 // NetworkConfig defines network configuration
@@ -2015,20 +2185,20 @@ type StoreConfig struct {
 	// Postgres configuration
 	Postgres *PostgresConfig `json:"postgres"`
 
-	// MaxEvents is the maximum number of events to merge into a single event.
-	// When omitted, Bindplane defaults to 100.
+	// MaxEvents is the maximum number of events to merge into a single event. Defaults to 100.
 	// +optional
+	// +kubebuilder:default=100
 	MaxEvents int `json:"maxEvents,omitempty"`
 
-	// EventMergeWindow is the window during which events are merged (e.g. "100ms").
-	// When omitted, Bindplane defaults to 100ms.
+	// EventMergeWindow is the window during which events are merged (e.g. "100ms"). Defaults to 100ms.
 	// +optional
+	// +kubebuilder:default="100ms"
 	EventMergeWindow string `json:"eventMergeWindow,omitempty"`
 
 	// SummaryRollupRetentionDays is the number of days to retain daily rollup data.
-	// 0 means indefinite retention (rollups are never deleted).
-	// When omitted, Bindplane defaults to 365.
+	// 0 means indefinite retention (rollups are never deleted). Defaults to 365.
 	// +optional
+	// +kubebuilder:default=365
 	SummaryRollupRetentionDays *int `json:"summaryRollupRetentionDays,omitempty"`
 }
 

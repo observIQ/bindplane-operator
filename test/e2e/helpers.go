@@ -40,9 +40,11 @@ import (
 )
 
 const (
-	defaultCertManagerVersion = "latest"
+	// defaultCertManagerVersion is the pinned cert-manager release used by default.
+	// Bump this when upgrading the github.com/cert-manager/cert-manager Go module in go.mod.
+	// Override at runtime with CERT_MANAGER_VERSION=vX.Y.Z to test a different version.
+	defaultCertManagerVersion = "v1.20.2"
 	certManagerVersionEnvVar  = "CERT_MANAGER_VERSION"
-	certManagerLatestURL      = "https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml"
 	certManagerVersionURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 	projectDirE2ESuffix       = "/test/e2e"
 )
@@ -382,8 +384,20 @@ func waitForBindplaneDeleted(name, namespace string, timeout time.Duration) {
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
+// bindplaneCRDInstalled reports whether the bindplane CRD is registered on the cluster.
+// Used to short-circuit cleanup when BeforeSuite failed before CRDs were installed.
+func bindplaneCRDInstalled() bool {
+	_, err := runCmd(exec.Command("kubectl", "get", "crd", "bindplanes.k8s.bindplane.com")) // #nosec G204 -- fixed args
+	return err == nil
+}
+
 //nolint:unparam
 func cleanupBindplane(name, namespace string, timeout time.Duration) {
+	if !bindplaneCRDInstalled() {
+		_, _ = fmt.Fprintf(GinkgoWriter,
+			"skipping cleanup of %s/%s: bindplane CRD not installed\n", namespace, name)
+		return
+	}
 	unpauseBindplaneForCleanup(name, namespace)
 	deleteBindplane(name, namespace)
 	waitForBindplaneDeleted(name, namespace, timeout)
@@ -476,7 +490,9 @@ func unpauseBindplaneForCleanup(name, namespace string) {
 		fmt.Sprintf("%s=false", pauseReconciliationAnnotation),
 		"--overwrite",
 	))
-	if err == nil || strings.Contains(err.Error(), "NotFound") {
+	if err == nil ||
+		strings.Contains(err.Error(), "NotFound") ||
+		strings.Contains(err.Error(), "the server doesn't have a resource type") {
 		return
 	}
 	Expect(err).NotTo(HaveOccurred(), "Failed to clear pause annotation on Bindplane %s during cleanup", name)
@@ -601,11 +617,7 @@ func getCertManagerVersion() string {
 }
 
 func getCertManagerURL() string {
-	version := getCertManagerVersion()
-	if version == defaultCertManagerVersion {
-		return certManagerLatestURL
-	}
-	return fmt.Sprintf(certManagerVersionURLTmpl, version)
+	return fmt.Sprintf(certManagerVersionURLTmpl, getCertManagerVersion())
 }
 
 func installCertManager() error {
@@ -616,20 +628,26 @@ func installCertManager() error {
 	if _, err := run(cmd); err != nil {
 		return err
 	}
-	cmd = exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook",
-		"--for", "condition=Available",
-		"--namespace", "cert-manager",
-		"--timeout", "5m",
-	)
-	if _, err := run(cmd); err != nil {
-		return err
+	// Wait for all three cert-manager workloads to become Available before proceeding.
+	// Waiting only on the webhook (as was done previously) misses cases where cainjector
+	// is still starting, causing "x509: certificate signed by unknown authority" errors.
+	for _, d := range []string{"cert-manager", "cert-manager-cainjector", "cert-manager-webhook"} {
+		cmd = exec.Command("kubectl", "wait", "deployment.apps/"+d, // #nosec G204 -- deployment name is a loop constant
+			"--for", "condition=Available",
+			"--namespace", "cert-manager",
+			"--timeout", "8m",
+		)
+		if _, err := run(cmd); err != nil {
+			dumpCertManagerDiagnostics()
+			return fmt.Errorf("cert-manager deployment %s not Available: %w", d, err)
+		}
 	}
 	// Wait for the cert-manager-webhook's CA bundle to be injected into its
 	// ValidatingWebhookConfiguration. Without this, cert-manager API requests
 	// fail with "x509: certificate signed by unknown authority" even after the
 	// webhook deployment shows as Available.
 	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for cert-manager webhook CA to be ready...\n")
-	deadline := time.Now().Add(5 * time.Minute)
+	deadline := time.Now().Add(8 * time.Minute)
 	for time.Now().Before(deadline) {
 		cmd = exec.Command("kubectl", "get", "validatingwebhookconfiguration", // #nosec G204 -- test utility
 			"cert-manager-webhook",
@@ -641,7 +659,25 @@ func installCertManager() error {
 		}
 		time.Sleep(5 * time.Second)
 	}
+	dumpCertManagerDiagnostics()
 	return fmt.Errorf("timed out waiting for cert-manager webhook CA bundle to be injected")
+}
+
+// dumpCertManagerDiagnostics emits pod, event, and webhook state to GinkgoWriter
+// to make cert-manager startup failures debuggable without re-running the suite.
+func dumpCertManagerDiagnostics() {
+	_, _ = fmt.Fprintln(GinkgoWriter, "===== cert-manager diagnostics =====")
+	for _, args := range [][]string{
+		{"get", "pods", "-n", "cert-manager", "-o", "wide"},
+		{"describe", "pods", "-n", "cert-manager"},
+		{"get", "events", "-n", "cert-manager", "--sort-by=.lastTimestamp"},
+		{"get", "deployments", "-n", "cert-manager", "-o", "wide"},
+		{"get", "validatingwebhookconfiguration", "cert-manager-webhook", "-o", "yaml"},
+	} {
+		out, _ := exec.Command("kubectl", args...).CombinedOutput() // #nosec G204 -- fixed diagnostic args
+		_, _ = fmt.Fprintf(GinkgoWriter, "$ kubectl %s\n%s\n", strings.Join(args, " "), out)
+	}
+	_, _ = fmt.Fprintln(GinkgoWriter, "===== end cert-manager diagnostics =====")
 }
 
 func warnError(err error) {

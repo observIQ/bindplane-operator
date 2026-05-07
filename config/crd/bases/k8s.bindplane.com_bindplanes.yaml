@@ -12169,6 +12169,14 @@ spec:
                 properties:
                   advanced:
                     properties:
+                      agent:
+                        properties:
+                          telemetryPort:
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                        type: object
                       cache:
                         properties:
                           redis:
@@ -12228,6 +12236,11 @@ spec:
                         properties:
                           disableUpdater:
                             type: boolean
+                          retryInterval:
+                            type: string
+                          updateWorkerCount:
+                            minimum: 1
+                            type: integer
                         type: object
                       server:
                         properties:
@@ -12263,6 +12276,7 @@ spec:
                           type: string
                         type: array
                       syncInterval:
+                        default: 1h
                         type: string
                     type: object
                   agents:
@@ -12276,6 +12290,7 @@ spec:
                                   type: string
                                 type: array
                               cacheTTL:
+                                default: 1h
                                 type: string
                               issuer:
                                 type: string
@@ -12296,21 +12311,28 @@ spec:
                                 type: array
                             type: object
                           type:
+                            default: secretKey
                             type: string
                         type: object
                       connectionClaimTimeout:
+                        default: 3s
                         type: string
                       connectionRegistryHeartbeatInterval:
+                        default: 15s
                         type: string
                       connectionRegistryLockTimeout:
+                        default: 2s
                         type: string
                       connectionRegistryStaleDuration:
+                        default: 45s
                         type: string
                       duplicationPrevention:
                         properties:
                           detectionGracePeriod:
+                            default: 3m
                             type: string
                           detectionStrategy:
+                            default: grace_period
                             enum:
                             - grace_period
                             type: string
@@ -12321,33 +12343,42 @@ spec:
                           enablePerOrgEnforcement:
                             type: boolean
                           maxReassignmentAttempts:
+                            default: 3
                             maximum: 10
                             minimum: 1
                             type: integer
                           minGracePeriodFailures:
+                            default: 3
                             minimum: 1
                             type: integer
                           reassignID:
                             type: boolean
                           reassignmentCacheTTL:
+                            default: 24h
                             type: string
                           reassignmentRetryAfter:
+                            default: 5m
                             type: string
                           retryAfter:
+                            default: 30s
                             type: string
                         type: object
                       enableConnectionRegistryMiddleware:
                         type: boolean
                       heartbeatExpiryInterval:
+                        default: 30s
                         type: string
                       heartbeatInterval:
+                        default: 30s
                         type: string
                       heartbeatTTL:
+                        default: 1m
                         type: string
                       maxSimultaneousConnections:
                         default: 10
                         type: integer
                       rebalanceInterval:
+                        default: 1h
                         type: string
                       rebalanceJitter:
                         maximum: 100
@@ -12536,6 +12567,8 @@ spec:
                             - key
                             type: object
                             x-kubernetes-map-type: atomic
+                          disableInvitations:
+                            type: boolean
                           issuer:
                             type: string
                           scopes:
@@ -12601,6 +12634,14 @@ spec:
                     type: object
                   encryptionProvider:
                     properties:
+                      cache:
+                        properties:
+                          cacheTimeout:
+                            type: string
+                          capacity:
+                            minimum: 1
+                            type: integer
+                        type: object
                       googleKMS:
                         properties:
                           keyDeletionJob:
@@ -12621,11 +12662,17 @@ spec:
                     properties:
                       backendDSN:
                         type: string
+                      debug:
+                        type: boolean
                       enabled:
                         type: boolean
                       environment:
                         type: string
                       frontendDSN:
+                        type: string
+                      release:
+                        type: string
+                      tracesSampleRate:
                         type: string
                     type: object
                   eventBus:
@@ -12644,7 +12691,21 @@ spec:
                     properties:
                       overrides:
                         properties:
+                          advancedPipelineEditor:
+                            type: boolean
+                          aixPlatform:
+                            type: boolean
+                          auth0SSO:
+                            type: boolean
+                          bindplaneBlueprints:
+                            type: boolean
+                          fleets:
+                            type: boolean
                           growthLicense:
+                            type: boolean
+                          identityTablesCutover:
+                            type: boolean
+                          identityTablesDualWrite:
                             type: boolean
                           llmFeatures:
                             type: boolean
@@ -12662,11 +12723,25 @@ spec:
                             type: boolean
                           pipelineIntelligenceSnapshotLogTypes:
                             type: boolean
+                          pipelineIntelligenceSplunkConfigImport:
+                            type: boolean
                           rawConfigLegacy:
+                            type: boolean
+                          rawLogMetricViews:
+                            type: boolean
+                          secopsGcsIntegration:
                             type: boolean
                           secopsIntegration:
                             type: boolean
                           secopsTheme:
+                            type: boolean
+                          snapshotPipelineIntelligence:
+                            type: boolean
+                          v2Configuration:
+                            type: boolean
+                          v2Connectors:
+                            type: boolean
+                          vault:
                             type: boolean
                         type: object
                       postHog:
@@ -12674,6 +12749,8 @@ spec:
                           defaultFeatureFlagsPollingInterval:
                             type: string
                           endpoint:
+                            type: string
+                          featureFlagRequestTimeout:
                             type: string
                           personalAPIKey:
                             type: string
@@ -12749,8 +12826,12 @@ spec:
                         type: object
                       gemini:
                         properties:
+                          credentialsFile:
+                            type: string
                           location:
                             type: string
+                          maxTokens:
+                            type: integer
                           projectID:
                             type: string
                           vectorSearchRedis:
@@ -12781,6 +12862,14 @@ spec:
                           enabled:
                             type: boolean
                           projectName:
+                            type: string
+                          sanitizeContent:
+                            type: boolean
+                          tags:
+                            items:
+                              type: string
+                            type: array
+                          url:
                             type: string
                         type: object
                       openai:
@@ -12890,6 +12979,8 @@ spec:
                             required:
                             - name
                             type: object
+                          skipVerify:
+                            type: boolean
                         type: object
                     type: object
                   network:
@@ -12976,8 +13067,27 @@ spec:
                         type: boolean
                       enforced:
                         type: boolean
+                      organizations:
+                        properties:
+                          default:
+                            properties:
+                              maxAgents:
+                                minimum: 0
+                                type: integer
+                            type: object
+                          enabled:
+                            type: boolean
+                          enforced:
+                            type: boolean
+                        type: object
                       projects:
                         properties:
+                          default:
+                            properties:
+                              maxAgents:
+                                minimum: 0
+                                type: integer
+                            type: object
                           enabled:
                             type: boolean
                           enforced:
@@ -13027,6 +13137,8 @@ spec:
                               traces:
                                 type: string
                             type: object
+                          meterReportInterval:
+                            type: string
                           publishableKey:
                             type: string
                           publishableKeySecretRef:
@@ -13108,8 +13220,10 @@ spec:
                   store:
                     properties:
                       eventMergeWindow:
+                        default: 100ms
                         type: string
                       maxEvents:
+                        default: 100
                         type: integer
                       postgres:
                         properties:
@@ -13188,6 +13302,7 @@ spec:
                         - host
                         type: object
                       summaryRollupRetentionDays:
+                        default: 365
                         type: integer
                     required:
                     - postgres
