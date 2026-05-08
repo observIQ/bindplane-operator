@@ -107,6 +107,22 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 		return err
 	}
 
+	if err := ValidateArgoRollout(bindplane); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateArgoRollout enforces that spec.bindplane.strategy and
+// spec.bindplane.argoRollout.enabled are mutually exclusive.
+func ValidateArgoRollout(bindplane *bindplanev1alpha1.Bindplane) error {
+	if bindplane.Spec.Bindplane.ArgoRollout == nil || !bindplane.Spec.Bindplane.ArgoRollout.Enabled {
+		return nil
+	}
+	if bindplane.Spec.Bindplane.Strategy != nil {
+		return fmt.Errorf("spec.bindplane.strategy and spec.bindplane.argoRollout.enabled are mutually exclusive (Argo Rollout uses BlueGreen)")
+	}
 	return nil
 }
 

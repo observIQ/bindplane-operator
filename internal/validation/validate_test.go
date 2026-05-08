@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -604,5 +605,65 @@ func TestValidateExtraEnv_AcceptsNil(t *testing.T) {
 func TestValidateExtraEnv_AcceptsEmpty(t *testing.T) {
 	if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", []corev1.EnvVar{}, false); err != nil {
 		t.Errorf("unexpected error for empty extraEnv: %v", err)
+	}
+}
+
+// ---- ValidateArgoRollout ----
+
+func newArgoRolloutTestBindplane() *bindplanev1alpha1.Bindplane {
+	return &bindplanev1alpha1.Bindplane{
+		ObjectMeta: metav1.ObjectMeta{Name: "bindplane"},
+		Spec: bindplanev1alpha1.BindplaneSpec{
+			Version: "1.99.1",
+			Config: bindplanev1alpha1.BindplaneConfigSpec{
+				License: "test-license",
+				Store: bindplanev1alpha1.StoreConfig{
+					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres.example.com"},
+				},
+			},
+		},
+	}
+}
+
+func TestValidateArgoRollout_AcceptsNilArgoRollout(t *testing.T) {
+	bp := newArgoRolloutTestBindplane()
+	if err := validation.ValidateArgoRollout(bp); err != nil {
+		t.Errorf("unexpected error when argoRollout is nil: %v", err)
+	}
+}
+
+func TestValidateArgoRollout_AcceptsDisabled(t *testing.T) {
+	bp := newArgoRolloutTestBindplane()
+	bp.Spec.Bindplane.ArgoRollout = &bindplanev1alpha1.ArgoRolloutSpec{Enabled: false}
+	if err := validation.ValidateArgoRollout(bp); err != nil {
+		t.Errorf("unexpected error when argoRollout.enabled=false: %v", err)
+	}
+}
+
+func TestValidateArgoRollout_AcceptsEnabledWithoutStrategy(t *testing.T) {
+	bp := newArgoRolloutTestBindplane()
+	bp.Spec.Bindplane.ArgoRollout = &bindplanev1alpha1.ArgoRolloutSpec{Enabled: true}
+	if err := validation.ValidateArgoRollout(bp); err != nil {
+		t.Errorf("unexpected error when argoRollout.enabled=true and strategy is nil: %v", err)
+	}
+}
+
+func TestValidateArgoRollout_RejectsMutuallyExclusive(t *testing.T) {
+	bp := newArgoRolloutTestBindplane()
+	rollingUpdate := appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType}
+	bp.Spec.Bindplane.ArgoRollout = &bindplanev1alpha1.ArgoRolloutSpec{Enabled: true}
+	bp.Spec.Bindplane.Strategy = &rollingUpdate
+	if err := validation.ValidateArgoRollout(bp); err == nil {
+		t.Error("expected error when argoRollout.enabled=true and strategy is set")
+	}
+}
+
+func TestValidateBindplane_RejectsArgoRolloutWithStrategy(t *testing.T) {
+	bp := newArgoRolloutTestBindplane()
+	rollingUpdate := appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType}
+	bp.Spec.Bindplane.ArgoRollout = &bindplanev1alpha1.ArgoRolloutSpec{Enabled: true}
+	bp.Spec.Bindplane.Strategy = &rollingUpdate
+	if err := validation.ValidateBindplane(bp); err == nil {
+		t.Error("expected ValidateBindplane to fail when argoRollout.enabled=true and strategy is set")
 	}
 }

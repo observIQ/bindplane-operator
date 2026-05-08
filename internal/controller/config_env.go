@@ -545,11 +545,7 @@ func getTransformAgentEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.E
 }
 
 // getNatsClientEnvVars returns the NATS client environment variables for Node and Jobs deployments
-func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsClient bool) []corev1.EnvVar {
-	if !includeNatsClient {
-		return nil
-	}
-
+func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	tlsVars := getNatsTLSEnvVars(bindplane)
 	envVars := make([]corev1.EnvVar, 0, 4+len(tlsVars))
 	envVars = append(envVars,

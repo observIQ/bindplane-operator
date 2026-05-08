@@ -45,6 +45,18 @@ spec:
               bindplane:
                 default: {}
                 properties:
+                  argoRollout:
+                    properties:
+                      autoPromotionEnabled:
+                        type: boolean
+                      enabled:
+                        default: false
+                        type: boolean
+                      scaleDownDelaySeconds:
+                        format: int32
+                        minimum: 0
+                        type: integer
+                    type: object
                   autoscaling:
                     properties:
                       behavior:

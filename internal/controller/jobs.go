@@ -157,7 +157,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 										},
 									},
 									getBindplaneCommonEnvVars(bindplane),
-									getNatsClientEnvVars(bindplane, true),
+									getNatsClientEnvVars(bindplane),
 								),
 								Resources: resources,
 								StartupProbe: &corev1.Probe{

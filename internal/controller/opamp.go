@@ -243,7 +243,7 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 									getKubernetesEnvVars(opampContainerName),
 									getNodeEnvVars(),
 									getBindplaneCommonEnvVars(bindplane),
-									getNatsClientEnvVars(bindplane, true),
+									getNatsClientEnvVars(bindplane),
 									getOpAMPOverrideEnvVars(bindplane),
 								),
 								Resources: opampResources,

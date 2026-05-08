@@ -83,16 +83,29 @@ func (r *BindplaneReconciler) nodeHPA(bindplane *bindplanev1alpha1.Bindplane) *a
 			Labels:    labels,
 		},
 		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
-				Name:       getResourceName(bindplane, nodeComponent),
-			},
-			MinReplicas: &minReplicas,
-			MaxReplicas: maxReplicas,
-			Metrics:     metrics,
-			Behavior:    behavior,
+			ScaleTargetRef: nodeHPAScaleTargetRef(bindplane),
+			MinReplicas:    &minReplicas,
+			MaxReplicas:    maxReplicas,
+			Metrics:        metrics,
+			Behavior:       behavior,
 		},
+	}
+}
+
+// nodeHPAScaleTargetRef returns the HPA scale target reference for Bindplane Node.
+// When ArgoRollout is enabled, it targets the Rollout resource; otherwise a Deployment.
+func nodeHPAScaleTargetRef(bindplane *bindplanev1alpha1.Bindplane) autoscalingv2.CrossVersionObjectReference {
+	if bindplane.Spec.Bindplane.ArgoRollout != nil && bindplane.Spec.Bindplane.ArgoRollout.Enabled {
+		return autoscalingv2.CrossVersionObjectReference{
+			APIVersion: argoRolloutAPIVersion,
+			Kind:       argoRolloutKind,
+			Name:       getResourceName(bindplane, nodeComponent),
+		}
+	}
+	return autoscalingv2.CrossVersionObjectReference{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       getResourceName(bindplane, nodeComponent),
 	}
 }
 
