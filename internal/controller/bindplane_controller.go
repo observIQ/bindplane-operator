@@ -124,19 +124,6 @@ const (
 	bindplaneSessionSecretEnvVar = "BINDPLANE_SESSION_SECRET" // #nosec G101 -- env var name, not a credential
 	bindplaneSecretKeyEnvVar     = "BINDPLANE_SECRET_KEY"     // #nosec G101 -- env var name, not a credential
 
-	// Auth0 configuration
-	bindplaneAuth0ClientIDEnvVar                = "BINDPLANE_AUTH0_CLIENT_ID"
-	bindplaneAuth0DomainEnvVar                  = "BINDPLANE_AUTH0_DOMAIN"
-	bindplaneAuth0AudienceEnvVar                = "BINDPLANE_AUTH0_AUDIENCE"
-	bindplaneAuth0ManagementDomainEnvVar        = "BINDPLANE_AUTH0_MANAGEMENT_DOMAIN"
-	bindplaneAuth0ManagementClientIDEnvVar      = "BINDPLANE_AUTH0_MANAGEMENT_CLIENT_ID"
-	bindplaneAuth0ManagementClientSecretEnvVar  = "BINDPLANE_AUTH0_MANAGEMENT_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential
-	bindplaneAuth0SSOEnabledEnvVar              = "BINDPLANE_AUTH_AUTH0_SSO_ENABLED"
-	bindplaneAuth0SSOSelfServiceProfileIDEnvVar = "BINDPLANE_AUTH_AUTH0_SSO_SELF_SERVICE_PROFILE_ID"
-	bindplaneAuth0WIFClientIDEnvVar             = "BINDPLANE_AUTH_AUTH0_WIF_CLIENT_ID"
-	bindplaneAuth0WIFClientSecretEnvVar         = "BINDPLANE_AUTH_AUTH0_WIF_CLIENT_SECRET" // #nosec G101 -- env var name, not a credential
-	bindplaneAuth0WIFAudienceEnvVar             = "BINDPLANE_AUTH_AUTH0_WIF_AUDIENCE"
-
 	// Store configuration
 	bindplaneStoreTypeEnvVar                       = "BINDPLANE_STORE_TYPE"
 	bindplaneStoreMaxEventsEnvVar                  = "BINDPLANE_STORE_MAX_EVENTS"
@@ -144,11 +131,10 @@ const (
 	bindplaneStoreSummaryRollupRetentionDaysEnvVar = "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS"
 
 	// Tracing configuration
-	bindplaneTracingTypeEnvVar            = "BINDPLANE_TRACING_TYPE"
-	bindplaneTracingOTLPEndpointEnvVar    = "BINDPLANE_TRACING_OTLP_ENDPOINT"
-	bindplaneTracingOTLPInsecureEnvVar    = "BINDPLANE_TRACING_OTLP_INSECURE"
-	bindplaneTracingSamplingRateEnvVar    = "BINDPLANE_TRACING_SAMPLING_RATE"
-	bindplaneTracingHoneycombAPIKeyEnvVar = "BINDPLANE_TRACING_HONEYCOMB_API_KEY" // #nosec G101 -- env var name, not a credential
+	bindplaneTracingTypeEnvVar         = "BINDPLANE_TRACING_TYPE"
+	bindplaneTracingOTLPEndpointEnvVar = "BINDPLANE_TRACING_OTLP_ENDPOINT"
+	bindplaneTracingOTLPInsecureEnvVar = "BINDPLANE_TRACING_OTLP_INSECURE"
+	bindplaneTracingSamplingRateEnvVar = "BINDPLANE_TRACING_SAMPLING_RATE"
 
 	// Metrics configuration
 	bindplaneMetricsTypeEnvVar               = "BINDPLANE_METRICS_TYPE"
@@ -253,235 +239,35 @@ const (
 	bindplaneNatsTLSKeyEnvVar    = "BINDPLANE_NATS_TLS_KEY"
 	bindplaneNatsTLSCAEnvVar     = "BINDPLANE_NATS_TLS_CA"
 
-	// Profiling (Google Cloud Profiler)
-	bindplaneProfilingEnabledEnvVar     = "BINDPLANE_PROFILING_ENABLED"
-	bindplaneProfilingProjectIDEnvVar   = "BINDPLANE_PROFILING_PROJECT_ID"
-	bindplaneProfilingServiceNameEnvVar = "BINDPLANE_PROFILING_SERVICE_NAME"
-	bindplaneProfilingNoCPUEnvVar       = "BINDPLANE_PROFILING_NO_CPU"
-	bindplaneProfilingNoAllocEnvVar     = "BINDPLANE_PROFILING_NO_ALLOC"
-	bindplaneProfilingNoHeapEnvVar      = "BINDPLANE_PROFILING_NO_HEAP"
-	bindplaneProfilingNoGoroutineEnvVar = "BINDPLANE_PROFILING_NO_GOROUTINE"
-	bindplaneProfilingMutexEnvVar       = "BINDPLANE_PROFILING_MUTEX"
-
-	// Pprof
-	bindplanePprofEnabledEnvVar  = "BINDPLANE_PPROF_ENABLED"
-	bindplanePprofEndpointEnvVar = "BINDPLANE_PPROF_ENDPOINT"
-
-	// Status check endpoints
-	bindplaneStatusEnabledEnvVar = "BINDPLANE_STATUS_ENABLED"
-	bindplaneStatusKeysEnvVar    = "BINDPLANE_STATUS_KEYS"
-
-	// Analytics
-	bindplaneAnalyticsDisabledEnvVar        = "BINDPLANE_ANALYTICS_DISABLED"
-	bindplaneAnalyticsSegmentWriteKeyEnvVar = "BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY"
-
 	// Logging configuration
-	bindplaneLoggingLevelEnvVar        = "BINDPLANE_LOGGING_LEVEL"
-	bindplaneLoggingTypeEnvVar         = "BINDPLANE_LOGGING_TYPE"
-	bindplaneLoggingOTLPEndpointEnvVar = "BINDPLANE_LOGGING_OTLP_ENDPOINT"
-	bindplaneLoggingOTLPInsecureEnvVar = "BINDPLANE_LOGGING_OTLP_INSECURE"
-	bindplaneLoggingOTLPIntervalEnvVar = "BINDPLANE_LOGGING_OTLP_INTERVAL"
+	bindplaneLoggingLevelEnvVar = "BINDPLANE_LOGGING_LEVEL"
+	bindplaneLoggingTypeEnvVar  = "BINDPLANE_LOGGING_TYPE"
 
-	// Advanced store stats
-	bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar = "BINDPLANE_ADVANCED_STORE_STATS_BATCH_FLUSH_INTERVAL"
-	bindplaneAdvancedStoreStatsWorkerCountEnvVar        = "BINDPLANE_ADVANCED_STORE_STATS_WORKER_COUNT"
-	bindplaneAdvancedStoreStatsEnableSortingEnvVar      = "BINDPLANE_ADVANCED_STORE_STATS_ENABLE_SORTING"
-	bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar  = "BINDPLANE_ADVANCED_STORE_STATS_METRIC_CHANNEL_SIZE"
-	bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar   = "BINDPLANE_ADVANCED_STORE_STATS_BATCH_CHANNEL_SIZE"
-
-	// Advanced rollout
-	bindplaneAdvancedRolloutDisableUpdaterEnvVar = "BINDPLANE_ADVANCED_ROLLOUT_DISABLE_UPDATER"
-
-	// Advanced server
-	bindplaneAdvancedServerMaxRequestBytesEnvVar                = "BINDPLANE_ADVANCED_SERVER_MAX_REQUEST_BYTES"
-	bindplaneAdvancedServerShutdownGracePeriodEnvVar            = "BINDPLANE_ADVANCED_SERVER_SHUTDOWN_GRACE_PERIOD"
+	// Advanced server (OpAMP shutdown tuning — used by the OpAMP component)
 	bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar = "BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET"
 
-	// Advanced cache
-	bindplaneAdvancedCacheTypeEnvVar              = "BINDPLANE_ADVANCED_CACHE_TYPE"
-	bindplaneAdvancedCacheRedisAddressEnvVar      = "BINDPLANE_ADVANCED_CACHE_REDIS_ADDRESS"
-	bindplaneAdvancedCacheRedisPasswordEnvVar     = "BINDPLANE_ADVANCED_CACHE_REDIS_PASSWORD" // #nosec G101 -- env var name, not a credential
-	bindplaneAdvancedCacheRedisDBEnvVar           = "BINDPLANE_ADVANCED_CACHE_REDIS_DB"
-	bindplaneAdvancedCacheRedisReadTimeoutEnvVar  = "BINDPLANE_ADVANCED_CACHE_REDIS_READ_TIMEOUT"
-	bindplaneAdvancedCacheRedisWriteTimeoutEnvVar = "BINDPLANE_ADVANCED_CACHE_REDIS_WRITE_TIMEOUT"
-	bindplaneAdvancedCacheRedisEnableTLSEnvVar    = "BINDPLANE_ADVANCED_CACHE_REDIS_ENABLE_TLS"
-
-	// Advanced cache Redis TLS (file-path env vars; operator mounts Secret)
-	bindplaneAdvancedCacheRedisTLSCertEnvVar       = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_CERT"
-	bindplaneAdvancedCacheRedisTLSKeyEnvVar        = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_KEY"
-	bindplaneAdvancedCacheRedisTLSCAEnvVar         = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_CA"
-	bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_SKIP_VERIFY"
-	bindplaneAdvancedCacheRedisTLSMinVersionEnvVar = "BINDPLANE_ADVANCED_CACHE_REDIS_TLS_MIN_TLSVERSION"
-
-	// Advanced cache Redis TLS volume mount (operator-managed path; user specifies only Secret name and keys)
-	advancedCacheRedisTLSVolumeName = "advanced-cache-redis-tls"
-	advancedCacheRedisTLSMountPath  = "/etc/bindplane/advanced-cache-redis-tls"
-
 	// Agents configuration
-	bindplaneAgentsAuthTypeEnvVar                            = "BINDPLANE_AGENTS_AUTH_TYPE"
-	bindplaneAgentsAuthSecretKeyHeadersEnvVar                = "BINDPLANE_AGENTS_AUTH_SECRET_KEY_HEADERS"
-	bindplaneAgentsAuthOAuthIssuerEnvVar                     = "BINDPLANE_AGENTS_AUTH_OAUTH_ISSUER"
-	bindplaneAgentsAuthOAuthAudiencesEnvVar                  = "BINDPLANE_AGENTS_AUTH_OAUTH_AUDIENCES"
-	bindplaneAgentsAuthOAuthRequiredClaimsEnvVar             = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_CLAIMS"
-	bindplaneAgentsAuthOAuthRequiredScopesEnvVar             = "BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_SCOPES"
-	bindplaneAgentsAuthOAuthCacheTTLEnvVar                   = "BINDPLANE_AGENTS_AUTH_OAUTH_CACHE_TTL"
-	bindplaneAgentsHeartbeatIntervalEnvVar                   = "BINDPLANE_AGENTS_HEARTBEAT_INTERVAL"
-	bindplaneAgentsHeartbeatTTLEnvVar                        = "BINDPLANE_AGENTS_HEARTBEAT_TTL"
-	bindplaneAgentsHeartbeatExpiryIntervalEnvVar             = "BINDPLANE_AGENTS_HEARTBEAT_EXPIRY_INTERVAL"
-	bindplaneAgentsRebalanceIntervalEnvVar                   = "BINDPLANE_AGENTS_REBALANCE_INTERVAL"
-	bindplaneAgentsRebalancePercentageEnvVar                 = "BINDPLANE_AGENTS_REBALANCE_PERCENTAGE"
-	bindplaneAgentsRebalanceJitterEnvVar                     = "BINDPLANE_AGENTS_REBALANCE_JITTER"
-	bindplaneAgentsMaxSimultaneousConnectionsEnvVar          = "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS"
-	bindplaneAgentsEnableConnectionRegistryMiddlewareEnvVar  = "BINDPLANE_AGENTS_ENABLE_CONNECTION_REGISTRY_MIDDLEWARE"
-	bindplaneAgentsConnectionRegistryHeartbeatIntervalEnvVar = "BINDPLANE_AGENTS_CONNECTION_REGISTRY_HEARTBEAT_INTERVAL"
-	bindplaneAgentsConnectionRegistryStaleDurationEnvVar     = "BINDPLANE_AGENTS_CONNECTION_REGISTRY_STALE_DURATION"
-	bindplaneAgentsConnectionRegistryLockTimeoutEnvVar       = "BINDPLANE_AGENTS_CONNECTION_REGISTRY_LOCK_TIMEOUT"
-	bindplaneAgentsConnectionClaimTimeoutEnvVar              = "BINDPLANE_AGENTS_CONNECTION_CLAIM_TIMEOUT"
-	bindplaneAgentsDupPrevEnableMiddlewareEnvVar             = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_MIDDLEWARE"
-	bindplaneAgentsDupPrevReassignIDEnvVar                   = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGN_ID"
-	bindplaneAgentsDupPrevDetectionStrategyEnvVar            = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_DETECTION_STRATEGY"
-	bindplaneAgentsDupPrevDetectionGracePeriodEnvVar         = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_DETECTION_GRACE_PERIOD"
-	bindplaneAgentsDupPrevMinGracePeriodFailuresEnvVar       = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_MIN_GRACE_PERIOD_FAILURES"
-	bindplaneAgentsDupPrevRetryAfterEnvVar                   = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_RETRY_AFTER"
-	bindplaneAgentsDupPrevMaxReassignmentAttemptsEnvVar      = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_MAX_REASSIGNMENT_ATTEMPTS"
-	bindplaneAgentsDupPrevReassignmentCacheTTLEnvVar         = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGNMENT_CACHE_TTL"
-	bindplaneAgentsDupPrevReassignmentRetryAfterEnvVar       = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGNMENT_RETRY_AFTER"
-	bindplaneAgentsDupPrevEnableDuplicateNotificationsEnvVar = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_DUPLICATE_NOTIFICATIONS"
-	bindplaneAgentsDupPrevEnablePerOrgEnforcementEnvVar      = "BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_PER_ORG_ENFORCEMENT"
+	bindplaneAgentsAuthTypeEnvVar                   = "BINDPLANE_AGENTS_AUTH_TYPE"
+	bindplaneAgentsAuthSecretKeyHeadersEnvVar       = "BINDPLANE_AGENTS_AUTH_SECRET_KEY_HEADERS"
+	bindplaneAgentsHeartbeatIntervalEnvVar          = "BINDPLANE_AGENTS_HEARTBEAT_INTERVAL"
+	bindplaneAgentsHeartbeatTTLEnvVar               = "BINDPLANE_AGENTS_HEARTBEAT_TTL"
+	bindplaneAgentsHeartbeatExpiryIntervalEnvVar    = "BINDPLANE_AGENTS_HEARTBEAT_EXPIRY_INTERVAL"
+	bindplaneAgentsRebalanceIntervalEnvVar          = "BINDPLANE_AGENTS_REBALANCE_INTERVAL"
+	bindplaneAgentsRebalancePercentageEnvVar        = "BINDPLANE_AGENTS_REBALANCE_PERCENTAGE"
+	bindplaneAgentsRebalanceJitterEnvVar            = "BINDPLANE_AGENTS_REBALANCE_JITTER"
+	bindplaneAgentsMaxSimultaneousConnectionsEnvVar = "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS"
 
 	// AgentVersions configuration
 	bindplaneAgentVersionsSyncIntervalEnvVar = "BINDPLANE_AGENT_VERSIONS_SYNC_INTERVAL"
-	bindplaneAgentVersionsClientsEnvVar      = "BINDPLANE_AGENT_VERSIONS_CLIENTS"
-
-	// Network rate limits configuration
-	bindplaneNetworkRateLimitsAPIRateEnvVar      = "BINDPLANE_NETWORK_RATE_LIMITS_API_RATE"
-	bindplaneNetworkRateLimitsAPIBurstEnvVar     = "BINDPLANE_NETWORK_RATE_LIMITS_API_BURST"
-	bindplaneNetworkRateLimitsGraphQLRateEnvVar  = "BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_RATE"
-	bindplaneNetworkRateLimitsGraphQLBurstEnvVar = "BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_BURST"
-
-	// SaaS configuration
-	bindplaneSaaSEnabledEnvVar                          = "BINDPLANE_SAAS_ENABLED"
-	bindplaneSaaSLicenseServerAddressEnvVar             = "BINDPLANE_SAAS_LICENSE_SERVER_ADDRESS"
-	bindplaneSaaSLicenseServerAPIKeyEnvVar              = "BINDPLANE_SAAS_LICENSE_SERVER_API_KEY" // #nosec G101
-	bindplaneSaaSUseStagePublicRSAKeyEnvVar             = "BINDPLANE_SAAS_USE_STAGE_PUBLIC_RSA_KEY"
-	bindplaneSaaSStripeEnabledEnvVar                    = "BINDPLANE_SAAS_STRIPE_ENABLED"
-	bindplaneSaaSStripeSecretKeyEnvVar                  = "BINDPLANE_SAAS_STRIPE_SECRET_KEY"      // #nosec G101
-	bindplaneSaaSStripePublishableKeyEnvVar             = "BINDPLANE_SAAS_STRIPE_PUBLISHABLE_KEY" // #nosec G101
-	bindplaneSaaSStripeWebhookSecretEnvVar              = "BINDPLANE_SAAS_STRIPE_WEBHOOK_SECRET"  // #nosec G101
-	bindplaneSaaSStripeGrowthPlanIDsBaseRateEnvVar      = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_BASE_RATE"
-	bindplaneSaaSStripeGrowthPlanIDsUsageRatesEnvVar    = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_USAGE_RATES"
-	bindplaneSaaSStripeGrowthMeterNamesLogsEnvVar       = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_LOGS"
-	bindplaneSaaSStripeGrowthMeterNamesMetricsEnvVar    = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_METRICS"
-	bindplaneSaaSStripeGrowthMeterNamesTracesEnvVar     = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_TRACES"
-	bindplaneSaaSStripeGrowthMeterNamesCollectorsEnvVar = "BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_COLLECTORS"
-
-	// EncryptionProvider configuration
-	bindplaneEncryptionProviderTypeEnvVar                       = "BINDPLANE_ENCRYPTIONPROVIDER_TYPE"
-	bindplaneEncryptionProviderGoogleKMSProjectIDEnvVar         = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_PROJECTID"
-	bindplaneEncryptionProviderGoogleKMSLocationEnvVar          = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_LOCATION"
-	bindplaneEncryptionProviderGoogleKMSKeyRotationPeriodEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_ROTATION_PERIOD"
-	// bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar is set only on the Jobs Migrate workload.
-	bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB"
-
-	// Features configuration
-	bindplaneFeaturesTypeEnvVar                                                        = "BINDPLANE_FEATURES_TYPE"
-	bindplaneFeaturesPostHogProjectAPIKeyEnvVar                                        = "BINDPLANE_FEATURES_POSTHOG_PROJECT_API_KEY"  // #nosec G101 -- env var name, not a credential
-	bindplaneFeaturesPostHogPersonalAPIKeyEnvVar                                       = "BINDPLANE_FEATURES_POSTHOG_PERSONAL_API_KEY" // #nosec G101 -- env var name, not a credential
-	bindplaneFeaturesPostHogEndpointEnvVar                                             = "BINDPLANE_FEATURES_POSTHOG_ENDPOINT"
-	bindplaneFeaturesPostHogPollingIntervalEnvVar                                      = "BINDPLANE_FEATURES_POSTHOG_DEFAULT_FEATURE_FLAGS_POLLING_INTERVAL"
-	bindplaneFeaturesOverridesGrowthLicenseEnvVar                                      = "BINDPLANE_FEATURES_OVERRIDES_GROWTH_LICENSE"
-	bindplaneFeaturesOverridesSecopsThemeEnvVar                                        = "BINDPLANE_FEATURES_OVERRIDES_SECOPS_THEME"
-	bindplaneFeaturesOverridesSecopsIntegrationEnvVar                                  = "BINDPLANE_FEATURES_OVERRIDES_SECOPS_INTEGRATION"
-	bindplaneFeaturesOverridesLLMFeaturesEnvVar                                        = "BINDPLANE_FEATURES_OVERRIDES_LLM_FEATURES"
-	bindplaneFeaturesOverridesPipelineIntelligenceEnvVar                               = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE"
-	bindplaneFeaturesOverridesPipelineIntelligenceSnapshotLogTypesEnvVar               = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SNAPSHOT_LOG_TYPES"
-	bindplaneFeaturesOverridesPipelineIntelligenceOtelConfigImportEnvVar               = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_OTEL_CONFIG_IMPORT"
-	bindplaneFeaturesOverridesPipelineIntelligenceChronicleForwarderConfigImportEnvVar = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_CHRONICLE_FORWARDER_CONFIG_IMPORT"
-	bindplaneFeaturesOverridesPipelineIntelligenceParseFieldEnvVar                     = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_PARSE_FIELD"
-	bindplaneFeaturesOverridesPipelineIntelligenceGenerateProcessorsEnvVar             = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_GENERATE_PROCESSORS"
-	bindplaneFeaturesOverridesRawConfigLegacyEnvVar                                    = "BINDPLANE_FEATURES_OVERRIDES_RAW_CONFIG_LEGACY"
-	bindplaneFeaturesOverridesNotificationsEnvVar                                      = "BINDPLANE_FEATURES_OVERRIDES_NOTIFICATIONS"
-
-	// Errors configuration
-	bindplaneErrorsEnabledEnvVar     = "BINDPLANE_ERRORS_ENABLED"
-	bindplaneErrorsBackendDSNEnvVar  = "BINDPLANE_ERRORS_BACKEND_DSN"
-	bindplaneErrorsFrontendDSNEnvVar = "BINDPLANE_ERRORS_FRONTEND_DSN"
-	bindplaneErrorsEnvironmentEnvVar = "BINDPLANE_ERRORS_ENVIRONMENT"
-
-	// LLM configuration
-	bindplaneLLMGeminiProjectIDEnvVar                  = "BINDPLANE_LLM_GEMINI_PROJECT_ID"
-	bindplaneLLMGeminiLocationEnvVar                   = "BINDPLANE_LLM_GEMINI_LOCATION"
-	bindplaneLLMGeminiVectorSearchRedisAddressEnvVar   = "BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ADDRESS"
-	bindplaneLLMGeminiVectorSearchRedisEnableTLSEnvVar = "BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ENABLE_TLS"
-	bindplaneLLMLangsmithEnabledEnvVar                 = "BINDPLANE_LLM_LANGSMITH_ENABLED"
-	bindplaneLLMLangsmithAPIKeyEnvVar                  = "BINDPLANE_LLM_LANGSMITH_API_KEY" // #nosec G101 -- env var name, not a credential
-	bindplaneLLMLangsmithProjectNameEnvVar             = "BINDPLANE_LLM_LANGSMITH_PROJECT_NAME"
-	bindplaneLLMOpenAIAPIKeyEnvVar                     = "BINDPLANE_LLM_OPENAI_API_KEY"    // #nosec G101 -- env var name, not a credential
-	bindplaneLLMAnthropicAPIKeyEnvVar                  = "BINDPLANE_LLM_ANTHROPIC_API_KEY" // #nosec G101 -- env var name, not a credential
-
-	// Quotas configuration
-	bindplaneQuotasEnabledEnvVar                       = "BINDPLANE_QUOTAS_ENABLED"
-	bindplaneQuotasEnforcedEnvVar                      = "BINDPLANE_QUOTAS_ENFORCED"
-	bindplaneQuotasProjectsEnabledEnvVar               = "BINDPLANE_QUOTAS_PROJECTS_ENABLED"
-	bindplaneQuotasProjectsEnforcedEnvVar              = "BINDPLANE_QUOTAS_PROJECTS_ENFORCED"
-	bindplaneQuotasOrganizationsEnabledEnvVar          = "BINDPLANE_QUOTAS_ORGANIZATIONS_ENABLED"
-	bindplaneQuotasOrganizationsEnforcedEnvVar         = "BINDPLANE_QUOTAS_ORGANIZATIONS_ENFORCED"
-	bindplaneQuotasOrganizationsDefaultMaxAgentsEnvVar = "BINDPLANE_QUOTAS_ORGANIZATIONS_DEFAULT_MAX_AGENTS"
-	bindplaneQuotasProjectsDefaultMaxAgentsEnvVar      = "BINDPLANE_QUOTAS_PROJECTS_DEFAULT_MAX_AGENTS"
 
 	// OIDC additional configuration
 	bindplaneOIDCDisableInvitationsEnvVar = "BINDPLANE_OIDC_DISABLE_INVITATIONS"
 
-	// Errors additional configuration
-	bindplaneErrorsReleaseEnvVar          = "BINDPLANE_ERRORS_RELEASE"
-	bindplaneErrorsTracesSampleRateEnvVar = "BINDPLANE_ERRORS_TRACES_SAMPLE_RATE"
-	bindplaneErrorsDebugEnvVar            = "BINDPLANE_ERRORS_DEBUG"
-
-	// LLM additional configuration
-	bindplaneLLMGeminiCredentialsFileEnvVar    = "BINDPLANE_LLM_GEMINI_CREDENTIALS_FILE" // #nosec G101 -- env var name, not a credential
-	bindplaneLLMGeminiMaxTokensEnvVar          = "BINDPLANE_LLM_GEMINI_MAX_TOKENS"       // #nosec G101 -- env var name, not a credential
-	bindplaneLLMLangsmithURLEnvVar             = "BINDPLANE_LLM_LANGSMITH_URL"
-	bindplaneLLMLangsmithSanitizeContentEnvVar = "BINDPLANE_LLM_LANGSMITH_SANITIZE_CONTENT"
-	bindplaneLLMLangsmithTagsEnvVar            = "BINDPLANE_LLM_LANGSMITH_TAGS"
-
-	// Features additional configuration
-	bindplaneFeaturesPostHogFeatureFlagRequestTimeoutEnvVar                = "BINDPLANE_FEATURES_POSTHOG_FEATURE_FLAG_REQUEST_TIMEOUT"
-	bindplaneFeaturesOverridesSecopsGCSIntegrationEnvVar                   = "BINDPLANE_FEATURES_OVERRIDES_SECOPS_GCS_INTEGRATION"
-	bindplaneFeaturesOverridesSnapshotPipelineIntelligenceEnvVar           = "BINDPLANE_FEATURES_OVERRIDES_SNAPSHOT_PIPELINE_INTELLIGENCE"
-	bindplaneFeaturesOverridesPipelineIntelligenceSplunkConfigImportEnvVar = "BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SPLUNK_CONFIG_IMPORT"
-	bindplaneFeaturesOverridesRawLogMetricViewsEnvVar                      = "BINDPLANE_FEATURES_OVERRIDES_RAW_LOG_METRIC_VIEWS"
-	bindplaneFeaturesOverridesVaultEnvVar                                  = "BINDPLANE_FEATURES_OVERRIDES_VAULT"
-	bindplaneFeaturesOverridesAuth0SSOEnvVar                               = "BINDPLANE_FEATURES_OVERRIDES_AUTH0_SSO"
-	bindplaneFeaturesOverridesAixPlatformEnvVar                            = "BINDPLANE_FEATURES_OVERRIDES_AIX_PLATFORM"
-	bindplaneFeaturesOverridesAdvancedPipelineEditorEnvVar                 = "BINDPLANE_FEATURES_OVERRIDES_ADVANCED_PIPELINE_EDITOR"
-	bindplaneFeaturesOverridesIdentityTablesDualWriteEnvVar                = "BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_DUAL_WRITE"
-	bindplaneFeaturesOverridesIdentityTablesCutoverEnvVar                  = "BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_CUTOVER"
-	bindplaneFeaturesOverridesV2ConfigurationEnvVar                        = "BINDPLANE_FEATURES_OVERRIDES_V2_CONFIGURATION"
-	bindplaneFeaturesOverridesV2ConnectorsEnvVar                           = "BINDPLANE_FEATURES_OVERRIDES_V2_CONNECTORS"
-	bindplaneFeaturesOverridesBindplaneBlueprintsEnvVar                    = "BINDPLANE_FEATURES_OVERRIDES_BINDPLANE_BLUEPRINTS"
-	bindplaneFeaturesOverridesFleetsEnvVar                                 = "BINDPLANE_FEATURES_OVERRIDES_FLEETS"
-
-	// EncryptionProvider cache configuration
-	bindplaneEncryptionProviderCacheCapacityEnvVar     = "BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CAPACITY"
-	bindplaneEncryptionProviderCacheCacheTimeoutEnvVar = "BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CACHE_TIMEOUT"
-
-	// SaaS Stripe additional configuration
-	bindplaneSaaSStripeMeterReportIntervalEnvVar = "BINDPLANE_SAAS_STRIPE_METER_REPORT_INTERVAL"
-
 	// NATS TLS additional configuration
 	bindplaneNatsTLSSkipVerifyEnvVar = "BINDPLANE_NATS_TLS_SKIP_VERIFY"
-
-	// Advanced agent configuration
-	bindplaneAdvancedAgentTelemetryPortEnvVar = "BINDPLANE_ADVANCED_AGENT_TELEMETRY_PORT"
-
-	// Advanced rollout additional configuration
-	bindplaneAdvancedRolloutRetryIntervalEnvVar     = "BINDPLANE_ADVANCED_ROLLOUT_RETRY_INTERVAL"
-	bindplaneAdvancedRolloutUpdateWorkerCountEnvVar = "BINDPLANE_ADVANCED_ROLLOUT_UPDATE_WORKER_COUNT"
 )
 
 const (
-	// defaultPprofEndpoint is the default host:port for the pprof server (matches Bindplane)
-	defaultPprofEndpoint = "127.0.0.1:6060"
 	// defaultConcurrency is the default value for maxConcurrency and maxSimultaneousConnections.
 	defaultConcurrency = 10
 
@@ -1375,36 +1161,8 @@ func getPostgresTLSConfig(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1al
 	return bindplane.Spec.Config.Store.Postgres.TLS
 }
 
-// getAdvancedCacheRedisTLSVolumeAndMount returns a Secret volume and mount for Redis TLS
-// when spec.config.advanced.cache.redis.tls.secretName is set.
-// The Secret is mounted at advancedCacheRedisTLSMountPath; file-path env vars are set by getAdvancedConfigEnvVars.
-// Returns (nil, nil) when not configured.
-func getAdvancedCacheRedisTLSVolumeAndMount(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
-	adv := bindplane.Spec.Config.Advanced
-	if adv == nil || adv.Cache == nil || adv.Cache.Redis == nil || adv.Cache.Redis.TLS == nil {
-		return nil, nil
-	}
-	tls := adv.Cache.Redis.TLS
-	if tls.SecretName == "" {
-		return nil, nil
-	}
-	vol := corev1.Volume{
-		Name: advancedCacheRedisTLSVolumeName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{SecretName: tls.SecretName},
-		},
-	}
-	mount := corev1.VolumeMount{
-		Name:      advancedCacheRedisTLSVolumeName,
-		MountPath: advancedCacheRedisTLSMountPath,
-		ReadOnly:  true,
-	}
-	return []corev1.Volume{vol}, []corev1.VolumeMount{mount}
-}
-
 // getConfigTLSVolumesAndMounts returns combined volumes and volume mounts for LDAP TLS, network TLS, Postgres TLS,
-// internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS, Transform Agent TLS),
-// and advanced cache Redis TLS.
+// and internal TLS (cert-manager: Prometheus remote write client cert, NATS TLS, Transform Agent TLS).
 // Used by Node, Jobs, and NATS so they receive all config TLS secrets when configured.
 func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]corev1.Volume, []corev1.VolumeMount) {
 	ldapVols, ldapMounts := getLDAPTLSVolumeAndMount(bindplane)
@@ -1413,9 +1171,8 @@ func getConfigTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]cor
 	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
 	natsVols, natsMounts := getNatsTLSVolumesAndMounts(bindplane)
 	transformAgentVols, transformAgentMounts := getTransformAgentTLSVolumesAndMounts(bindplane)
-	redisVols, redisMounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
-	vols := append(append(append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), natsVols...), transformAgentVols...), redisVols...)
-	mounts := append(append(append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), natsMounts...), transformAgentMounts...), redisMounts...)
+	vols := append(append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), natsVols...), transformAgentVols...)
+	mounts := append(append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), natsMounts...), transformAgentMounts...)
 	return vols, mounts
 }
 

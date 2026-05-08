@@ -370,34 +370,13 @@ type BindplaneConfigSpec struct {
 	// +optional
 	Nats *NatsConfig `json:"nats,omitempty"`
 
-	// Profiling configures Google Cloud Profiler for Bindplane. When omitted or disabled, profiling is off.
-	// +optional
-	Profiling *ProfilingConfig `json:"profiling,omitempty"`
-
-	// Pprof configures the pprof HTTP server for Bindplane. When omitted or disabled, pprof is off.
-	// +optional
-	Pprof *PprofConfig `json:"pprof,omitempty"`
-
-	// Status configures the Bindplane status check endpoints.
-	// +optional
-	Status *StatusConfig `json:"status,omitempty"`
-
 	// EventBus configures the event bus (NATS) integration, including health checks.
 	// +optional
 	EventBus *EventBusConfig `json:"eventBus,omitempty"`
 
-	// Analytics configures Bindplane analytics reporting.
-	// +optional
-	Analytics *AnalyticsConfig `json:"analytics,omitempty"`
-
 	// Logging configures the Bindplane log level and output destination.
 	// +optional
 	Logging *LoggingConfig `json:"logging,omitempty"`
-
-	// Advanced configures advanced Bindplane options. These are typically used to
-	// fine-tune behavior at scale and are not required for basic operation.
-	// +optional
-	Advanced *AdvancedConfig `json:"advanced,omitempty"`
 
 	// Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options.
 	// +optional
@@ -406,545 +385,6 @@ type BindplaneConfigSpec struct {
 	// AgentVersions configures agent version sync behavior.
 	// +optional
 	AgentVersions *AgentVersionsConfig `json:"agentVersions,omitempty"`
-
-	// SaaS configures Bindplane SaaS-specific functionality including the license server and Stripe billing.
-	// +optional
-	SaaS *SaaSConfig `json:"saas,omitempty"`
-
-	// EncryptionProvider configures the encryption provider for at-rest encryption of sensitive store data.
-	// When omitted, Bindplane uses its built-in encryption.
-	// +optional
-	EncryptionProvider *EncryptionProviderConfig `json:"encryptionProvider,omitempty"`
-
-	// Features configures the feature flag backend and feature overrides.
-	// +optional
-	Features *FeaturesConfig `json:"features,omitempty"`
-
-	// Errors configures error tracking (e.g., BetterStack, Sentry).
-	// When omitted, error tracking is disabled.
-	// +optional
-	Errors *ErrorsConfig `json:"errors,omitempty"`
-
-	// LLM configures large language model integrations.
-	// When omitted, LLM features are disabled.
-	// +optional
-	LLM *LLMConfig `json:"llm,omitempty"`
-
-	// Quotas configures usage quota enforcement.
-	// +optional
-	Quotas *QuotasConfig `json:"quotas,omitempty"`
-}
-
-// SaaSConfig configures Bindplane SaaS-specific functionality.
-// +kubebuilder:validation:XValidation:rule="!(has(self.licenseServerAPIKey) && has(self.licenseServerAPIKeySecretRef))",message="exactly one of licenseServerAPIKey or licenseServerAPIKeySecretRef must be set"
-type SaaSConfig struct {
-	// Enabled toggles SaaS mode.
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// LicenseServerAddress is the URL of the SaaS license server.
-	// +optional
-	LicenseServerAddress string `json:"licenseServerAddress,omitempty"`
-
-	// LicenseServerAPIKey is a plain-text API key for the license server.
-	// +optional
-	LicenseServerAPIKey string `json:"licenseServerAPIKey,omitempty"`
-
-	// LicenseServerAPIKeySecretRef references a Secret containing the license server API key.
-	// Takes precedence over LicenseServerAPIKey when both are set.
-	// +optional
-	LicenseServerAPIKeySecretRef *corev1.SecretKeySelector `json:"licenseServerAPIKeySecretRef,omitempty"`
-
-	// UseStagePublicRSAKey enables use of the staging RSA public key for token validation.
-	// +optional
-	UseStagePublicRSAKey bool `json:"useStagePublicRSAKey,omitempty"`
-
-	// Stripe configures Stripe billing integration.
-	// +optional
-	Stripe *SaaSStripeConfig `json:"stripe,omitempty"`
-}
-
-// SaaSStripeConfig configures Stripe billing for Bindplane SaaS.
-// +kubebuilder:validation:XValidation:rule="!(has(self.secretKey) && has(self.secretKeySecretRef))",message="exactly one of secretKey or secretKeySecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.publishableKey) && has(self.publishableKeySecretRef))",message="exactly one of publishableKey or publishableKeySecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.webhookSecret) && has(self.webhookSecretSecretRef))",message="exactly one of webhookSecret or webhookSecretSecretRef must be set"
-type SaaSStripeConfig struct {
-	// Enabled toggles Stripe integration.
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// SecretKey is a plain-text Stripe secret key.
-	// +optional
-	SecretKey string `json:"secretKey,omitempty"`
-
-	// SecretKeySecretRef references a Secret containing the Stripe secret key.
-	// Takes precedence over SecretKey when both are set.
-	// +optional
-	SecretKeySecretRef *corev1.SecretKeySelector `json:"secretKeySecretRef,omitempty"`
-
-	// PublishableKey is a plain-text Stripe publishable key.
-	// +optional
-	PublishableKey string `json:"publishableKey,omitempty"`
-
-	// PublishableKeySecretRef references a Secret containing the Stripe publishable key.
-	// Takes precedence over PublishableKey when both are set.
-	// +optional
-	PublishableKeySecretRef *corev1.SecretKeySelector `json:"publishableKeySecretRef,omitempty"`
-
-	// WebhookSecret is a plain-text Stripe webhook signing secret.
-	// +optional
-	WebhookSecret string `json:"webhookSecret,omitempty"`
-
-	// WebhookSecretSecretRef references a Secret containing the Stripe webhook secret.
-	// Takes precedence over WebhookSecret when both are set.
-	// +optional
-	WebhookSecretSecretRef *corev1.SecretKeySelector `json:"webhookSecretSecretRef,omitempty"`
-
-	// GrowthPlanIDs configures Stripe plan identifiers for the growth tier.
-	// +optional
-	GrowthPlanIDs *SaaSStripeGrowthPlanIDsConfig `json:"growthPlanIDs,omitempty"`
-
-	// GrowthPlanMeterNames configures Stripe meter names for the growth tier.
-	// +optional
-	GrowthPlanMeterNames *SaaSStripeGrowthPlanMeterNamesConfig `json:"growthPlanMeterNames,omitempty"`
-
-	// MeterReportInterval is the interval at which usage metrics are reported to Stripe (e.g., "6h"). Defaults to 6h.
-	// +optional
-	MeterReportInterval string `json:"meterReportInterval,omitempty"`
-}
-
-// SaaSStripeGrowthPlanIDsConfig configures Stripe plan IDs for the growth tier.
-type SaaSStripeGrowthPlanIDsConfig struct {
-	// BaseRate is the Stripe price ID for the base rate plan.
-	// +optional
-	BaseRate string `json:"baseRate,omitempty"`
-
-	// UsageRates is a comma-separated list of Stripe price IDs for usage-based rates.
-	// +optional
-	UsageRates string `json:"usageRates,omitempty"`
-}
-
-// SaaSStripeGrowthPlanMeterNamesConfig configures Stripe meter names for usage billing.
-type SaaSStripeGrowthPlanMeterNamesConfig struct {
-	// Logs is the Stripe meter name for log volume.
-	// +optional
-	Logs string `json:"logs,omitempty"`
-
-	// Metrics is the Stripe meter name for metric volume.
-	// +optional
-	Metrics string `json:"metrics,omitempty"`
-
-	// Traces is the Stripe meter name for trace volume.
-	// +optional
-	Traces string `json:"traces,omitempty"`
-
-	// Collectors is the Stripe meter name for collector count.
-	// +optional
-	Collectors string `json:"collectors,omitempty"`
-}
-
-// EncryptionProviderConfig configures the encryption provider for Bindplane.
-type EncryptionProviderConfig struct {
-	// Type is the encryption provider type.
-	// +optional
-	// +kubebuilder:validation:Enum=googleKMS
-	Type string `json:"type,omitempty"`
-
-	// GoogleKMS configures Google Cloud KMS as the encryption provider.
-	// +optional
-	GoogleKMS *GoogleKMSConfig `json:"googleKMS,omitempty"`
-
-	// Cache configures the in-memory cache for encryption keys.
-	// +optional
-	Cache *EncryptionProviderCacheConfig `json:"cache,omitempty"`
-}
-
-// EncryptionProviderCacheConfig configures the in-memory cache for encryption keys.
-type EncryptionProviderCacheConfig struct {
-	// Capacity is the maximum number of entries in the encryption key cache. Defaults to 2000.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	Capacity int `json:"capacity,omitempty"`
-
-	// CacheTimeout is the TTL for cached encryption keys (e.g., "2m"). Defaults to 2m.
-	// +optional
-	CacheTimeout string `json:"cacheTimeout,omitempty"`
-}
-
-// GoogleKMSConfig configures Google Cloud KMS as the encryption provider.
-type GoogleKMSConfig struct {
-	// ProjectID is the Google Cloud project ID that contains the KMS key ring.
-	// +optional
-	ProjectID string `json:"projectID,omitempty"`
-
-	// Location is the Google Cloud region or zone for the KMS key ring (e.g., "us-central1").
-	// +optional
-	Location string `json:"location,omitempty"`
-
-	// KeyRotationPeriod is the rotation period for KMS keys (e.g., "30d").
-	// +optional
-	KeyRotationPeriod string `json:"keyRotationPeriod,omitempty"`
-
-	// KeyDeletionJob enables the KMS key deletion job on the Jobs Migrate workload only.
-	// When true, BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is set on Jobs Migrate.
-	// +optional
-	KeyDeletionJob bool `json:"keyDeletionJob,omitempty"`
-}
-
-// FeaturesConfig configures the feature flag backend and feature overrides.
-type FeaturesConfig struct {
-	// Type is the feature flag backend type.
-	// +optional
-	// +kubebuilder:validation:Enum=posthog
-	Type string `json:"type,omitempty"`
-
-	// PostHog configures PostHog as the feature flag backend.
-	// +optional
-	PostHog *PostHogConfig `json:"postHog,omitempty"`
-
-	// Overrides configures feature flag overrides that force specific features on or off.
-	// +optional
-	Overrides *FeatureOverridesConfig `json:"overrides,omitempty"`
-}
-
-// PostHogConfig configures PostHog as the feature flag backend.
-// +kubebuilder:validation:XValidation:rule="!(has(self.projectAPIKey) && has(self.projectAPIKeySecretRef))",message="exactly one of projectAPIKey or projectAPIKeySecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.personalAPIKey) && has(self.personalAPIKeySecretRef))",message="exactly one of personalAPIKey or personalAPIKeySecretRef must be set"
-type PostHogConfig struct {
-	// ProjectAPIKey is the PostHog project API key (plain value; prefer projectAPIKeySecretRef in production).
-	// +optional
-	ProjectAPIKey string `json:"projectAPIKey,omitempty"`
-
-	// ProjectAPIKeySecretRef references a Kubernetes Secret containing the PostHog project API key.
-	// +optional
-	ProjectAPIKeySecretRef *corev1.SecretKeySelector `json:"projectAPIKeySecretRef,omitempty"`
-
-	// PersonalAPIKey is the PostHog personal API key (plain value; prefer personalAPIKeySecretRef in production).
-	// +optional
-	PersonalAPIKey string `json:"personalAPIKey,omitempty"`
-
-	// PersonalAPIKeySecretRef references a Kubernetes Secret containing the PostHog personal API key.
-	// +optional
-	PersonalAPIKeySecretRef *corev1.SecretKeySelector `json:"personalAPIKeySecretRef,omitempty"`
-
-	// Endpoint is the PostHog API endpoint URL.
-	// +optional
-	Endpoint string `json:"endpoint,omitempty"`
-
-	// FeatureFlagRequestTimeout is the timeout for PostHog feature flag requests (e.g., "30s"). Defaults to 30s.
-	// +optional
-	FeatureFlagRequestTimeout string `json:"featureFlagRequestTimeout,omitempty"`
-
-	// DefaultFeatureFlagsPollingInterval is the polling interval for feature flags (e.g., "5m"). Defaults to 5m.
-	// +optional
-	DefaultFeatureFlagsPollingInterval string `json:"defaultFeatureFlagsPollingInterval,omitempty"`
-}
-
-// FeatureOverridesConfig forces specific features on or off regardless of the flag backend.
-type FeatureOverridesConfig struct {
-	// GrowthLicense forces the growth license feature on.
-	// +optional
-	GrowthLicense bool `json:"growthLicense,omitempty"`
-
-	// SecopsTheme forces the SecOps theme on.
-	// +optional
-	SecopsTheme bool `json:"secopsTheme,omitempty"`
-
-	// SecopsIntegration forces the SecOps integration feature on.
-	// +optional
-	SecopsIntegration bool `json:"secopsIntegration,omitempty"`
-
-	// SecopsGcsIntegration forces the SecOps GCS integration feature on.
-	// +optional
-	SecopsGcsIntegration bool `json:"secopsGcsIntegration,omitempty"`
-
-	// LLMFeatures forces LLM features on.
-	// +optional
-	LLMFeatures bool `json:"llmFeatures,omitempty"`
-
-	// PipelineIntelligence forces the pipeline intelligence feature on.
-	// +optional
-	PipelineIntelligence bool `json:"pipelineIntelligence,omitempty"`
-
-	// SnapshotPipelineIntelligence forces the snapshot pipeline intelligence feature on.
-	// +optional
-	SnapshotPipelineIntelligence bool `json:"snapshotPipelineIntelligence,omitempty"`
-
-	// PipelineIntelligenceSnapshotLogTypes forces the pipeline intelligence snapshot log types feature on.
-	// +optional
-	PipelineIntelligenceSnapshotLogTypes bool `json:"pipelineIntelligenceSnapshotLogTypes,omitempty"`
-
-	// PipelineIntelligenceOtelConfigImport forces the OpenTelemetry config import pipeline intelligence feature on.
-	// +optional
-	PipelineIntelligenceOtelConfigImport bool `json:"pipelineIntelligenceOtelConfigImport,omitempty"`
-
-	// PipelineIntelligenceChronicleForwarderConfigImport forces the Chronicle Forwarder config import feature on.
-	// +optional
-	PipelineIntelligenceChronicleForwarderConfigImport bool `json:"pipelineIntelligenceChronicleForwarderConfigImport,omitempty"`
-
-	// PipelineIntelligenceSplunkConfigImport forces the Splunk config import pipeline intelligence feature on.
-	// +optional
-	PipelineIntelligenceSplunkConfigImport bool `json:"pipelineIntelligenceSplunkConfigImport,omitempty"`
-
-	// PipelineIntelligenceParseField forces the parse field pipeline intelligence feature on.
-	// +optional
-	PipelineIntelligenceParseField bool `json:"pipelineIntelligenceParseField,omitempty"`
-
-	// PipelineIntelligenceGenerateProcessors forces the generate processors pipeline intelligence feature on.
-	// +optional
-	PipelineIntelligenceGenerateProcessors bool `json:"pipelineIntelligenceGenerateProcessors,omitempty"`
-
-	// RawConfigLegacy forces the raw config legacy feature on.
-	// +optional
-	RawConfigLegacy bool `json:"rawConfigLegacy,omitempty"`
-
-	// RawLogMetricViews is deprecated and ignored; kept for backwards compatibility.
-	// +optional
-	RawLogMetricViews bool `json:"rawLogMetricViews,omitempty"`
-
-	// Notifications forces the notifications feature on.
-	// +optional
-	Notifications bool `json:"notifications,omitempty"`
-
-	// Vault forces the vault feature on.
-	// +optional
-	Vault bool `json:"vault,omitempty"`
-
-	// Auth0SSO forces the Auth0 SSO feature on.
-	// +optional
-	Auth0SSO bool `json:"auth0SSO,omitempty"`
-
-	// AixPlatform forces the AIX platform feature on.
-	// +optional
-	AixPlatform bool `json:"aixPlatform,omitempty"`
-
-	// AdvancedPipelineEditor forces the advanced pipeline editor feature on.
-	// +optional
-	AdvancedPipelineEditor bool `json:"advancedPipelineEditor,omitempty"`
-
-	// IdentityTablesDualWrite forces the identity tables dual write feature on.
-	// +optional
-	IdentityTablesDualWrite bool `json:"identityTablesDualWrite,omitempty"`
-
-	// IdentityTablesCutover forces the identity tables cutover feature on.
-	// +optional
-	IdentityTablesCutover bool `json:"identityTablesCutover,omitempty"`
-
-	// V2Configuration is deprecated and kept for backwards compatibility.
-	// +optional
-	V2Configuration bool `json:"v2Configuration,omitempty"`
-
-	// V2Connectors is deprecated and kept for backwards compatibility.
-	// +optional
-	V2Connectors bool `json:"v2Connectors,omitempty"`
-
-	// BindplaneBlueprints is deprecated and kept for backwards compatibility.
-	// +optional
-	BindplaneBlueprints bool `json:"bindplaneBlueprints,omitempty"`
-
-	// Fleets is deprecated and kept for backwards compatibility.
-	// +optional
-	Fleets bool `json:"fleets,omitempty"`
-}
-
-// ErrorsConfig configures error tracking for Bindplane.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backendDSN) && has(self.backendDSNSecretRef))",message="exactly one of backendDSN or backendDSNSecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.frontendDSN) && has(self.frontendDSNSecretRef))",message="exactly one of frontendDSN or frontendDSNSecretRef must be set"
-type ErrorsConfig struct {
-	// Enabled enables error tracking.
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// BackendDSN is the DSN (Data Source Name) for the backend error tracking service.
-	// DSNs may contain authentication tokens; prefer backendDSNSecretRef in production.
-	// +optional
-	BackendDSN string `json:"backendDSN,omitempty"`
-
-	// BackendDSNSecretRef references a Kubernetes Secret containing the backend DSN.
-	// Takes precedence over BackendDSN when both are set.
-	// +optional
-	BackendDSNSecretRef *corev1.SecretKeySelector `json:"backendDSNSecretRef,omitempty"`
-
-	// FrontendDSN is the DSN for the frontend error tracking service.
-	// DSNs may contain authentication tokens; prefer frontendDSNSecretRef in production.
-	// +optional
-	FrontendDSN string `json:"frontendDSN,omitempty"`
-
-	// FrontendDSNSecretRef references a Kubernetes Secret containing the frontend DSN.
-	// Takes precedence over FrontendDSN when both are set.
-	// +optional
-	FrontendDSNSecretRef *corev1.SecretKeySelector `json:"frontendDSNSecretRef,omitempty"`
-
-	// Environment is the deployment environment name reported to the error tracking service (e.g., "production", "staging").
-	// +optional
-	Environment string `json:"environment,omitempty"`
-
-	// Release is the release version reported to the error tracking service (e.g., "1.2.3").
-	// +optional
-	Release string `json:"release,omitempty"`
-
-	// TracesSampleRate is the fraction of transactions to send for performance monitoring (0.0 to 1.0).
-	// +optional
-	TracesSampleRate string `json:"tracesSampleRate,omitempty"`
-
-	// Debug enables debug mode for the error tracking SDK.
-	// +optional
-	Debug bool `json:"debug,omitempty"`
-}
-
-// LLMConfig configures large language model integrations for Bindplane.
-type LLMConfig struct {
-	// Gemini configures Google Gemini integration.
-	// +optional
-	Gemini *GeminiConfig `json:"gemini,omitempty"`
-
-	// Langsmith configures LangSmith tracing for LLM calls.
-	// +optional
-	Langsmith *LangsmithConfig `json:"langsmith,omitempty"`
-
-	// OpenAI configures OpenAI integration.
-	// +optional
-	OpenAI *OpenAIConfig `json:"openai,omitempty"`
-
-	// Anthropic configures Anthropic integration.
-	// +optional
-	Anthropic *AnthropicConfig `json:"anthropic,omitempty"`
-}
-
-// GeminiConfig configures Google Gemini as an LLM backend.
-type GeminiConfig struct {
-	// ProjectID is the Google Cloud project ID.
-	// +optional
-	ProjectID string `json:"projectID,omitempty"`
-
-	// Location is the Google Cloud region for the Gemini API (e.g., "us-central1").
-	// +optional
-	Location string `json:"location,omitempty"`
-
-	// CredentialsFile is the path to the Google Cloud credentials file.
-	// When running on GKE with Workload Identity, this is typically not needed.
-	// +optional
-	CredentialsFile string `json:"credentialsFile,omitempty"`
-
-	// MaxTokens is the maximum number of tokens for responses from the Gemini API.
-	// When omitted or 0, the Gemini API default is used.
-	// +optional
-	MaxTokens int `json:"maxTokens,omitempty"`
-
-	// VectorSearchRedis configures Redis for Gemini vector search.
-	// +optional
-	VectorSearchRedis *VectorSearchRedisConfig `json:"vectorSearchRedis,omitempty"`
-}
-
-// VectorSearchRedisConfig configures Redis for vector search.
-type VectorSearchRedisConfig struct {
-	// Address is the Redis address (host:port).
-	// +optional
-	Address string `json:"address,omitempty"`
-
-	// EnableTLS enables TLS for the Redis connection.
-	// +optional
-	EnableTLS bool `json:"enableTLS,omitempty"`
-}
-
-// LangsmithConfig configures LangSmith LLM call tracing.
-// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
-type LangsmithConfig struct {
-	// Enabled enables LangSmith tracing.
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// APIKey is the LangSmith API key (plain value; prefer apiKeySecretRef in production).
-	// +optional
-	APIKey string `json:"apiKey,omitempty"`
-
-	// APIKeySecretRef references a Kubernetes Secret containing the LangSmith API key.
-	// +optional
-	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
-
-	// ProjectName is the LangSmith project name for tracing.
-	// +optional
-	ProjectName string `json:"projectName,omitempty"`
-
-	// URL is the LangSmith API URL (e.g., "https://api.smith.langchain.com/api/v1").
-	// +optional
-	URL string `json:"url,omitempty"`
-
-	// SanitizeContent controls whether input/output content is sanitized before sending to LangSmith
-	// for privacy compliance. Defaults to true when omitted.
-	// +optional
-	SanitizeContent *bool `json:"sanitizeContent,omitempty"`
-
-	// Tags is the list of default tags to apply to all LLM runs in LangSmith.
-	// +optional
-	Tags []string `json:"tags,omitempty"`
-}
-
-// OpenAIConfig configures OpenAI integration.
-// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
-type OpenAIConfig struct {
-	// APIKey is the OpenAI API key (plain value; prefer apiKeySecretRef in production).
-	// +optional
-	APIKey string `json:"apiKey,omitempty"`
-
-	// APIKeySecretRef references a Kubernetes Secret containing the OpenAI API key.
-	// +optional
-	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
-}
-
-// AnthropicConfig configures Anthropic integration.
-// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
-type AnthropicConfig struct {
-	// APIKey is the Anthropic API key (plain value; prefer apiKeySecretRef in production).
-	// +optional
-	APIKey string `json:"apiKey,omitempty"`
-
-	// APIKeySecretRef references a Kubernetes Secret containing the Anthropic API key.
-	// +optional
-	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
-}
-
-// QuotasConfig configures usage quota enforcement.
-type QuotasConfig struct {
-	// Enabled enables quota enforcement globally.
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// Enforced causes quota violations to be enforced (rejected) rather than only logged.
-	// +optional
-	Enforced bool `json:"enforced,omitempty"`
-
-	// Organizations configures per-organization quota enforcement.
-	// +optional
-	Organizations *QuotasTierConfig `json:"organizations,omitempty"`
-
-	// Projects configures per-project quota enforcement.
-	// +optional
-	Projects *QuotasTierConfig `json:"projects,omitempty"`
-}
-
-// QuotasTierConfig configures quota enforcement for a specific tier (organizations or projects).
-type QuotasTierConfig struct {
-	// Enabled enables quota enforcement for this tier.
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// Enforced causes quota violations for this tier to be enforced (rejected) rather than only logged.
-	// +optional
-	Enforced bool `json:"enforced,omitempty"`
-
-	// Default configures default quota limits for this tier.
-	// +optional
-	Default *QuotasTierDefaultConfig `json:"default,omitempty"`
-}
-
-// QuotasTierDefaultConfig configures default quota limits for a quota tier.
-type QuotasTierDefaultConfig struct {
-	// MaxAgents is the default maximum number of agents allowed for this tier.
-	// When omitted or 0, no default limit is applied.
-	// +optional
-	// +kubebuilder:validation:Minimum=0
-	MaxAgents int `json:"maxAgents,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.
@@ -997,108 +437,6 @@ type AgentsConfig struct {
 	// +optional
 	// +kubebuilder:default=10
 	MaxSimultaneousConnections int `json:"maxSimultaneousConnections,omitempty"`
-
-	// EnableConnectionRegistryMiddleware enables the connection registry middleware.
-	// +optional
-	EnableConnectionRegistryMiddleware bool `json:"enableConnectionRegistryMiddleware,omitempty"`
-
-	// ConnectionRegistryHeartbeatInterval is the interval at which agents send heartbeats to
-	// the connection registry (e.g. "15s"). Defaults to 15s.
-	// +optional
-	// +kubebuilder:default="15s"
-	ConnectionRegistryHeartbeatInterval string `json:"connectionRegistryHeartbeatInterval,omitempty"`
-
-	// ConnectionRegistryStaleDuration is the duration after which an agent connection is
-	// considered stale if no heartbeat is received (e.g. "45s"). Must be greater than
-	// connectionRegistryHeartbeatInterval. Defaults to 45s.
-	// +optional
-	// +kubebuilder:default="45s"
-	ConnectionRegistryStaleDuration string `json:"connectionRegistryStaleDuration,omitempty"`
-
-	// ConnectionRegistryLockTimeout is the PostgreSQL lock_timeout for connection registry
-	// operations (e.g. "2s"). Defaults to 2s.
-	// +optional
-	// +kubebuilder:default="2s"
-	ConnectionRegistryLockTimeout string `json:"connectionRegistryLockTimeout,omitempty"`
-
-	// ConnectionClaimTimeout is the overall timeout for ClaimConnection operations (e.g. "3s").
-	// Must be greater than connectionRegistryLockTimeout. Defaults to 3s.
-	// +optional
-	// +kubebuilder:default="3s"
-	ConnectionClaimTimeout string `json:"connectionClaimTimeout,omitempty"`
-
-	// DuplicationPrevention configures duplicate agent connection prevention.
-	// +optional
-	DuplicationPrevention *AgentDuplicationPreventionConfig `json:"duplicationPrevention,omitempty"`
-}
-
-// AgentDuplicationPreventionConfig configures duplicate agent connection prevention.
-type AgentDuplicationPreventionConfig struct {
-	// EnableMiddleware enables the duplication prevention middleware.
-	// +optional
-	EnableMiddleware bool `json:"enableMiddleware,omitempty"`
-
-	// ReassignID reassigns the agent ID when a duplicate is detected.
-	// +optional
-	ReassignID bool `json:"reassignID,omitempty"`
-
-	// DetectionStrategy is the strategy used to detect duplicate connections.
-	// Valid values: grace_period. Defaults to grace_period.
-	// +optional
-	// +kubebuilder:validation:Enum=grace_period
-	// +kubebuilder:default=grace_period
-	DetectionStrategy string `json:"detectionStrategy,omitempty"`
-
-	// DetectionGracePeriod is how long after the first claim failure to wait before treating
-	// subsequent failures as true duplicates (e.g. "3m"). Used with the grace_period strategy.
-	// Must be >= connectionRegistryStaleDuration. Defaults to 3m.
-	// +optional
-	// +kubebuilder:default="3m"
-	DetectionGracePeriod string `json:"detectionGracePeriod,omitempty"`
-
-	// MinGracePeriodFailures is the minimum number of claim failures required before the
-	// grace_period strategy confirms a duplicate. Both the time (grace period) and count
-	// must be satisfied. Defaults to 3.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:default=3
-	MinGracePeriodFailures int `json:"minGracePeriodFailures,omitempty"`
-
-	// RetryAfter is the Retry-After duration sent to the agent when rejecting connections
-	// during the grace period (e.g. "30s"). Defaults to 30s.
-	// +optional
-	// +kubebuilder:default="30s"
-	RetryAfter string `json:"retryAfter,omitempty"`
-
-	// MaxReassignmentAttempts is the maximum number of times an agent can reconnect with
-	// the same ID after being assigned a new ID before being permanently rejected (1–10).
-	// Defaults to 3.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=10
-	// +kubebuilder:default=3
-	MaxReassignmentAttempts int `json:"maxReassignmentAttempts,omitempty"`
-
-	// ReassignmentCacheTTL is how long to remember reassignment attempts (e.g. "24h").
-	// Maximum 7d. Defaults to 24h.
-	// +optional
-	// +kubebuilder:default="24h"
-	ReassignmentCacheTTL string `json:"reassignmentCacheTTL,omitempty"`
-
-	// ReassignmentRetryAfter is the Retry-After duration sent to an agent when it is
-	// permanently rejected after exceeding maxReassignmentAttempts (e.g. "5m").
-	// Maximum 1h. Defaults to 5m.
-	// +optional
-	// +kubebuilder:default="5m"
-	ReassignmentRetryAfter string `json:"reassignmentRetryAfter,omitempty"`
-
-	// EnableDuplicateNotifications enables sending notifications when duplicate connections are detected.
-	// +optional
-	EnableDuplicateNotifications bool `json:"enableDuplicateNotifications,omitempty"`
-
-	// EnablePerOrgEnforcement enables per-organization enforcement of duplicate prevention.
-	// +optional
-	EnablePerOrgEnforcement bool `json:"enablePerOrgEnforcement,omitempty"`
 }
 
 // AgentVersionsConfig configures how Bindplane syncs agent versions.
@@ -1108,11 +446,6 @@ type AgentVersionsConfig struct {
 	// +optional
 	// +kubebuilder:default="1h"
 	SyncInterval string `json:"syncInterval,omitempty"`
-
-	// Clients is a deprecated list of version client types (e.g. ["bdot", "github"]).
-	// Version clients are now configured per-agent-type via AgentType resources.
-	// +optional
-	Clients []string `json:"clients,omitempty"`
 }
 
 // AgentsAuthConfig configures authentication for agent connections.
@@ -1127,10 +460,6 @@ type AgentsAuthConfig struct {
 	// SecretKey configures the secret key authentication method.
 	// +optional
 	SecretKey *AgentsAuthSecretKeyConfig `json:"secretKey,omitempty"`
-
-	// OAuth configures the OAuth authentication method.
-	// +optional
-	OAuth *AgentsAuthOAuthConfig `json:"oauth,omitempty"`
 }
 
 // AgentsAuthSecretKeyConfig configures secret key authentication for agent connections.
@@ -1141,259 +470,12 @@ type AgentsAuthSecretKeyConfig struct {
 	Headers []string `json:"headers,omitempty"`
 }
 
-// AgentsAuthOAuthConfig configures OAuth authentication for agent connections.
-type AgentsAuthOAuthConfig struct {
-	// Issuer is the URL of the OAuth provider used to validate the token's iss claim.
-	// +optional
-	Issuer string `json:"issuer,omitempty"`
-
-	// Audiences is the list of valid audience values. The token's aud claim must match
-	// at least one of these values.
-	// +optional
-	Audiences []string `json:"audiences,omitempty"`
-
-	// RequiredClaims is the list of claim names that must be present in the token.
-	// +optional
-	RequiredClaims []string `json:"requiredClaims,omitempty"`
-
-	// RequiredScopes is the list of scopes that must all be present in the token.
-	// +optional
-	RequiredScopes []string `json:"requiredScopes,omitempty"`
-
-	// CacheTTL is the duration a valid OAuth token is cached (e.g. "1h"). Defaults to 1h.
-	// +optional
-	// +kubebuilder:default="1h"
-	CacheTTL string `json:"cacheTTL,omitempty"`
-}
-
-// AdvancedConfig defines advanced Bindplane configuration options.
-type AdvancedConfig struct {
-	// Store contains advanced store configuration options.
-	// +optional
-	Store *AdvancedStoreConfig `json:"store,omitempty"`
-	// Server contains advanced server configuration options.
-	// +optional
-	Server *AdvancedServerConfig `json:"server,omitempty"`
-	// Agent contains advanced agent telemetry configuration options.
-	// +optional
-	Agent *AdvancedAgentConfig `json:"agent,omitempty"`
-	// Cache contains advanced cache configuration options.
-	// +optional
-	Cache *AdvancedCacheConfig `json:"cache,omitempty"`
-	// Rollout contains advanced rollout configuration options.
-	// +optional
-	Rollout *AdvancedRolloutConfig `json:"rollout,omitempty"`
-}
-
-// AdvancedAgentConfig contains advanced agent configuration options.
-type AdvancedAgentConfig struct {
-	// TelemetryPort is the port used for agent telemetry collection. Defaults to 8888.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	TelemetryPort *int32 `json:"telemetryPort,omitempty"`
-}
-
-// AdvancedRolloutConfig contains advanced rollout configuration options.
-type AdvancedRolloutConfig struct {
-	// DisableUpdater disables the background rollout updater.
-	// +optional
-	DisableUpdater bool `json:"disableUpdater,omitempty"`
-
-	// RetryInterval is the duration to retry configuring pending agents (e.g., "30s"). Defaults to 30s.
-	// +optional
-	RetryInterval string `json:"retryInterval,omitempty"`
-
-	// UpdateWorkerCount is the number of workers used for updating rollouts. Defaults to 10.
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	UpdateWorkerCount int `json:"updateWorkerCount,omitempty"`
-}
-
-// AdvancedStoreConfig contains advanced store configuration options.
-type AdvancedStoreConfig struct {
-	// Stats configures advanced measurement storage tuning.
-	// +optional
-	Stats *AdvancedStoreStatsConfig `json:"stats,omitempty"`
-}
-
-// AdvancedStoreStatsConfig tunes measurement pipeline performance.
-type AdvancedStoreStatsConfig struct {
-	// BatchFlushInterval is the interval at which to flush measurement batches (e.g. "1s").
-	// +optional
-	BatchFlushInterval string `json:"batchFlushInterval,omitempty"`
-	// WorkerCount is the number of workers saving measurements to the backend.
-	// +optional
-	WorkerCount int `json:"workerCount,omitempty"`
-	// EnableSorting enables sorting of metrics by timestamp before saving.
-	// +optional
-	EnableSorting bool `json:"enableSorting,omitempty"`
-	// MetricChannelSize is the buffer size for the incoming metrics channel.
-	// +optional
-	MetricChannelSize int `json:"metricChannelSize,omitempty"`
-	// BatchChannelSize is the buffer size for the batch channel between accept and save workers.
-	// +optional
-	BatchChannelSize int `json:"batchChannelSize,omitempty"`
-}
-
-// AdvancedServerConfig contains advanced HTTP/OpAMP server options.
-type AdvancedServerConfig struct {
-	// MaxRequestBytes is the maximum request body size the server accepts, excluding offline
-	// agent uploads. Defaults to 10485760 (10 MiB).
-	// +optional
-	MaxRequestBytes int64 `json:"maxRequestBytes,omitempty"`
-	// ShutdownGracePeriod is the total time the server waits for in-flight requests and
-	// connections to finish before forceful shutdown (e.g. "5m"). Defaults to 2m.
-	// +optional
-	ShutdownGracePeriod string `json:"shutdownGracePeriod,omitempty"`
-	// OpAMPShutdownGracePeriodTarget is the fraction (0.1–1.0) of ShutdownGracePeriod
-	// that the OpAMP server is given to drain agents (e.g. "0.25"). Defaults to 0.25.
-	// +optional
-	OpAMPShutdownGracePeriodTarget string `json:"opampShutdownGracePeriodTarget,omitempty"`
-}
-
-// AdvancedCacheConfig configures the distributed cache.
-type AdvancedCacheConfig struct {
-	// Type is the cache backend to use. Currently only "redis" is supported.
-	// +optional
-	// +kubebuilder:validation:Enum=redis
-	Type string `json:"type,omitempty"`
-	// Redis configures the Redis cache connection.
-	// +optional
-	Redis *AdvancedCacheRedisConfig `json:"redis,omitempty"`
-}
-
-// AdvancedCacheRedisConfig configures a Redis cache backend.
-// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
-type AdvancedCacheRedisConfig struct {
-	// Address is the Redis server address in host:port form (e.g. "redis.default.svc:6379").
-	Address string `json:"address"`
-	// Password is the Redis password (plain text). Use PasswordSecretRef instead for sensitive values.
-	// +optional
-	Password string `json:"password,omitempty"`
-	// PasswordSecretRef references a Kubernetes Secret containing the Redis password.
-	// Takes precedence over Password when both are set.
-	// +optional
-	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
-	// DB is the Redis database index. When omitted, defaults to 0.
-	// +optional
-	DB int `json:"db,omitempty"`
-	// ReadTimeout is the read timeout for Redis commands (e.g. "5s"). When omitted, the Redis client default is used.
-	// +optional
-	ReadTimeout string `json:"readTimeout,omitempty"`
-	// WriteTimeout is the write timeout for Redis commands (e.g. "5s"). When omitted, the Redis client default is used.
-	// +optional
-	WriteTimeout string `json:"writeTimeout,omitempty"`
-	// EnableTLS enables TLS for the Redis connection.
-	// +optional
-	EnableTLS bool `json:"enableTLS,omitempty"`
-	// TLS configures TLS for the Redis connection. Only relevant when EnableTLS is true.
-	// +optional
-	TLS *AdvancedCacheRedisTLSConfig `json:"tls,omitempty"`
-}
-
-// AdvancedCacheRedisTLSConfig configures TLS for Redis via a Kubernetes Secret.
-// The operator mounts the Secret and sets file-path env vars automatically.
-type AdvancedCacheRedisTLSConfig struct {
-	// SecretName is the name of the Secret containing TLS assets.
-	// +optional
-	SecretName string `json:"secretName,omitempty"`
-	// CertKey is the key within SecretName for the TLS certificate file.
-	// +optional
-	CertKey string `json:"certKey,omitempty"`
-	// KeyKey is the key within SecretName for the TLS private key file.
-	// +optional
-	KeyKey string `json:"keyKey,omitempty"`
-	// CAKey is the key within SecretName for the CA certificate file.
-	// +optional
-	CAKey string `json:"caKey,omitempty"`
-	// SkipVerify disables TLS certificate verification.
-	// +optional
-	SkipVerify bool `json:"skipVerify,omitempty"`
-	// MinTLSVersion is the minimum TLS version. One of: 1.2, 1.3.
-	// +optional
-	// +kubebuilder:validation:Enum="1.2";"1.3"
-	MinTLSVersion string `json:"minTLSVersion,omitempty"`
-}
-
 // AuditTrailConfig defines audit trail configuration
 type AuditTrailConfig struct {
 	// RetentionDays is the number of days to retain audit trail events.
 	// +optional
 	// +kubebuilder:default=365
 	RetentionDays int `json:"retentionDays,omitempty"`
-}
-
-// ProfilingConfig configures Google Cloud Profiler for Bindplane.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || (size(self.projectID) > 0)",message="projectID is required when profiling is enabled"
-type ProfilingConfig struct {
-	// Enabled turns on Google Cloud Profiler. When false or omitted, profiling is disabled.
-	// +optional
-	// +kubebuilder:default=false
-	Enabled bool `json:"enabled,omitempty"`
-
-	// ProjectID is the GCP project ID. Required when enabled is true.
-	// +optional
-	ProjectID string `json:"projectID,omitempty"`
-
-	// NoCPU disables CPU profiling.
-	// +optional
-	// +kubebuilder:default=false
-	NoCPU bool `json:"noCPU,omitempty"`
-
-	// NoAlloc disables allocation profiling.
-	// +optional
-	// +kubebuilder:default=false
-	NoAlloc bool `json:"noAlloc,omitempty"`
-
-	// NoHeap disables heap profiling.
-	// +optional
-	// +kubebuilder:default=false
-	NoHeap bool `json:"noHeap,omitempty"`
-
-	// NoGoroutine disables goroutine profiling.
-	// +optional
-	// +kubebuilder:default=false
-	NoGoroutine bool `json:"noGoroutine,omitempty"`
-
-	// Mutex enables mutex profiling (disabled by default in Bindplane).
-	// +optional
-	// +kubebuilder:default=false
-	Mutex bool `json:"mutex,omitempty"`
-}
-
-// StatusConfig configures the Bindplane status check endpoints.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))",message="at least one key must be configured when status is enabled"
-type StatusConfig struct {
-	// Enabled controls whether the status check endpoints are enabled.
-	// Defaults to true.
-	// +kubebuilder:default=true
-	Enabled bool `json:"enabled"`
-
-	// Keys are UUIDs used to authenticate requests to the status check endpoints.
-	// Supports multiple keys to allow rotation. At least one is required when enabled is true.
-	// +optional
-	Keys []string `json:"keys,omitempty"`
-
-	// KeysSecretRef references a Kubernetes Secret containing status check keys.
-	// The secret value should be comma-delimited UUIDs to support rotation.
-	// Takes precedence over Keys if both are set.
-	// +optional
-	KeysSecretRef *corev1.SecretKeySelector `json:"keysSecretRef,omitempty"`
-}
-
-// AnalyticsConfig configures Bindplane analytics reporting.
-type AnalyticsConfig struct {
-	// Disabled turns off analytics reporting. When false or omitted, analytics are enabled.
-	// Free licenses do not support disabling analytics; this option is ignored for that license type.
-	// +optional
-	// +kubebuilder:default=false
-	Disabled bool `json:"disabled,omitempty"`
-
-	// SegmentWriteKey overrides the default Segment write key used for analytics.
-	// Do not set unless directed by Bindplane support.
-	// +optional
-	SegmentWriteKey string `json:"segmentWriteKey,omitempty"`
 }
 
 // EventBusHealthConfig configures the Bindplane event bus health check.
@@ -1420,18 +502,6 @@ type EventBusConfig struct {
 	// Health configures the event bus health check endpoints.
 	// +optional
 	Health *EventBusHealthConfig `json:"health,omitempty"`
-}
-
-// PprofConfig configures the pprof HTTP server for Bindplane.
-type PprofConfig struct {
-	// Enabled turns on the pprof server. When false or omitted, pprof is disabled.
-	// +optional
-	// +kubebuilder:default=false
-	Enabled bool `json:"enabled,omitempty"`
-
-	// Endpoint is the host:port the pprof server listens on. When unset, defaults to 127.0.0.1:6060.
-	// +optional
-	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // TSDBConfig configures Bindplane's TSDB component (default implementation: Prometheus).
@@ -1570,35 +640,18 @@ type CertManagerTLSIssuerRef struct {
 
 // TracingConfig defines tracing configuration
 type TracingConfig struct {
-	// Type specifies the tracing type. One of: otlp, google, honeycomb. When empty, tracing is disabled.
+	// Type specifies the tracing type. One of: otlp, google. When empty, tracing is disabled.
 	// +optional
-	// +kubebuilder:validation:Enum=otlp;google;honeycomb
+	// +kubebuilder:validation:Enum=otlp;google
 	Type string `json:"type,omitempty"`
 
 	// OTLP configures OTLP tracing when Type is otlp.
 	// +optional
 	OTLP *TracingOTLPConfig `json:"otlp,omitempty"`
 
-	// Honeycomb configures Honeycomb tracing when Type is honeycomb.
-	// +optional
-	Honeycomb *TracingHoneycombConfig `json:"honeycomb,omitempty"`
-
 	// SamplingRate is the ratio between 0 and 1 of traces to keep. Omit or 0 to disable sampling.
 	// +optional
 	SamplingRate string `json:"samplingRate,omitempty"`
-}
-
-// TracingHoneycombConfig defines Honeycomb tracing configuration.
-// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
-type TracingHoneycombConfig struct {
-	// APIKey is the Honeycomb API key (plain text). Use APIKeySecretRef instead for sensitive values.
-	// +optional
-	APIKey string `json:"apiKey,omitempty"`
-
-	// APIKeySecretRef references a Kubernetes Secret containing the Honeycomb API key.
-	// Takes precedence over APIKey when both are set.
-	// +optional
-	APIKeySecretRef *corev1.SecretKeySelector `json:"apiKeySecretRef,omitempty"`
 }
 
 // TracingOTLPConfig defines OTLP tracing configuration
@@ -1635,7 +688,6 @@ type MetricsConfig struct {
 }
 
 // MetricsPrometheusConfig defines Prometheus metrics configuration
-// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
 type MetricsPrometheusConfig struct {
 	// Endpoint is the HTTP path to serve metrics on (e.g. /metrics).
 	// +optional
@@ -1656,21 +708,6 @@ type MetricsPrometheusConfig struct {
 	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 }
 
-// LoggingOTLPConfig defines OTLP logging configuration.
-type LoggingOTLPConfig struct {
-	// Endpoint is the gRPC endpoint to send logs to (e.g. localhost:4317).
-	// +optional
-	Endpoint string `json:"endpoint,omitempty"`
-
-	// Insecure disables TLS verification for the OTLP connection.
-	// +optional
-	Insecure bool `json:"insecure,omitempty"`
-
-	// Interval is the interval at which to export logs (e.g. "1s"). Defaults to 1s.
-	// +optional
-	Interval string `json:"interval,omitempty"`
-}
-
 // LoggingConfig defines logging configuration.
 type LoggingConfig struct {
 	// Level specifies the log level. One of: debug, info, warn, error.
@@ -1680,16 +717,11 @@ type LoggingConfig struct {
 	Level string `json:"level,omitempty"`
 
 	// Type specifies the logging output destination.
-	// Use "stdout" to write logs to standard output, "otlp" to export via OTLP,
-	// or "stdout,otlp" to write to both simultaneously.
+	// Use "stdout" to write logs to standard output.
 	// +optional
 	// +kubebuilder:default=stdout
-	// +kubebuilder:validation:Pattern=`^(stdout|otlp)(,(stdout|otlp))?$`
+	// +kubebuilder:validation:Enum=stdout
 	Type string `json:"type,omitempty"`
-
-	// OTLP configures OTLP log export when Type includes otlp.
-	// +optional
-	OTLP *LoggingOTLPConfig `json:"otlp,omitempty"`
 }
 
 // MetricsOTLPConfig defines OTLP metrics configuration
@@ -1864,14 +896,10 @@ type PodTemplateSpec struct {
 }
 
 // AuthConfig defines authentication configuration
-// +kubebuilder:validation:XValidation:rule="!(has(self.username) && has(self.usernameSecretRef))",message="exactly one of username or usernameSecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.sessionSecret) && has(self.sessionSecretSecretRef))",message="exactly one of sessionSecret or sessionSecretSecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.apiKey) && has(self.apiKeySecretRef))",message="exactly one of apiKey or apiKeySecretRef must be set"
 type AuthConfig struct {
 	// Type specifies the authentication type.
 	// +optional
-	// +kubebuilder:validation:Enum=system;ldap;active-directory;oidc;auth0
+	// +kubebuilder:validation:Enum=system;ldap;active-directory;oidc
 	Type string `json:"type,omitempty"`
 
 	// Username for authentication
@@ -1921,88 +949,9 @@ type AuthConfig struct {
 	// OIDC is the configuration for the oidc auth type.
 	// +optional
 	OIDC *OIDCConfig `json:"oidc,omitempty"`
-
-	// Auth0 is the configuration for the auth0 auth type.
-	// +optional
-	Auth0 *Auth0Config `json:"auth0,omitempty"`
-}
-
-// Auth0Config configures Auth0 as the Bindplane authentication provider.
-// +kubebuilder:validation:XValidation:rule="!(has(self.managementClientSecret) && has(self.managementClientSecretSecretRef))",message="exactly one of managementClientSecret or managementClientSecretSecretRef must be set"
-type Auth0Config struct {
-	// ClientID is the Auth0 application client ID.
-	// +optional
-	ClientID string `json:"clientID,omitempty"`
-
-	// Domain is the Auth0 tenant domain (e.g. "example.auth0.com").
-	// +optional
-	Domain string `json:"domain,omitempty"`
-
-	// Audience is the Auth0 API audience identifier.
-	// +optional
-	Audience string `json:"audience,omitempty"`
-
-	// ManagementDomain is the Auth0 management API domain.
-	// +optional
-	ManagementDomain string `json:"managementDomain,omitempty"`
-
-	// ManagementClientID is the client ID for the Auth0 management API application.
-	// +optional
-	ManagementClientID string `json:"managementClientID,omitempty"`
-
-	// ManagementClientSecret is a plain-text client secret for the Auth0 management API.
-	// +optional
-	ManagementClientSecret string `json:"managementClientSecret,omitempty"`
-
-	// ManagementClientSecretSecretRef references a Secret containing the management API client secret.
-	// Takes precedence over ManagementClientSecret when both are set.
-	// +optional
-	ManagementClientSecretSecretRef *corev1.SecretKeySelector `json:"managementClientSecretSecretRef,omitempty"`
-
-	// SSO configures Auth0 single sign-on settings.
-	// +optional
-	SSO *Auth0SSOConfig `json:"sso,omitempty"`
-
-	// WIF configures Workload Identity Federation for Auth0.
-	// +optional
-	WIF *Auth0WIFConfig `json:"wif,omitempty"`
-}
-
-// Auth0SSOConfig configures Auth0 SSO settings.
-type Auth0SSOConfig struct {
-	// Enabled toggles Auth0 SSO support.
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// SelfServiceProfileID is the Auth0 self-service SSO profile identifier.
-	// +optional
-	SelfServiceProfileID string `json:"selfServiceProfileID,omitempty"`
-}
-
-// Auth0WIFConfig configures Workload Identity Federation for Auth0.
-// +kubebuilder:validation:XValidation:rule="!(has(self.clientSecret) && has(self.clientSecretSecretRef))",message="exactly one of clientSecret or clientSecretSecretRef must be set"
-type Auth0WIFConfig struct {
-	// ClientID is the WIF client ID.
-	// +optional
-	ClientID string `json:"clientID,omitempty"`
-
-	// ClientSecret is a plain-text WIF client secret.
-	// +optional
-	ClientSecret string `json:"clientSecret,omitempty"`
-
-	// ClientSecretSecretRef references a Secret containing the WIF client secret.
-	// Takes precedence over ClientSecret when both are set.
-	// +optional
-	ClientSecretSecretRef *corev1.SecretKeySelector `json:"clientSecretSecretRef,omitempty"`
-
-	// Audience is the WIF audience identifier.
-	// +optional
-	Audience string `json:"audience,omitempty"`
 }
 
 // LDAPConfig defines LDAP and Active Directory authentication configuration
-// +kubebuilder:validation:XValidation:rule="!(has(self.bindUser) && has(self.bindUserSecretRef))",message="exactly one of bindUser or bindUserSecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.bindPassword) && has(self.bindPasswordSecretRef))",message="exactly one of bindPassword or bindPasswordSecretRef must be set"
 type LDAPConfig struct {
 	// Protocol to use when connecting to the LDAP server. One of: ldap|ldaps
 	// +optional
@@ -2125,8 +1074,6 @@ type PostgresTLSConfig struct {
 }
 
 // OIDCConfig defines OpenID Connect authentication configuration
-// +kubebuilder:validation:XValidation:rule="!(has(self.clientID) && has(self.clientIDSecretRef))",message="exactly one of clientID or clientIDSecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.clientSecret) && has(self.clientSecretSecretRef))",message="exactly one of clientSecret or clientSecretSecretRef must be set"
 type OIDCConfig struct {
 	// ClientID is the OIDC OAuth2 client ID
 	// +optional
@@ -2189,31 +1136,6 @@ type NetworkConfig struct {
 	// Omit or omit secretName/certKey/keyKey to disable server TLS (e.g. when using Ingress to terminate TLS).
 	// +optional
 	TLS *NetworkTLSConfig `json:"tls,omitempty"`
-
-	// RateLimits configures per-endpoint rate limiting for the REST API and GraphQL API.
-	// +optional
-	RateLimits *NetworkRateLimitsConfig `json:"rateLimits,omitempty"`
-}
-
-// NetworkRateLimitsConfig configures rate limiting for the Bindplane REST and GraphQL APIs.
-type NetworkRateLimitsConfig struct {
-	// APIRate is the maximum number of REST API requests per second (e.g. "10").
-	// Bindplane reads this as a float64.
-	// +optional
-	APIRate string `json:"apiRate,omitempty"`
-
-	// APIBurst is the maximum burst size for REST API requests.
-	// +optional
-	APIBurst int `json:"apiBurst,omitempty"`
-
-	// GraphQLRate is the maximum number of GraphQL API requests per second (e.g. "10").
-	// Bindplane reads this as a float64.
-	// +optional
-	GraphQLRate string `json:"graphqlRate,omitempty"`
-
-	// GraphQLBurst is the maximum burst size for GraphQL API requests.
-	// +optional
-	GraphQLBurst int `json:"graphqlBurst,omitempty"`
 }
 
 // StoreConfig defines store configuration
@@ -2239,8 +1161,6 @@ type StoreConfig struct {
 }
 
 // PostgresConfig defines PostgreSQL store configuration
-// +kubebuilder:validation:XValidation:rule="!(has(self.username) && has(self.usernameSecretRef))",message="exactly one of username or usernameSecretRef must be set"
-// +kubebuilder:validation:XValidation:rule="!(has(self.password) && has(self.passwordSecretRef))",message="exactly one of password or passwordSecretRef must be set"
 type PostgresConfig struct {
 	// Host specifies the PostgreSQL host
 	Host string `json:"host"`

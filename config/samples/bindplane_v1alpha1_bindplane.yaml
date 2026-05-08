@@ -75,8 +75,3 @@ spec:
       health:
         requiredHosts: 3
         interval: 5s
-    logging:
-      type: otlp
-      otlp:
-        endpoint: otel-collector.observability.svc:4317
-        interval: "5s"

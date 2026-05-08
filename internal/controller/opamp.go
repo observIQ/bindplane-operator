@@ -242,7 +242,7 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 								Env: combineEnvVars(
 									getKubernetesEnvVars(opampContainerName),
 									getNodeEnvVars(),
-									getBindplaneCommonEnvVars(bindplane, opampComponent),
+									getBindplaneCommonEnvVars(bindplane),
 									getNatsClientEnvVars(bindplane, true),
 									getOpAMPOverrideEnvVars(bindplane),
 								),
@@ -308,16 +308,6 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 // and getNatsClientEnvVars in the env slice so Kubernetes uses the later (OpAMP-specific) value.
 func getOpAMPOverrideEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	var envVars []corev1.EnvVar
-
-	// Override profiling service name to be <bindplane.Name>-opamp for this specific CR.
-	// getBindplaneCommonEnvVars emits "bindplane-opamp" (static). The override below
-	// makes it CR-name-specific, matching the Node deployment's <bindplane.Name>-node pattern.
-	if bindplane.Spec.Config.Profiling != nil && bindplane.Spec.Config.Profiling.Enabled {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  bindplaneProfilingServiceNameEnvVar,
-			Value: fmt.Sprintf("%s-opamp", bindplane.Name),
-		})
-	}
 
 	// Per-deployment override for max simultaneous connections.
 	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.MaxSimultaneousConnections != nil {

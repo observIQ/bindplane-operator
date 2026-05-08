@@ -11,7 +11,6 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [System auth](#system-auth)
   - [LDAP and Active Directory](#ldap-and-active-directory)
   - [OIDC](#oidc)
-  - [Auth0](#auth0)
 - [Network](#network)
 - [Store](#store)
   - [PostgreSQL](#postgresql)
@@ -20,34 +19,13 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [TSDB](#tsdb)
 - [Max concurrency](#max-concurrency)
 - [Audit trail](#audit-trail)
-- [Profiling](#profiling)
-- [Pprof](#pprof)
-- [Status](#status)
 - [Event bus](#event-bus)
-- [Analytics](#analytics)
 - [Logging](#logging)
-- [Advanced](#advanced)
-  - [Store stats](#store-stats)
-  - [Server](#server)
-  - [Rollout](#rollout)
-  - [Agent](#agent)
-  - [Cache](#cache)
-    - [Redis](#redis)
 - [Agents](#agents)
   - [Authentication](#agents-authentication)
   - [Heartbeat](#heartbeat)
   - [Rebalance](#rebalance)
-  - [Duplication Prevention](#duplication-prevention)
 - [Agent versions](#agent-versions)
-- [SaaS](#saas)
-  - [Stripe](#stripe)
-- [Encryption provider](#encryption-provider)
-- [Features](#features)
-  - [PostHog](#posthog)
-  - [Feature overrides](#feature-overrides)
-- [Errors](#errors)
-- [LLM](#llm)
-- [Quotas](#quotas)
 - [Extra environment variables](#extra-environment-variables)
   - [Reserved env names](#reserved-env-names)
   - [Pod template vs extraEnv](#pod-template-vs-extraenv)
@@ -90,7 +68,7 @@ spec:
 
 ## Authentication
 
-Supported auth types: `system`, `ldap`, `active-directory`, `oidc`, `auth0`.
+Supported auth types: `system`, `ldap`, `active-directory`, `oidc`.
 
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
@@ -292,57 +270,6 @@ spec:
           key: client-secret
 ```
 
-### Auth0
-
-Set `spec.config.auth.type` to `auth0`. The management client secret and WIF client secret support both plain values and Secret references; Secret references take precedence.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.auth.auth0.clientID` | `BINDPLANE_AUTH0_CLIENT_ID` | — | No |
-| `spec.config.auth.auth0.domain` | `BINDPLANE_AUTH0_DOMAIN` | — | No |
-| `spec.config.auth.auth0.audience` | `BINDPLANE_AUTH0_AUDIENCE` | — | No |
-| `spec.config.auth.auth0.managementDomain` | `BINDPLANE_AUTH0_MANAGEMENT_DOMAIN` | — | No |
-| `spec.config.auth.auth0.managementClientID` | `BINDPLANE_AUTH0_MANAGEMENT_CLIENT_ID` | — | No |
-| `spec.config.auth.auth0.managementClientSecret` | `BINDPLANE_AUTH0_MANAGEMENT_CLIENT_SECRET` | — | No |
-| `spec.config.auth.auth0.managementClientSecretSecretRef` | `BINDPLANE_AUTH0_MANAGEMENT_CLIENT_SECRET` | — | No |
-| `spec.config.auth.auth0.sso.enabled` | `BINDPLANE_AUTH_AUTH0_SSO_ENABLED` | `false` | No |
-| `spec.config.auth.auth0.sso.selfServiceProfileID` | `BINDPLANE_AUTH_AUTH0_SSO_SELF_SERVICE_PROFILE_ID` | — | No |
-| `spec.config.auth.auth0.wif.clientID` | `BINDPLANE_AUTH_AUTH0_WIF_CLIENT_ID` | — | No |
-| `spec.config.auth.auth0.wif.clientSecret` | `BINDPLANE_AUTH_AUTH0_WIF_CLIENT_SECRET` | — | No |
-| `spec.config.auth.auth0.wif.clientSecretSecretRef` | `BINDPLANE_AUTH_AUTH0_WIF_CLIENT_SECRET` | — | No |
-| `spec.config.auth.auth0.wif.audience` | `BINDPLANE_AUTH_AUTH0_WIF_AUDIENCE` | — | No |
-
-```yaml
-spec:
-  config:
-    auth:
-      type: auth0
-      sessionSecretSecretRef:
-        name: bindplane-secrets
-        key: session-secret
-      apiKeySecretRef:
-        name: bindplane-secrets
-        key: api-key
-      auth0:
-        clientID: "your-client-id"
-        domain: "example.auth0.com"
-        audience: "https://api.example.com"
-        managementDomain: "example.auth0.com"
-        managementClientID: "mgmt-client-id"
-        managementClientSecretSecretRef:
-          name: bindplane-secrets
-          key: auth0-mgmt-client-secret
-        sso:
-          enabled: true
-          selfServiceProfileID: "ssp_xxx"
-        wif:
-          clientID: "wif-client-id"
-          clientSecretSecretRef:
-            name: bindplane-secrets
-            key: auth0-wif-client-secret
-          audience: "https://iam.googleapis.com/projects/..."
-```
-
 ## Network
 
 TLS is generally not configured on the Bindplane server when you use Ingress or Gateway API to terminate TLS. In that case, only `remoteURL` (and optionally `webURL`) need to reflect the external URL; the server continues to listen over HTTP inside the cluster.
@@ -355,7 +282,6 @@ TLS is generally not configured on the Bindplane server when you use Ingress or 
 | `spec.config.network.webURL` | `BINDPLANE_WEB_URL` | — | No |
 | `spec.config.network.corsAllowedOrigins` | `BINDPLANE_CORS_ALLOWED_ORIGINS` | — | No |
 | `spec.config.network.tls` | (see below) | — | No |
-| `spec.config.network.rateLimits` | (see below) | — | No |
 
 `BINDPLANE_REMOTE_URL` is always set. When `spec.config.network.remoteURL` is not configured, it defaults to the internal node service URL (`http://<bindplane-name>-node:3001`). Override this when the Bindplane UI is accessed through an ingress or load balancer, e.g. `https://bindplane.my-corp.net`.
 
@@ -401,28 +327,6 @@ spec:
         certKey: tls.crt
         keyKey: tls.key
         caKey: ca.crt
-```
-
-**Network Rate Limits:** Configure per-endpoint rate limiting for the REST and GraphQL APIs. Rate fields are decimal strings read by Bindplane as float64 (requests per second).
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.network.rateLimits.apiRate` | `BINDPLANE_NETWORK_RATE_LIMITS_API_RATE` | — | No |
-| `spec.config.network.rateLimits.apiBurst` | `BINDPLANE_NETWORK_RATE_LIMITS_API_BURST` | — | No |
-| `spec.config.network.rateLimits.graphqlRate` | `BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_RATE` | — | No |
-| `spec.config.network.rateLimits.graphqlBurst` | `BINDPLANE_NETWORK_RATE_LIMITS_GRAPHQL_BURST` | — | No |
-
-Example (rate limits):
-
-```yaml
-spec:
-  config:
-    network:
-      rateLimits:
-        apiRate: "10"
-        apiBurst: 20
-        graphqlRate: "10"
-        graphqlBurst: 20
 ```
 
 ## Store
@@ -549,15 +453,13 @@ spec:
 
 Tracing is optional. When `spec.config.tracing` is omitted or `type` is empty, tracing is disabled and no tracing environment variables are set.
 
-Supported types: `otlp`, `google`, `honeycomb`. For `otlp`, configure the `otlp` block with endpoint and optional insecure flag. For `honeycomb`, configure the `honeycomb` block with an API key. You can set a sampling rate (string, e.g. `"0.5"`) between 0 and 1.
+Supported types: `otlp`, `google`. For `otlp`, configure the `otlp` block with endpoint and optional insecure flag. You can set a sampling rate (string, e.g. `"0.5"`) between 0 and 1.
 
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.tracing.type` | `BINDPLANE_TRACING_TYPE` | — | No (omit to disable) |
 | `spec.config.tracing.otlp.endpoint` | `BINDPLANE_TRACING_OTLP_ENDPOINT` | — | Yes when type is `otlp` |
 | `spec.config.tracing.otlp.insecure` | `BINDPLANE_TRACING_OTLP_INSECURE` | `false` | No |
-| `spec.config.tracing.honeycomb.apiKey` | `BINDPLANE_TRACING_HONEYCOMB_API_KEY` | — | Yes when type is `honeycomb` |
-| `spec.config.tracing.honeycomb.apiKeySecretRef` | `BINDPLANE_TRACING_HONEYCOMB_API_KEY` | — | Yes when type is `honeycomb` (use instead of `apiKey`) |
 | `spec.config.tracing.samplingRate` | `BINDPLANE_TRACING_SAMPLING_RATE` | — | No |
 
 Example (OTLP tracing):
@@ -571,19 +473,6 @@ spec:
         endpoint: http://otel-collector.observability.svc:4317
         insecure: false
       samplingRate: "0.5"
-```
-
-Example (Honeycomb tracing using a Secret reference):
-
-```yaml
-spec:
-  config:
-    tracing:
-      type: honeycomb
-      honeycomb:
-        apiKeySecretRef:
-          name: bindplane-honeycomb
-          key: api-key
 ```
 
 ## Metrics
@@ -744,82 +633,6 @@ Do not change these fields unless directed by Bindplane support.
 |---|---|---|---|
 | `spec.config.auditTrail.retentionDays` | `BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS` | `365` | No |
 
-## Profiling
-
-Profiling integrates Google Cloud Profiler into Bindplane components. When omitted or `enabled: false`, profiling is off and no profiling environment variables are set. When `enabled: true`, `projectID` is required (enforced by a CRD XValidation rule). The `serviceName` is set automatically per component (e.g. `bindplane-node`); it cannot be overridden via the CRD.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.profiling.enabled` | `BINDPLANE_PROFILING_ENABLED` | `false` | No |
-| `spec.config.profiling.projectID` | `BINDPLANE_PROFILING_PROJECT_ID` | — | Yes when `enabled: true` |
-| `spec.config.profiling.noCPU` | `BINDPLANE_PROFILING_NO_CPU` | `false` | No |
-| `spec.config.profiling.noAlloc` | `BINDPLANE_PROFILING_NO_ALLOC` | `false` | No |
-| `spec.config.profiling.noHeap` | `BINDPLANE_PROFILING_NO_HEAP` | `false` | No |
-| `spec.config.profiling.noGoroutine` | `BINDPLANE_PROFILING_NO_GOROUTINE` | `false` | No |
-| `spec.config.profiling.mutex` | `BINDPLANE_PROFILING_MUTEX` | `false` | No |
-
-Example:
-
-```yaml
-spec:
-  config:
-    profiling:
-      enabled: true
-      projectID: my-gcp-project
-```
-
-## Pprof
-
-Pprof exposes a Go pprof HTTP server on each Bindplane component for CPU and memory profiling. When omitted or `enabled: false`, the server is not started.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.pprof.enabled` | `BINDPLANE_PPROF_ENABLED` | `false` | No |
-| `spec.config.pprof.endpoint` | `BINDPLANE_PPROF_ENDPOINT` | `127.0.0.1:6060` | No |
-
-Example:
-
-```yaml
-spec:
-  config:
-    pprof:
-      enabled: true
-      endpoint: "127.0.0.1:6060"
-```
-
-## Status
-
-Status configures the Bindplane status check endpoints. When `enabled: true`, at least one key must be provided via `keys` or `keysSecretRef` (enforced by a CRD XValidation rule). `keysSecretRef` takes precedence when both are set.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.status.enabled` | `BINDPLANE_STATUS_ENABLED` | `true` | Yes |
-| `spec.config.status.keys` | `BINDPLANE_STATUS_KEYS` | — | Yes when `enabled: true` (or use `keysSecretRef`) |
-| `spec.config.status.keysSecretRef` | `BINDPLANE_STATUS_KEYS` | — | Yes when `enabled: true` (or use `keys`) |
-
-Example (direct keys):
-
-```yaml
-spec:
-  config:
-    status:
-      enabled: true
-      keys:
-        - my-status-key
-```
-
-Example (Secret reference):
-
-```yaml
-spec:
-  config:
-    status:
-      enabled: true
-      keysSecretRef:
-        name: bindplane-secrets
-        key: status-keys
-```
-
 ## Event bus
 
 Event bus configuration controls the NATS integration health check. The health check sends an event over NATS and waits for responses from Bindplane components. Failures affect the status page only — they do not cause pod restarts or rollouts.
@@ -842,41 +655,20 @@ spec:
         interval: "30s"
 ```
 
-## Analytics
-
-Analytics configures Bindplane analytics reporting. When `disabled: true`, analytics reporting is turned off. Note that free licenses do not support disabling analytics; this setting is ignored for those license types. Do not set `segmentWriteKey` unless directed by Bindplane support.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.analytics.disabled` | `BINDPLANE_ANALYTICS_DISABLED` | `false` | No |
-| `spec.config.analytics.segmentWriteKey` | `BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY` | — | No |
-
-Example:
-
-```yaml
-spec:
-  config:
-    analytics:
-      disabled: true
-```
-
 ## Logging
 
-Logging configures the log level and output destination for Bindplane components. When `spec.config.logging` is omitted entirely, no logging environment variables are set and Bindplane uses its own internal defaults. The `otlp` block is only relevant when `type` includes `otlp`.
+Logging configures the log level for Bindplane components. When `spec.config.logging` is omitted entirely, no logging environment variables are set and Bindplane uses its own internal defaults.
 
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.logging.level` | `BINDPLANE_LOGGING_LEVEL` | `info` | No |
 | `spec.config.logging.type` | `BINDPLANE_LOGGING_TYPE` | `stdout` | No |
-| `spec.config.logging.otlp.endpoint` | `BINDPLANE_LOGGING_OTLP_ENDPOINT` | — | Yes when `type` includes `otlp` |
-| `spec.config.logging.otlp.insecure` | `BINDPLANE_LOGGING_OTLP_INSECURE` | `false` | No |
-| `spec.config.logging.otlp.interval` | `BINDPLANE_LOGGING_OTLP_INTERVAL` | — | No |
 
 Valid values for `level`: `debug`, `info`, `warn`, `error`.
 
-Valid values for `type`: `stdout`, `otlp`, `stdout,otlp`.
+Valid values for `type`: `stdout`.
 
-Example (stdout only):
+Example:
 
 ```yaml
 spec:
@@ -884,194 +676,6 @@ spec:
     logging:
       level: debug
       type: stdout
-```
-
-Example (OTLP):
-
-```yaml
-spec:
-  config:
-    logging:
-      level: info
-      type: otlp
-      otlp:
-        endpoint: otel-collector.observability.svc:4317
-        insecure: true
-        interval: "5s"
-```
-
-Example (stdout and OTLP):
-
-```yaml
-spec:
-  config:
-    logging:
-      level: warn
-      type: "stdout,otlp"
-      otlp:
-        endpoint: otel-collector.observability.svc:4317
-        insecure: false
-```
-
-## Advanced
-
-Advanced options allow fine-grained control of Bindplane's internal pipelines and distributed cache. They are not required for basic operation. When `spec.config.advanced` is omitted entirely, Bindplane uses its own internal defaults for all of these settings.
-
-### Store stats
-
-The store stats section tunes the measurement ingestion pipeline (how agent metrics are batched and saved to the backend store).
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.advanced.store.stats.batchFlushInterval` | `BINDPLANE_ADVANCED_STORE_STATS_BATCH_FLUSH_INTERVAL` | — | No |
-| `spec.config.advanced.store.stats.workerCount` | `BINDPLANE_ADVANCED_STORE_STATS_WORKER_COUNT` | — | No |
-| `spec.config.advanced.store.stats.enableSorting` | `BINDPLANE_ADVANCED_STORE_STATS_ENABLE_SORTING` | — | No |
-| `spec.config.advanced.store.stats.metricChannelSize` | `BINDPLANE_ADVANCED_STORE_STATS_METRIC_CHANNEL_SIZE` | — | No |
-| `spec.config.advanced.store.stats.batchChannelSize` | `BINDPLANE_ADVANCED_STORE_STATS_BATCH_CHANNEL_SIZE` | — | No |
-
-Example:
-
-```yaml
-spec:
-  config:
-    advanced:
-      store:
-        stats:
-          batchFlushInterval: "2s"
-          workerCount: 8
-          enableSorting: true
-          metricChannelSize: 200
-          batchChannelSize: 100
-```
-
-### Server
-
-The server section configures HTTP and OpAMP server limits.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.advanced.server.maxRequestBytes` | `BINDPLANE_ADVANCED_SERVER_MAX_REQUEST_BYTES` | — | No |
-| `spec.config.advanced.server.shutdownGracePeriod` | `BINDPLANE_ADVANCED_SERVER_SHUTDOWN_GRACE_PERIOD` | — | No |
-| `spec.config.advanced.server.opampShutdownGracePeriodTarget` | `BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET` | — | No |
-
-- `maxRequestBytes`: Maximum request body size (in bytes) the server accepts, excluding offline agent uploads. Bindplane defaults to 10485760 (10 MiB) when omitted.
-- `shutdownGracePeriod`: Total time the server waits for in-flight requests and connections to finish before forceful shutdown (e.g. `"5m"`). Valid range: 5s–1h. Bindplane defaults to 2m when omitted. Setting this field also adjusts the Node pod's termination grace period to 125% of this value.
-- `opampShutdownGracePeriodTarget`: Fraction of `shutdownGracePeriod` allocated to draining OpAMP agent connections (0.1–1.0, stored as a string, e.g. `"0.6"`). Bindplane defaults to 0.25 when omitted.
-
-Example:
-
-```yaml
-spec:
-  config:
-    advanced:
-      server:
-        maxRequestBytes: 20971520
-        shutdownGracePeriod: "5m"
-        opampShutdownGracePeriodTarget: "0.6"
-```
-
-### Rollout
-
-The rollout section controls the background rollout updater.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.advanced.rollout.disableUpdater` | `BINDPLANE_ADVANCED_ROLLOUT_DISABLE_UPDATER` | `false` | No |
-| `spec.config.advanced.rollout.retryInterval` | `BINDPLANE_ADVANCED_ROLLOUT_RETRY_INTERVAL` | `30s` | No |
-| `spec.config.advanced.rollout.updateWorkerCount` | `BINDPLANE_ADVANCED_ROLLOUT_UPDATE_WORKER_COUNT` | `10` | No |
-
-- `disableUpdater`: When `true`, disables the background rollout updater process.
-- `retryInterval`: How long to wait before retrying pending agent rollout configuration.
-- `updateWorkerCount`: Number of workers used for processing rollout updates.
-
-Example:
-
-```yaml
-spec:
-  config:
-    advanced:
-      rollout:
-        disableUpdater: true
-```
-
-### Agent
-
-The agent section configures advanced agent-related settings.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.advanced.agent.telemetryPort` | `BINDPLANE_ADVANCED_AGENT_TELEMETRY_PORT` | `8888` | No |
-
-- `telemetryPort`: The port used for agent telemetry collection.
-
-### Cache
-
-The cache section configures the distributed cache backend. Currently only `redis` is supported as the cache type.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.advanced.cache.type` | `BINDPLANE_ADVANCED_CACHE_TYPE` | — | No |
-
-#### Redis
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.advanced.cache.redis.address` | `BINDPLANE_ADVANCED_CACHE_REDIS_ADDRESS` | — | Yes when `type` is `redis` |
-| `spec.config.advanced.cache.redis.password` | `BINDPLANE_ADVANCED_CACHE_REDIS_PASSWORD` | — | No |
-| `spec.config.advanced.cache.redis.passwordSecretRef` | `BINDPLANE_ADVANCED_CACHE_REDIS_PASSWORD` | — | No |
-| `spec.config.advanced.cache.redis.db` | `BINDPLANE_ADVANCED_CACHE_REDIS_DB` | — | No |
-| `spec.config.advanced.cache.redis.readTimeout` | `BINDPLANE_ADVANCED_CACHE_REDIS_READ_TIMEOUT` | — | No |
-| `spec.config.advanced.cache.redis.writeTimeout` | `BINDPLANE_ADVANCED_CACHE_REDIS_WRITE_TIMEOUT` | — | No |
-| `spec.config.advanced.cache.redis.enableTLS` | `BINDPLANE_ADVANCED_CACHE_REDIS_ENABLE_TLS` | — | No |
-| `spec.config.advanced.cache.redis.tls.secretName` | (mounts Secret) | — | No |
-| `spec.config.advanced.cache.redis.tls.certKey` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_CERT` | — | No |
-| `spec.config.advanced.cache.redis.tls.keyKey` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_KEY` | — | No |
-| `spec.config.advanced.cache.redis.tls.caKey` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_CA` | — | No |
-| `spec.config.advanced.cache.redis.tls.skipVerify` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_TLS_SKIP_VERIFY` | — | No |
-| `spec.config.advanced.cache.redis.tls.minTLSVersion` | `BINDPLANE_ADVANCED_CACHE_REDIS_TLS_MIN_TLSVERSION` | — | No |
-
-`passwordSecretRef` takes precedence over `password` when both are set.
-
-When `tls.secretName` is set, the operator mounts the Secret at `/etc/bindplane/advanced-cache-redis-tls` and sets the TLS env vars to the corresponding file paths. Specify only the Secret name and key names; the operator manages the mount path.
-
-Example (Redis without TLS):
-
-```yaml
-spec:
-  config:
-    advanced:
-      cache:
-        type: redis
-        redis:
-          address: redis.default.svc:6379
-          passwordSecretRef:
-            name: redis-credentials
-            key: password
-          db: 1
-          readTimeout: "5s"
-          writeTimeout: "5s"
-```
-
-Example (Redis with TLS):
-
-```yaml
-spec:
-  config:
-    advanced:
-      cache:
-        type: redis
-        redis:
-          address: redis.default.svc:6379
-          passwordSecretRef:
-            name: redis-credentials
-            key: password
-          enableTLS: true
-          tls:
-            secretName: redis-tls
-            certKey: tls.crt
-            keyKey: tls.key
-            caKey: ca.crt
-            minTLSVersion: "1.3"
 ```
 
 ## Agents
@@ -1084,14 +688,9 @@ The `spec.config.agents` section configures how Bindplane communicates with agen
 |---|---|---|---|
 | `spec.config.agents.auth.type` | `BINDPLANE_AGENTS_AUTH_TYPE` | `secretKey` | No |
 | `spec.config.agents.auth.secretKey.headers` | `BINDPLANE_AGENTS_AUTH_SECRET_KEY_HEADERS` | `X-Bindplane-Authorization,Authorization` | No |
-| `spec.config.agents.auth.oauth.issuer` | `BINDPLANE_AGENTS_AUTH_OAUTH_ISSUER` | — | No |
-| `spec.config.agents.auth.oauth.audiences` | `BINDPLANE_AGENTS_AUTH_OAUTH_AUDIENCES` | — | No |
-| `spec.config.agents.auth.oauth.requiredClaims` | `BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_CLAIMS` | — | No |
-| `spec.config.agents.auth.oauth.requiredScopes` | `BINDPLANE_AGENTS_AUTH_OAUTH_REQUIRED_SCOPES` | — | No |
-| `spec.config.agents.auth.oauth.cacheTTL` | `BINDPLANE_AGENTS_AUTH_OAUTH_CACHE_TTL` | `1h` | No |
 
-`auth.type` accepts a single value or a comma-separated list (e.g. `"oauth,secretKey"`).
-`[]string` fields (headers, audiences, requiredClaims, requiredScopes) are comma-separated in the env var.
+`auth.type` accepts `secretKey`.
+`[]string` fields (headers) are comma-separated in the env var.
 
 ### Heartbeat
 
@@ -1109,81 +708,16 @@ The `spec.config.agents` section configures how Bindplane communicates with agen
 | `spec.config.agents.rebalancePercentage` | `BINDPLANE_AGENTS_REBALANCE_PERCENTAGE` | `0` | No |
 | `spec.config.agents.rebalanceJitter` | `BINDPLANE_AGENTS_REBALANCE_JITTER` | `0` | No |
 
-### Connections
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.agents.maxSimultaneousConnections` | `BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS` | `10` | No |
-| `spec.config.agents.enableConnectionRegistryMiddleware` | `BINDPLANE_AGENTS_ENABLE_CONNECTION_REGISTRY_MIDDLEWARE` | `false` | No |
-| `spec.config.agents.connectionRegistryHeartbeatInterval` | `BINDPLANE_AGENTS_CONNECTION_REGISTRY_HEARTBEAT_INTERVAL` | `15s` | No |
-| `spec.config.agents.connectionRegistryStaleDuration` | `BINDPLANE_AGENTS_CONNECTION_REGISTRY_STALE_DURATION` | `45s` | No |
-| `spec.config.agents.connectionRegistryLockTimeout` | `BINDPLANE_AGENTS_CONNECTION_REGISTRY_LOCK_TIMEOUT` | `2s` | No |
-| `spec.config.agents.connectionClaimTimeout` | `BINDPLANE_AGENTS_CONNECTION_CLAIM_TIMEOUT` | `3s` | No |
-
-See [Max concurrency](#max-concurrency) for details. Do not modify unless directed by Bindplane support.
-
 `rebalancePercentage` and `rebalanceJitter` are integers in the range 0–100. A value of 0 disables that feature.
-
-`connectionRegistryStaleDuration` must be greater than `connectionRegistryHeartbeatInterval`. `connectionClaimTimeout` must be greater than `connectionRegistryLockTimeout`. These fields only take effect when `enableConnectionRegistryMiddleware` is `true`.
-
-### Duplication Prevention
-
-`spec.config.agents.duplicationPrevention` configures detection and handling of duplicate agent connections (the same agent connecting from multiple sources). All fields are optional; defaults are shown in the table below.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.agents.duplicationPrevention.enableMiddleware` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_MIDDLEWARE` | `false` | No |
-| `spec.config.agents.duplicationPrevention.reassignID` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGN_ID` | `false` | No |
-| `spec.config.agents.duplicationPrevention.detectionStrategy` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_DETECTION_STRATEGY` | — | No |
-| `spec.config.agents.duplicationPrevention.detectionGracePeriod` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_DETECTION_GRACE_PERIOD` | `3m` | No |
-| `spec.config.agents.duplicationPrevention.minGracePeriodFailures` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_MIN_GRACE_PERIOD_FAILURES` | `3` | No |
-| `spec.config.agents.duplicationPrevention.retryAfter` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_RETRY_AFTER` | `30s` | No |
-| `spec.config.agents.duplicationPrevention.maxReassignmentAttempts` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_MAX_REASSIGNMENT_ATTEMPTS` | `3` | No |
-| `spec.config.agents.duplicationPrevention.reassignmentCacheTTL` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGNMENT_CACHE_TTL` | `24h` | No |
-| `spec.config.agents.duplicationPrevention.reassignmentRetryAfter` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_REASSIGNMENT_RETRY_AFTER` | `5m` | No |
-| `spec.config.agents.duplicationPrevention.enableDuplicateNotifications` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_DUPLICATE_NOTIFICATIONS` | `false` | No |
-| `spec.config.agents.duplicationPrevention.enablePerOrgEnforcement` | `BINDPLANE_AGENTS_DUPLICATE_PREVENTION_ENABLE_PER_ORG_ENFORCEMENT` | `false` | No |
-
-- `detectionStrategy` must be `grace_period` when set.
-- `detectionGracePeriod` must be >= `connectionRegistryStaleDuration`. Used with the `grace_period` strategy.
-- `minGracePeriodFailures`: both the grace period duration and this count must be satisfied before confirming a duplicate (minimum 1).
-- `retryAfter`: Retry-After header value sent during the grace period window.
-- `maxReassignmentAttempts`: valid range 1–10.
-- `reassignmentCacheTTL`: maximum 7d.
-- `reassignmentRetryAfter`: maximum 1h; sent when permanently rejecting after max attempts.
 
 ```yaml
 spec:
   config:
     agents:
-      auth:
-        type: "oauth,secretKey"
-        oauth:
-          issuer: "https://auth.example.com"
-          audiences:
-            - "https://api.example.com"
-          cacheTTL: "2h"
       heartbeatInterval: "45s"
       heartbeatTTL: "2m"
       rebalanceInterval: "30m"
       rebalancePercentage: 50
-      enableConnectionRegistryMiddleware: true
-      connectionRegistryHeartbeatInterval: "20s"
-      connectionRegistryStaleDuration: "60s"
-      connectionRegistryLockTimeout: "3s"
-      connectionClaimTimeout: "5s"
-      duplicationPrevention:
-        enableMiddleware: true
-        reassignID: true
-        detectionStrategy: grace_period
-        detectionGracePeriod: "3m"
-        minGracePeriodFailures: 3
-        retryAfter: "30s"
-        maxReassignmentAttempts: 3
-        reassignmentCacheTTL: "24h"
-        reassignmentRetryAfter: "5m"
-        enableDuplicateNotifications: true
-        enablePerOrgEnforcement: true
 ```
 
 ## Agent versions
@@ -1194,304 +728,14 @@ When omitted, Bindplane uses its own defaults.
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.agentVersions.syncInterval` | `BINDPLANE_AGENT_VERSIONS_SYNC_INTERVAL` | `1h` | No |
-| `spec.config.agentVersions.clients` | `BINDPLANE_AGENT_VERSIONS_CLIENTS` | — | No |
 
 `syncInterval` must be at least `1h` (enforced by Bindplane at runtime).
-`clients` is a deprecated field; version clients are now configured per-agent-type via AgentType resources.
-`clients` is a comma-separated list of version client identifiers (e.g. `"bdot,github"`).
 
 ```yaml
 spec:
   config:
     agentVersions:
       syncInterval: "2h"
-      clients:
-        - bdot
-        - github
-```
-
-## SaaS
-
-The `spec.config.saas` section configures Bindplane SaaS-specific functionality including the license server and Stripe billing.
-When omitted, SaaS mode is disabled.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.saas.enabled` | `BINDPLANE_SAAS_ENABLED` | `false` | No |
-| `spec.config.saas.licenseServerAddress` | `BINDPLANE_SAAS_LICENSE_SERVER_ADDRESS` | — | No |
-| `spec.config.saas.licenseServerAPIKey` | `BINDPLANE_SAAS_LICENSE_SERVER_API_KEY` | — | No |
-| `spec.config.saas.licenseServerAPIKeySecretRef` | `BINDPLANE_SAAS_LICENSE_SERVER_API_KEY` | — | No |
-| `spec.config.saas.useStagePublicRSAKey` | `BINDPLANE_SAAS_USE_STAGE_PUBLIC_RSA_KEY` | `false` | No |
-
-`licenseServerAPIKeySecretRef` takes precedence over `licenseServerAPIKey` when both are set.
-
-### Stripe
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.saas.stripe.enabled` | `BINDPLANE_SAAS_STRIPE_ENABLED` | `false` | No |
-| `spec.config.saas.stripe.secretKey` | `BINDPLANE_SAAS_STRIPE_SECRET_KEY` | — | No |
-| `spec.config.saas.stripe.secretKeySecretRef` | `BINDPLANE_SAAS_STRIPE_SECRET_KEY` | — | No |
-| `spec.config.saas.stripe.publishableKey` | `BINDPLANE_SAAS_STRIPE_PUBLISHABLE_KEY` | — | No |
-| `spec.config.saas.stripe.publishableKeySecretRef` | `BINDPLANE_SAAS_STRIPE_PUBLISHABLE_KEY` | — | No |
-| `spec.config.saas.stripe.webhookSecret` | `BINDPLANE_SAAS_STRIPE_WEBHOOK_SECRET` | — | No |
-| `spec.config.saas.stripe.webhookSecretSecretRef` | `BINDPLANE_SAAS_STRIPE_WEBHOOK_SECRET` | — | No |
-| `spec.config.saas.stripe.growthPlanIDs.baseRate` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_BASE_RATE` | — | No |
-| `spec.config.saas.stripe.growthPlanIDs.usageRates` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_IDS_USAGE_RATES` | — | No |
-| `spec.config.saas.stripe.growthPlanMeterNames.logs` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_LOGS` | — | No |
-| `spec.config.saas.stripe.growthPlanMeterNames.metrics` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_METRICS` | — | No |
-| `spec.config.saas.stripe.growthPlanMeterNames.traces` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_TRACES` | — | No |
-| `spec.config.saas.stripe.growthPlanMeterNames.collectors` | `BINDPLANE_SAAS_STRIPE_GROWTH_PLAN_METER_NAMES_COLLECTORS` | — | No |
-| `spec.config.saas.stripe.meterReportInterval` | `BINDPLANE_SAAS_STRIPE_METER_REPORT_INTERVAL` | `6h` | No |
-
-Secret references for Stripe keys take precedence over plain-value fields when both are set. Prefer Secret references in production.
-
-## Features
-
-The `spec.config.features` section configures the feature flag backend and enables optional feature overrides.
-When omitted, feature flags are disabled and all overrides default to `false`.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.features.type` | `BINDPLANE_FEATURES_TYPE` | — | No |
-
-`type` accepts: `posthog`.
-
-### PostHog
-
-PostHog is the supported feature flag backend. When `type: posthog` is set, configure the connection via the fields below. API keys may be provided as plain values or as Secret references; the Secret reference takes precedence when both are set.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.features.postHog.projectAPIKey` | `BINDPLANE_FEATURES_POSTHOG_PROJECT_API_KEY` | — | No |
-| `spec.config.features.postHog.projectAPIKeySecretRef` | `BINDPLANE_FEATURES_POSTHOG_PROJECT_API_KEY` | — | No |
-| `spec.config.features.postHog.personalAPIKey` | `BINDPLANE_FEATURES_POSTHOG_PERSONAL_API_KEY` | — | No |
-| `spec.config.features.postHog.personalAPIKeySecretRef` | `BINDPLANE_FEATURES_POSTHOG_PERSONAL_API_KEY` | — | No |
-| `spec.config.features.postHog.endpoint` | `BINDPLANE_FEATURES_POSTHOG_ENDPOINT` | — | No |
-| `spec.config.features.postHog.defaultFeatureFlagsPollingInterval` | `BINDPLANE_FEATURES_POSTHOG_DEFAULT_FEATURE_FLAGS_POLLING_INTERVAL` | — | No |
-| `spec.config.features.postHog.featureFlagRequestTimeout` | `BINDPLANE_FEATURES_POSTHOG_FEATURE_FLAG_REQUEST_TIMEOUT` | `30s` | No |
-
-### Feature overrides
-
-Feature overrides allow individual features to be force-enabled regardless of the feature flag backend result.
-All override fields are boolean and default to `false`.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.features.overrides.growthLicense` | `BINDPLANE_FEATURES_OVERRIDES_GROWTH_LICENSE` | `false` | No |
-| `spec.config.features.overrides.secopsTheme` | `BINDPLANE_FEATURES_OVERRIDES_SECOPS_THEME` | `false` | No |
-| `spec.config.features.overrides.secopsIntegration` | `BINDPLANE_FEATURES_OVERRIDES_SECOPS_INTEGRATION` | `false` | No |
-| `spec.config.features.overrides.llmFeatures` | `BINDPLANE_FEATURES_OVERRIDES_LLM_FEATURES` | `false` | No |
-| `spec.config.features.overrides.pipelineIntelligence` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE` | `false` | No |
-| `spec.config.features.overrides.pipelineIntelligenceSnapshotLogTypes` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SNAPSHOT_LOG_TYPES` | `false` | No |
-| `spec.config.features.overrides.pipelineIntelligenceOtelConfigImport` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_OTEL_CONFIG_IMPORT` | `false` | No |
-| `spec.config.features.overrides.pipelineIntelligenceChronicleForwarderConfigImport` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_CHRONICLE_FORWARDER_CONFIG_IMPORT` | `false` | No |
-| `spec.config.features.overrides.pipelineIntelligenceParseField` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_PARSE_FIELD` | `false` | No |
-| `spec.config.features.overrides.pipelineIntelligenceGenerateProcessors` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_GENERATE_PROCESSORS` | `false` | No |
-| `spec.config.features.overrides.rawConfigLegacy` | `BINDPLANE_FEATURES_OVERRIDES_RAW_CONFIG_LEGACY` | `false` | No |
-| `spec.config.features.overrides.notifications` | `BINDPLANE_FEATURES_OVERRIDES_NOTIFICATIONS` | `false` | No |
-| `spec.config.features.overrides.secopsGcsIntegration` | `BINDPLANE_FEATURES_OVERRIDES_SECOPS_GCS_INTEGRATION` | `false` | No |
-| `spec.config.features.overrides.snapshotPipelineIntelligence` | `BINDPLANE_FEATURES_OVERRIDES_SNAPSHOT_PIPELINE_INTELLIGENCE` | `false` | No |
-| `spec.config.features.overrides.pipelineIntelligenceSplunkConfigImport` | `BINDPLANE_FEATURES_OVERRIDES_PIPELINE_INTELLIGENCE_SPLUNK_CONFIG_IMPORT` | `false` | No |
-| `spec.config.features.overrides.rawLogMetricViews` | `BINDPLANE_FEATURES_OVERRIDES_RAW_LOG_METRIC_VIEWS` | `false` | No |
-| `spec.config.features.overrides.vault` | `BINDPLANE_FEATURES_OVERRIDES_VAULT` | `false` | No |
-| `spec.config.features.overrides.auth0SSO` | `BINDPLANE_FEATURES_OVERRIDES_AUTH0_SSO` | `false` | No |
-| `spec.config.features.overrides.aixPlatform` | `BINDPLANE_FEATURES_OVERRIDES_AIX_PLATFORM` | `false` | No |
-| `spec.config.features.overrides.advancedPipelineEditor` | `BINDPLANE_FEATURES_OVERRIDES_ADVANCED_PIPELINE_EDITOR` | `false` | No |
-| `spec.config.features.overrides.identityTablesDualWrite` | `BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_DUAL_WRITE` | `false` | No |
-| `spec.config.features.overrides.identityTablesCutover` | `BINDPLANE_FEATURES_OVERRIDES_IDENTITY_TABLES_CUTOVER` | `false` | No |
-| `spec.config.features.overrides.v2Configuration` | `BINDPLANE_FEATURES_OVERRIDES_V2_CONFIGURATION` | `false` | No |
-| `spec.config.features.overrides.v2Connectors` | `BINDPLANE_FEATURES_OVERRIDES_V2_CONNECTORS` | `false` | No |
-| `spec.config.features.overrides.bindplaneBlueprints` | `BINDPLANE_FEATURES_OVERRIDES_BINDPLANE_BLUEPRINTS` | `false` | No |
-| `spec.config.features.overrides.fleets` | `BINDPLANE_FEATURES_OVERRIDES_FLEETS` | `false` | No |
-
-## Errors
-
-The `spec.config.errors` section configures error tracking (e.g., BetterStack). When omitted, error tracking is disabled.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.errors.enabled` | `BINDPLANE_ERRORS_ENABLED` | `false` | No |
-| `spec.config.errors.backendDSN` | `BINDPLANE_ERRORS_BACKEND_DSN` | — | No |
-| `spec.config.errors.frontendDSN` | `BINDPLANE_ERRORS_FRONTEND_DSN` | — | No |
-| `spec.config.errors.environment` | `BINDPLANE_ERRORS_ENVIRONMENT` | — | No |
-| `spec.config.errors.release` | `BINDPLANE_ERRORS_RELEASE` | — | No |
-| `spec.config.errors.tracesSampleRate` | `BINDPLANE_ERRORS_TRACES_SAMPLE_RATE` | — | No |
-| `spec.config.errors.debug` | `BINDPLANE_ERRORS_DEBUG` | `false` | No |
-
-`backendDSN` and `frontendDSN` are service-specific DSNs (e.g., BetterStack ingest DSN). `environment` is reported to the error tracking service (e.g., `"production"`, `"staging"`).
-## LLM
-
-The `spec.config.llm` section configures large language model integrations. When omitted, LLM features are disabled.
-
-### Gemini
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.llm.gemini.projectID` | `BINDPLANE_LLM_GEMINI_PROJECT_ID` | — | No |
-| `spec.config.llm.gemini.location` | `BINDPLANE_LLM_GEMINI_LOCATION` | — | No |
-| `spec.config.llm.gemini.credentialsFile` | `BINDPLANE_LLM_GEMINI_CREDENTIALS_FILE` | — | No |
-| `spec.config.llm.gemini.maxTokens` | `BINDPLANE_LLM_GEMINI_MAX_TOKENS` | — | No |
-| `spec.config.llm.gemini.vectorSearchRedis.address` | `BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ADDRESS` | — | No |
-| `spec.config.llm.gemini.vectorSearchRedis.enableTLS` | `BINDPLANE_LLM_GEMINI_VECTOR_SEARCH_REDIS_ENABLE_TLS` | `false` | No |
-
-### LangSmith
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.llm.langsmith.enabled` | `BINDPLANE_LLM_LANGSMITH_ENABLED` | `false` | No |
-| `spec.config.llm.langsmith.apiKey` | `BINDPLANE_LLM_LANGSMITH_API_KEY` | — | No |
-| `spec.config.llm.langsmith.apiKeySecretRef` | `BINDPLANE_LLM_LANGSMITH_API_KEY` | — | No |
-| `spec.config.llm.langsmith.projectName` | `BINDPLANE_LLM_LANGSMITH_PROJECT_NAME` | — | No |
-| `spec.config.llm.langsmith.url` | `BINDPLANE_LLM_LANGSMITH_URL` | — | No |
-| `spec.config.llm.langsmith.sanitizeContent` | `BINDPLANE_LLM_LANGSMITH_SANITIZE_CONTENT` | `true` | No |
-| `spec.config.llm.langsmith.tags` | `BINDPLANE_LLM_LANGSMITH_TAGS` | — | No |
-
-### OpenAI
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.llm.openai.apiKey` | `BINDPLANE_LLM_OPENAI_API_KEY` | — | No |
-| `spec.config.llm.openai.apiKeySecretRef` | `BINDPLANE_LLM_OPENAI_API_KEY` | — | No |
-
-### Anthropic
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.llm.anthropic.apiKey` | `BINDPLANE_LLM_ANTHROPIC_API_KEY` | — | No |
-| `spec.config.llm.anthropic.apiKeySecretRef` | `BINDPLANE_LLM_ANTHROPIC_API_KEY` | — | No |
-
-For `apiKey` and `apiKeySecretRef`, the Secret reference takes precedence when both are set. Prefer Secret references in production.
-
-## Quotas
-
-The `spec.config.quotas` section configures usage quota enforcement. When omitted, Bindplane uses its own defaults.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.quotas.enabled` | `BINDPLANE_QUOTAS_ENABLED` | `false` | No |
-| `spec.config.quotas.enforced` | `BINDPLANE_QUOTAS_ENFORCED` | `false` | No |
-| `spec.config.quotas.projects.enabled` | `BINDPLANE_QUOTAS_PROJECTS_ENABLED` | `false` | No |
-| `spec.config.quotas.projects.enforced` | `BINDPLANE_QUOTAS_PROJECTS_ENFORCED` | `false` | No |
-| `spec.config.quotas.projects.default.maxAgents` | `BINDPLANE_QUOTAS_PROJECTS_DEFAULT_MAX_AGENTS` | — | No |
-| `spec.config.quotas.organizations.enabled` | `BINDPLANE_QUOTAS_ORGANIZATIONS_ENABLED` | `false` | No |
-| `spec.config.quotas.organizations.enforced` | `BINDPLANE_QUOTAS_ORGANIZATIONS_ENFORCED` | `false` | No |
-| `spec.config.quotas.organizations.default.maxAgents` | `BINDPLANE_QUOTAS_ORGANIZATIONS_DEFAULT_MAX_AGENTS` | — | No |
-
-`enabled` activates quota tracking; `enforced` causes violations to be rejected rather than only logged. The same semantics apply to `projects` and `organizations`. `default.maxAgents` sets the maximum number of agents allowed per project or organization by default.
-
-```yaml
-spec:
-  config:
-    saas:
-      enabled: true
-      licenseServerAddress: "https://license.bindplane.com"
-      licenseServerAPIKeySecretRef:
-        name: bindplane-secrets
-        key: saas-license-api-key
-      stripe:
-        enabled: true
-        secretKeySecretRef:
-          name: bindplane-secrets
-          key: stripe-secret-key
-        publishableKeySecretRef:
-          name: bindplane-secrets
-          key: stripe-publishable-key
-        webhookSecretSecretRef:
-          name: bindplane-secrets
-          key: stripe-webhook-secret
-        growthPlanIDs:
-          baseRate: "price_xxx"
-          usageRates: "price_yyy,price_zzz"
-        growthPlanMeterNames:
-          logs: "log_volume"
-          metrics: "metric_volume"
-          traces: "trace_volume"
-          collectors: "collector_count"
-```
-
-## Encryption provider
-
-The `spec.config.encryptionProvider` section configures at-rest encryption of sensitive store data. When omitted, Bindplane uses its built-in encryption.
-
-| CRD Field | Environment Variable | Default | Required |
-|---|---|---|---|
-| `spec.config.encryptionProvider.type` | `BINDPLANE_ENCRYPTIONPROVIDER_TYPE` | — | No |
-| `spec.config.encryptionProvider.googleKMS.projectID` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_PROJECTID` | — | No |
-| `spec.config.encryptionProvider.googleKMS.location` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_LOCATION` | — | No |
-| `spec.config.encryptionProvider.googleKMS.keyRotationPeriod` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_ROTATION_PERIOD` | — | No |
-| `spec.config.encryptionProvider.googleKMS.keyDeletionJob` | `BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB` | `false` | No |
-| `spec.config.encryptionProvider.cache.capacity` | `BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CAPACITY` | — | No |
-| `spec.config.encryptionProvider.cache.cacheTimeout` | `BINDPLANE_ENCRYPTIONPROVIDER_CACHE_CACHE_TIMEOUT` | `2m` | No |
-
-`type` must be `googleKMS` when set. `keyDeletionJob` is injected only into the **Jobs Migrate** workload — it is not set on Node, NATS, or Jobs.
-
-```yaml
-spec:
-  config:
-    encryptionProvider:
-      type: googleKMS
-      googleKMS:
-        projectID: my-gcp-project
-        location: us-central1
-        keyRotationPeriod: 30d
-        keyDeletionJob: true
-```
-
-```yaml
-spec:
-  config:
-    features:
-      type: posthog
-      postHog:
-        projectAPIKeySecretRef:
-          name: bindplane-secrets
-          key: posthog-project-api-key
-        personalAPIKeySecretRef:
-          name: bindplane-secrets
-          key: posthog-personal-api-key
-        endpoint: "https://app.posthog.com"
-        defaultFeatureFlagsPollingInterval: "30s"
-      overrides:
-        growthLicense: true
-        pipelineIntelligence: true
-```
-
-```yaml
-spec:
-  config:
-    errors:
-      enabled: true
-      backendDSN: "https://errors.example.com/backend-dsn"
-      frontendDSN: "https://errors.example.com/frontend-dsn"
-      environment: production
-    llm:
-      gemini:
-        projectID: my-gcp-project
-        location: us-central1
-        vectorSearchRedis:
-          address: "redis.example.com:6379"
-          enableTLS: true
-      langsmith:
-        enabled: true
-        apiKeySecretRef:
-          name: llm-secrets
-          key: langsmith-api-key
-        projectName: bindplane-prod
-      openai:
-        apiKeySecretRef:
-          name: llm-secrets
-          key: openai-api-key
-      anthropic:
-        apiKeySecretRef:
-          name: llm-secrets
-          key: anthropic-api-key
-    quotas:
-      enabled: true
-      enforced: true
-      projects:
-        enabled: true
-        enforced: false
 ```
 
 ## Extra environment variables
