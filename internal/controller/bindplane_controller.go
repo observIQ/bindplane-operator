@@ -243,6 +243,10 @@ const (
 	bindplaneLoggingLevelEnvVar = "BINDPLANE_LOGGING_LEVEL"
 	bindplaneLoggingTypeEnvVar  = "BINDPLANE_LOGGING_TYPE"
 
+	// Status check endpoint configuration
+	bindplaneStatusEnabledEnvVar = "BINDPLANE_STATUS_ENABLED"
+	bindplaneStatusKeysEnvVar    = "BINDPLANE_STATUS_KEYS"
+
 	// Advanced server (OpAMP shutdown tuning — used by the OpAMP component)
 	bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar = "BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET"
 

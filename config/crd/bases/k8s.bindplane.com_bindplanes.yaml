@@ -12534,6 +12534,35 @@ spec:
                       webURL:
                         type: string
                     type: object
+                  status:
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                      keys:
+                        items:
+                          type: string
+                        type: array
+                      keysSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - message: at least one key must be configured when status is
+                        enabled
+                      rule: '!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))'
                   store:
                     properties:
                       eventMergeWindow:

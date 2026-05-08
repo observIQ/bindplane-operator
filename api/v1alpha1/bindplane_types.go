@@ -374,6 +374,10 @@ type BindplaneConfigSpec struct {
 	// +optional
 	EventBus *EventBusConfig `json:"eventBus,omitempty"`
 
+	// Status configures the Bindplane status check endpoints.
+	// +optional
+	Status *StatusConfig `json:"status,omitempty"`
+
 	// Logging configures the Bindplane log level and output destination.
 	// +optional
 	Logging *LoggingConfig `json:"logging,omitempty"`
@@ -385,6 +389,26 @@ type BindplaneConfigSpec struct {
 	// AgentVersions configures agent version sync behavior.
 	// +optional
 	AgentVersions *AgentVersionsConfig `json:"agentVersions,omitempty"`
+}
+
+// StatusConfig configures the Bindplane status check endpoints.
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))",message="at least one key must be configured when status is enabled"
+type StatusConfig struct {
+	// Enabled controls whether the status check endpoints are enabled.
+	// Defaults to true.
+	// +kubebuilder:default=true
+	Enabled bool `json:"enabled"`
+
+	// Keys are UUIDs used to authenticate requests to the status check endpoints.
+	// Supports multiple keys to allow rotation. At least one is required when enabled is true.
+	// +optional
+	Keys []string `json:"keys,omitempty"`
+
+	// KeysSecretRef references a Kubernetes Secret containing status check keys.
+	// The secret value should be comma-delimited UUIDs to support rotation.
+	// Takes precedence over Keys if both are set.
+	// +optional
+	KeysSecretRef *corev1.SecretKeySelector `json:"keysSecretRef,omitempty"`
 }
 
 // AgentsConfig configures how Bindplane communicates with agents.

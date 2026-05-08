@@ -21,6 +21,7 @@ package validation
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -33,6 +34,9 @@ import (
 // maxResourceNamePrefixLen is the maximum length for the Bindplane name prefix so that
 // derived resource names (e.g. "<name>-transform-agent") fit within the 63-character limit.
 const maxResourceNamePrefixLen = 63 - 1 - len("transform-agent") // 47
+
+// uuidRegex matches standard UUID format (case-insensitive).
+var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // reservedExtraEnvNames is the set of exact env var names that may never be set via extraEnv
 // because they are always managed by the operator.
@@ -82,6 +86,9 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 	}
 
 	if err := ValidateLicenseConfig(&bindplane.Spec.Config); err != nil {
+		return err
+	}
+	if err := ValidateStatusConfig(&bindplane.Spec.Config); err != nil {
 		return err
 	}
 	if err := ValidateAuthConfig(&bindplane.Spec.Config); err != nil {
@@ -201,6 +208,23 @@ func ValidateLicenseConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error 
 	hasLicenseSecretRef := config.LicenseSecretRef != nil
 	if hasLicense == hasLicenseSecretRef {
 		return fmt.Errorf("exactly one of spec.config.license or spec.config.licenseSecretRef must be set")
+	}
+	return nil
+}
+
+// ValidateStatusConfig ensures status check keys are valid UUIDs when set inline.
+func ValidateStatusConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
+	if config == nil || config.Status == nil {
+		return nil
+	}
+	s := config.Status
+	if s.Enabled && len(s.Keys) == 0 && s.KeysSecretRef == nil {
+		return fmt.Errorf("at least one key must be configured when status is enabled")
+	}
+	for i, key := range s.Keys {
+		if !uuidRegex.MatchString(key) {
+			return fmt.Errorf("spec.config.status.keys[%d]: %q is not a valid UUID", i, key)
+		}
 	}
 	return nil
 }
