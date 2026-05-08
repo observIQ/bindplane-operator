@@ -135,54 +135,6 @@ func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig) []corev1.EnvVar {
 	}
 	envVars = append(envVars, getLDAPEnvVars(auth.LDAP)...)
 	envVars = append(envVars, getOIDCEnvVars(auth.OIDC)...)
-	envVars = append(envVars, getAuth0EnvVars(auth.Auth0)...)
-	return envVars
-}
-
-// getAuth0EnvVars returns env vars for spec.config.auth.auth0.
-// Returns nil when auth0 is nil.
-func getAuth0EnvVars(a *bindplanev1alpha1.Auth0Config) []corev1.EnvVar {
-	if a == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if a.ClientID != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0ClientIDEnvVar, Value: a.ClientID})
-	}
-	if a.Domain != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0DomainEnvVar, Value: a.Domain})
-	}
-	if a.Audience != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0AudienceEnvVar, Value: a.Audience})
-	}
-	if a.ManagementDomain != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0ManagementDomainEnvVar, Value: a.ManagementDomain})
-	}
-	if a.ManagementClientID != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0ManagementClientIDEnvVar, Value: a.ManagementClientID})
-	}
-	if ev := secretOrValue(bindplaneAuth0ManagementClientSecretEnvVar, a.ManagementClientSecret, a.ManagementClientSecretSecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if sso := a.SSO; sso != nil {
-		if sso.Enabled {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0SSOEnabledEnvVar, Value: "true"})
-		}
-		if sso.SelfServiceProfileID != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0SSOSelfServiceProfileIDEnvVar, Value: sso.SelfServiceProfileID})
-		}
-	}
-	if wif := a.WIF; wif != nil {
-		if wif.ClientID != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0WIFClientIDEnvVar, Value: wif.ClientID})
-		}
-		if ev := secretOrValue(bindplaneAuth0WIFClientSecretEnvVar, wif.ClientSecret, wif.ClientSecretSecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-		if wif.Audience != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuth0WIFAudienceEnvVar, Value: wif.Audience})
-		}
-	}
 	return envVars
 }
 
@@ -218,21 +170,6 @@ func getNetworkConfigEnvVars(network *bindplanev1alpha1.NetworkConfig, bindplane
 			if tls.SkipVerify {
 				envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSSkipVerifyEnvVar, Value: "true"})
 			}
-		}
-	}
-	if network != nil && network.RateLimits != nil {
-		rl := network.RateLimits
-		if rl.APIRate != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsAPIRateEnvVar, Value: rl.APIRate})
-		}
-		if rl.APIBurst > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsAPIBurstEnvVar, Value: strconv.Itoa(rl.APIBurst)})
-		}
-		if rl.GraphQLRate != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsGraphQLRateEnvVar, Value: rl.GraphQLRate})
-		}
-		if rl.GraphQLBurst > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneNetworkRateLimitsGraphQLBurstEnvVar, Value: strconv.Itoa(rl.GraphQLBurst)})
 		}
 	}
 	remoteURL := ""
@@ -338,11 +275,6 @@ func getTracingConfigEnvVars(tracing *bindplanev1alpha1.TracingConfig) []corev1.
 		}
 		if tracing.OTLP.Insecure {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingOTLPInsecureEnvVar, Value: "true"})
-		}
-	}
-	if tracing.Type == "honeycomb" && tracing.Honeycomb != nil {
-		if ev := secretOrValue(bindplaneTracingHoneycombAPIKeyEnvVar, tracing.Honeycomb.APIKey, tracing.Honeycomb.APIKeySecretRef); ev != nil {
-			envVars = append(envVars, *ev)
 		}
 	}
 	if tracing.SamplingRate != "" {
@@ -463,12 +395,6 @@ func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 	envVars = append(envVars, getMiscConfigEnvVars(config)...)
 	envVars = append(envVars, getAgentsConfigEnvVars(config.Agents)...)
 	envVars = append(envVars, getAgentVersionsConfigEnvVars(config.AgentVersions)...)
-	envVars = append(envVars, getSaaSConfigEnvVars(config.SaaS)...)
-	envVars = append(envVars, getEncryptionProviderEnvVars(config.EncryptionProvider)...)
-	envVars = append(envVars, getFeaturesConfigEnvVars(config.Features)...)
-	envVars = append(envVars, getErrorsConfigEnvVars(config.Errors)...)
-	envVars = append(envVars, getLLMConfigEnvVars(config.LLM)...)
-	envVars = append(envVars, getQuotasConfigEnvVars(config.Quotas)...)
 	return envVars
 }
 
@@ -618,67 +544,6 @@ func getTransformAgentEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.E
 	}
 }
 
-// getProfilingServiceNameDefault returns the default profiling service name for a component when spec does not set it.
-func getProfilingServiceNameDefault(component string) string {
-	switch component {
-	case nodeComponent:
-		return "bindplane-node"
-	case bindplaneJobsComponent:
-		return "bindplane-jobs"
-	case bindplaneJobsMigrateComponent:
-		return "bindplane-migrate"
-	case natsComponent:
-		return "bindplane-nats"
-	default:
-		return "bindplane-" + component
-	}
-}
-
-// getProfilingEnvVars returns env vars for spec.config.profiling (Google Cloud Profiler). Only adds vars when profiling is enabled.
-func getProfilingEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec, component string) []corev1.EnvVar {
-	if config == nil || config.Profiling == nil || !config.Profiling.Enabled {
-		return nil
-	}
-	p := config.Profiling
-	serviceName := getProfilingServiceNameDefault(component)
-	envVars := []corev1.EnvVar{
-		{Name: bindplaneProfilingEnabledEnvVar, Value: "true"},
-		{Name: bindplaneProfilingProjectIDEnvVar, Value: p.ProjectID},
-		{Name: bindplaneProfilingServiceNameEnvVar, Value: serviceName},
-	}
-	if p.NoCPU {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoCPUEnvVar, Value: "true"})
-	}
-	if p.NoAlloc {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoAllocEnvVar, Value: "true"})
-	}
-	if p.NoHeap {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoHeapEnvVar, Value: "true"})
-	}
-	if p.NoGoroutine {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingNoGoroutineEnvVar, Value: "true"})
-	}
-	if p.Mutex {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneProfilingMutexEnvVar, Value: "true"})
-	}
-	return envVars
-}
-
-// getPprofEnvVars returns env vars for spec.config.pprof. Only adds vars when pprof is enabled.
-func getPprofEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	if config == nil || config.Pprof == nil || !config.Pprof.Enabled {
-		return nil
-	}
-	endpoint := config.Pprof.Endpoint
-	if endpoint == "" {
-		endpoint = defaultPprofEndpoint
-	}
-	return []corev1.EnvVar{
-		{Name: bindplanePprofEnabledEnvVar, Value: "true"},
-		{Name: bindplanePprofEndpointEnvVar, Value: endpoint},
-	}
-}
-
 // getNatsClientEnvVars returns the NATS client environment variables for Node and Jobs deployments
 func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsClient bool) []corev1.EnvVar {
 	if !includeNatsClient {
@@ -701,46 +566,6 @@ func getNatsClientEnvVars(bindplane *bindplanev1alpha1.Bindplane, includeNatsCli
 		corev1.EnvVar{Name: bindplaneNatsClientSubjectEnvVar, Value: natsClientSubject},
 	)
 	envVars = append(envVars, tlsVars...)
-	return envVars
-}
-
-// getStatusEnvVars returns environment variables for the status check endpoint configuration.
-func getStatusEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	if config == nil || config.Status == nil {
-		return nil
-	}
-	s := config.Status
-	envVars := []corev1.EnvVar{
-		{Name: bindplaneStatusEnabledEnvVar, Value: strconv.FormatBool(s.Enabled)},
-	}
-	if s.KeysSecretRef != nil {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:      bindplaneStatusKeysEnvVar,
-			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: s.KeysSecretRef},
-		})
-	} else if len(s.Keys) > 0 {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  bindplaneStatusKeysEnvVar,
-			Value: strings.Join(s.Keys, ","),
-		})
-	}
-	return envVars
-}
-
-// getAnalyticsEnvVars returns env vars for spec.config.analytics.
-// Returns nil when analytics is nil (analytics enabled, no custom key).
-func getAnalyticsEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	if config == nil || config.Analytics == nil {
-		return nil
-	}
-	a := config.Analytics
-	var envVars []corev1.EnvVar
-	if a.Disabled {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAnalyticsDisabledEnvVar, Value: "true"})
-	}
-	if a.SegmentWriteKey != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAnalyticsSegmentWriteKeyEnvVar, Value: a.SegmentWriteKey})
-	}
 	return envVars
 }
 
@@ -800,17 +625,6 @@ func getLoggingConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []co
 		{Name: bindplaneLoggingLevelEnvVar, Value: level},
 		{Name: bindplaneLoggingTypeEnvVar, Value: loggingType},
 	}
-	if l.OTLP != nil {
-		if l.OTLP.Endpoint != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPEndpointEnvVar, Value: l.OTLP.Endpoint})
-		}
-		if l.OTLP.Insecure {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPInsecureEnvVar, Value: "true"})
-		}
-		if l.OTLP.Interval != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLoggingOTLPIntervalEnvVar, Value: l.OTLP.Interval})
-		}
-	}
 	return envVars
 }
 
@@ -830,24 +644,6 @@ func getAgentsConfigEnvVars(agents *bindplanev1alpha1.AgentsConfig) []corev1.Env
 		}
 		if auth.SecretKey != nil && len(auth.SecretKey.Headers) > 0 {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthSecretKeyHeadersEnvVar, Value: strings.Join(auth.SecretKey.Headers, ",")})
-		}
-		if auth.OAuth != nil {
-			oauth := auth.OAuth
-			if oauth.Issuer != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthIssuerEnvVar, Value: oauth.Issuer})
-			}
-			if len(oauth.Audiences) > 0 {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthAudiencesEnvVar, Value: strings.Join(oauth.Audiences, ",")})
-			}
-			if len(oauth.RequiredClaims) > 0 {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthRequiredClaimsEnvVar, Value: strings.Join(oauth.RequiredClaims, ",")})
-			}
-			if len(oauth.RequiredScopes) > 0 {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthRequiredScopesEnvVar, Value: strings.Join(oauth.RequiredScopes, ",")})
-			}
-			if oauth.CacheTTL != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsAuthOAuthCacheTTLEnvVar, Value: oauth.CacheTTL})
-			}
 		}
 	}
 
@@ -873,75 +669,6 @@ func getAgentsConfigEnvVars(agents *bindplanev1alpha1.AgentsConfig) []corev1.Env
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsRebalanceJitterEnvVar, Value: strconv.Itoa(*agents.RebalanceJitter)})
 	}
 
-	// Connection registry middleware
-	envVars = append(envVars, getAgentsConnectionRegistryEnvVars(agents)...)
-
-	// Duplication prevention
-	envVars = append(envVars, getAgentsDuplicationPreventionEnvVars(agents.DuplicationPrevention)...)
-
-	return envVars
-}
-
-// getAgentsConnectionRegistryEnvVars returns connection registry env vars for spec.config.agents.
-func getAgentsConnectionRegistryEnvVars(agents *bindplanev1alpha1.AgentsConfig) []corev1.EnvVar {
-	var envVars []corev1.EnvVar
-	if agents.EnableConnectionRegistryMiddleware {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsEnableConnectionRegistryMiddlewareEnvVar, Value: "true"})
-	}
-	if agents.ConnectionRegistryHeartbeatInterval != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionRegistryHeartbeatIntervalEnvVar, Value: agents.ConnectionRegistryHeartbeatInterval})
-	}
-	if agents.ConnectionRegistryStaleDuration != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionRegistryStaleDurationEnvVar, Value: agents.ConnectionRegistryStaleDuration})
-	}
-	if agents.ConnectionRegistryLockTimeout != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionRegistryLockTimeoutEnvVar, Value: agents.ConnectionRegistryLockTimeout})
-	}
-	if agents.ConnectionClaimTimeout != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsConnectionClaimTimeoutEnvVar, Value: agents.ConnectionClaimTimeout})
-	}
-	return envVars
-}
-
-// getAgentsDuplicationPreventionEnvVars returns env vars for spec.config.agents.duplicationPrevention.
-func getAgentsDuplicationPreventionEnvVars(dp *bindplanev1alpha1.AgentDuplicationPreventionConfig) []corev1.EnvVar {
-	if dp == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if dp.EnableMiddleware {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevEnableMiddlewareEnvVar, Value: "true"})
-	}
-	if dp.ReassignID {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevReassignIDEnvVar, Value: "true"})
-	}
-	if dp.DetectionStrategy != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevDetectionStrategyEnvVar, Value: dp.DetectionStrategy})
-	}
-	if dp.DetectionGracePeriod != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevDetectionGracePeriodEnvVar, Value: dp.DetectionGracePeriod})
-	}
-	if dp.MinGracePeriodFailures > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevMinGracePeriodFailuresEnvVar, Value: strconv.Itoa(dp.MinGracePeriodFailures)})
-	}
-	if dp.RetryAfter != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevRetryAfterEnvVar, Value: dp.RetryAfter})
-	}
-	if dp.MaxReassignmentAttempts > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevMaxReassignmentAttemptsEnvVar, Value: strconv.Itoa(dp.MaxReassignmentAttempts)})
-	}
-	if dp.ReassignmentCacheTTL != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevReassignmentCacheTTLEnvVar, Value: dp.ReassignmentCacheTTL})
-	}
-	if dp.ReassignmentRetryAfter != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevReassignmentRetryAfterEnvVar, Value: dp.ReassignmentRetryAfter})
-	}
-	if dp.EnableDuplicateNotifications {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevEnableDuplicateNotificationsEnvVar, Value: "true"})
-	}
-	if dp.EnablePerOrgEnforcement {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentsDupPrevEnablePerOrgEnforcementEnvVar, Value: "true"})
-	}
 	return envVars
 }
 
@@ -955,523 +682,42 @@ func getAgentVersionsConfigEnvVars(av *bindplanev1alpha1.AgentVersionsConfig) []
 	if av.SyncInterval != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentVersionsSyncIntervalEnvVar, Value: av.SyncInterval})
 	}
-	if len(av.Clients) > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAgentVersionsClientsEnvVar, Value: strings.Join(av.Clients, ",")})
-	}
 	return envVars
 }
 
-// getSaaSConfigEnvVars returns env vars for spec.config.saas.
-// Returns nil when saas is nil.
-func getSaaSConfigEnvVars(s *bindplanev1alpha1.SaaSConfig) []corev1.EnvVar {
-	if s == nil {
+// getStatusEnvVars returns environment variables for the status check endpoint configuration.
+func getStatusEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
+	if config == nil || config.Status == nil {
 		return nil
 	}
-	var envVars []corev1.EnvVar
-	if s.Enabled {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSEnabledEnvVar, Value: "true"})
+	s := config.Status
+	envVars := []corev1.EnvVar{
+		{Name: bindplaneStatusEnabledEnvVar, Value: strconv.FormatBool(s.Enabled)},
+	}
+	if s.KeysSecretRef != nil {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:      bindplaneStatusKeysEnvVar,
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: s.KeysSecretRef},
+		})
+	} else if len(s.Keys) > 0 {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  bindplaneStatusKeysEnvVar,
+			Value: strings.Join(s.Keys, ","),
+		})
 	}
-	if s.LicenseServerAddress != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSLicenseServerAddressEnvVar, Value: s.LicenseServerAddress})
-	}
-	if ev := secretOrValue(bindplaneSaaSLicenseServerAPIKeyEnvVar, s.LicenseServerAPIKey, s.LicenseServerAPIKeySecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	// NOTE: BINDPLANE_SAAS_JANITOR_ORGANIZATION is intentionally NOT exposed by
-	// the operator. Users who need to set it can do so via spec.bindplane.extraEnv
-	// with the operator started using --allow-bindplane-extra-env. See plans/05.
-	if s.UseStagePublicRSAKey {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSUseStagePublicRSAKeyEnvVar, Value: "true"})
-	}
-	envVars = append(envVars, getSaaSStripeEnvVars(s.Stripe)...)
-	return envVars
-}
-
-// getSaaSStripeEnvVars returns env vars for spec.config.saas.stripe.
-func getSaaSStripeEnvVars(stripe *bindplanev1alpha1.SaaSStripeConfig) []corev1.EnvVar {
-	if stripe == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if stripe.Enabled {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeEnabledEnvVar, Value: "true"})
-	}
-	if ev := secretOrValue(bindplaneSaaSStripeSecretKeyEnvVar, stripe.SecretKey, stripe.SecretKeySecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if ev := secretOrValue(bindplaneSaaSStripePublishableKeyEnvVar, stripe.PublishableKey, stripe.PublishableKeySecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if ev := secretOrValue(bindplaneSaaSStripeWebhookSecretEnvVar, stripe.WebhookSecret, stripe.WebhookSecretSecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if ids := stripe.GrowthPlanIDs; ids != nil {
-		if ids.BaseRate != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthPlanIDsBaseRateEnvVar, Value: ids.BaseRate})
-		}
-		if ids.UsageRates != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthPlanIDsUsageRatesEnvVar, Value: ids.UsageRates})
-		}
-	}
-	if mn := stripe.GrowthPlanMeterNames; mn != nil {
-		if mn.Logs != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesLogsEnvVar, Value: mn.Logs})
-		}
-		if mn.Metrics != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesMetricsEnvVar, Value: mn.Metrics})
-		}
-		if mn.Traces != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesTracesEnvVar, Value: mn.Traces})
-		}
-		if mn.Collectors != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeGrowthMeterNamesCollectorsEnvVar, Value: mn.Collectors})
-		}
-	}
-	if stripe.MeterReportInterval != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneSaaSStripeMeterReportIntervalEnvVar, Value: stripe.MeterReportInterval})
-	}
-	return envVars
-}
-
-// getQuotasConfigEnvVars returns env vars for spec.config.quotas.
-// Returns nil when quotas is nil (Bindplane uses its own defaults).
-func getQuotasConfigEnvVars(q *bindplanev1alpha1.QuotasConfig) []corev1.EnvVar {
-	if q == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if q.Enabled {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasEnabledEnvVar, Value: "true"})
-	}
-	if q.Enforced {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasEnforcedEnvVar, Value: "true"})
-	}
-	if q.Projects != nil {
-		if q.Projects.Enabled {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasProjectsEnabledEnvVar, Value: "true"})
-		}
-		if q.Projects.Enforced {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasProjectsEnforcedEnvVar, Value: "true"})
-		}
-		if q.Projects.Default != nil && q.Projects.Default.MaxAgents > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasProjectsDefaultMaxAgentsEnvVar, Value: strconv.Itoa(q.Projects.Default.MaxAgents)})
-		}
-	}
-	if q.Organizations != nil {
-		if q.Organizations.Enabled {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasOrganizationsEnabledEnvVar, Value: "true"})
-		}
-		if q.Organizations.Enforced {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasOrganizationsEnforcedEnvVar, Value: "true"})
-		}
-		if q.Organizations.Default != nil && q.Organizations.Default.MaxAgents > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneQuotasOrganizationsDefaultMaxAgentsEnvVar, Value: strconv.Itoa(q.Organizations.Default.MaxAgents)})
-		}
-	}
-	return envVars
-}
-
-// getFeaturesConfigEnvVars returns env vars for spec.config.features.
-// Returns nil when features is nil.
-func getFeaturesConfigEnvVars(f *bindplanev1alpha1.FeaturesConfig) []corev1.EnvVar {
-	if f == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if f.Type != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesTypeEnvVar, Value: f.Type})
-	}
-	if f.PostHog != nil {
-		envVars = append(envVars, getPostHogEnvVars(f.PostHog)...)
-	}
-	envVars = append(envVars, getFeatureOverridesEnvVars(f.Overrides)...)
-	return envVars
-}
-
-// getPostHogEnvVars returns env vars for the PostHog feature flag config.
-func getPostHogEnvVars(ph *bindplanev1alpha1.PostHogConfig) []corev1.EnvVar {
-	var envVars []corev1.EnvVar
-	if ev := secretOrValue(bindplaneFeaturesPostHogProjectAPIKeyEnvVar, ph.ProjectAPIKey, ph.ProjectAPIKeySecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if ev := secretOrValue(bindplaneFeaturesPostHogPersonalAPIKeyEnvVar, ph.PersonalAPIKey, ph.PersonalAPIKeySecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if ph.Endpoint != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesPostHogEndpointEnvVar, Value: ph.Endpoint})
-	}
-	if ph.DefaultFeatureFlagsPollingInterval != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesPostHogPollingIntervalEnvVar, Value: ph.DefaultFeatureFlagsPollingInterval})
-	}
-	if ph.FeatureFlagRequestTimeout != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesPostHogFeatureFlagRequestTimeoutEnvVar, Value: ph.FeatureFlagRequestTimeout})
-	}
-	return envVars
-}
-
-// getAdvancedStoreStatsEnvVars returns env vars for spec.config.advanced.store.stats.
-func getAdvancedStoreStatsEnvVars(s *bindplanev1alpha1.AdvancedStoreStatsConfig) []corev1.EnvVar {
-	if s == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if s.BatchFlushInterval != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar, Value: s.BatchFlushInterval})
-	}
-	if s.WorkerCount > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsWorkerCountEnvVar, Value: strconv.Itoa(s.WorkerCount)})
-	}
-	if s.EnableSorting {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsEnableSortingEnvVar, Value: "true"})
-	}
-	if s.MetricChannelSize > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar, Value: strconv.Itoa(s.MetricChannelSize)})
-	}
-	if s.BatchChannelSize > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar, Value: strconv.Itoa(s.BatchChannelSize)})
-	}
-	return envVars
-}
-
-// getAdvancedServerEnvVars returns env vars for spec.config.advanced.server.
-func getAdvancedServerEnvVars(srv *bindplanev1alpha1.AdvancedServerConfig) []corev1.EnvVar {
-	if srv == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if srv.MaxRequestBytes > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerMaxRequestBytesEnvVar, Value: strconv.FormatInt(srv.MaxRequestBytes, 10)})
-	}
-	if srv.ShutdownGracePeriod != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerShutdownGracePeriodEnvVar, Value: srv.ShutdownGracePeriod})
-	}
-	if srv.OpAMPShutdownGracePeriodTarget != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar, Value: srv.OpAMPShutdownGracePeriodTarget})
-	}
-	return envVars
-}
-
-// getAdvancedCacheRedisEnvVars returns env vars for spec.config.advanced.cache.redis.
-func getAdvancedCacheRedisEnvVars(r *bindplanev1alpha1.AdvancedCacheRedisConfig) []corev1.EnvVar {
-	if r == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if r.Address != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisAddressEnvVar, Value: r.Address})
-	}
-	if ev := secretOrValue(bindplaneAdvancedCacheRedisPasswordEnvVar, r.Password, r.PasswordSecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if r.DB > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisDBEnvVar, Value: strconv.Itoa(r.DB)})
-	}
-	if r.ReadTimeout != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisReadTimeoutEnvVar, Value: r.ReadTimeout})
-	}
-	if r.WriteTimeout != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisWriteTimeoutEnvVar, Value: r.WriteTimeout})
-	}
-	if r.EnableTLS {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisEnableTLSEnvVar, Value: "true"})
-	}
-	if r.TLS != nil && r.TLS.SecretName != "" {
-		tls := r.TLS
-		if tls.CertKey != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCertEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CertKey})
-		}
-		if tls.KeyKey != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSKeyEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.KeyKey})
-		}
-		if tls.CAKey != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSCAEnvVar, Value: advancedCacheRedisTLSMountPath + "/" + tls.CAKey})
-		}
-		if tls.SkipVerify {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar, Value: "true"})
-		}
-		if tls.MinTLSVersion != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheRedisTLSMinVersionEnvVar, Value: tls.MinTLSVersion})
-		}
-	}
-	return envVars
-}
-
-// getEncryptionProviderEnvVars returns env vars for spec.config.encryptionProvider.
-// Returns nil when encryptionProvider is nil (Bindplane uses its built-in encryption).
-// Note: BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is NOT included here;
-// it is injected directly into the Jobs Migrate workload only.
-func getEncryptionProviderEnvVars(ep *bindplanev1alpha1.EncryptionProviderConfig) []corev1.EnvVar {
-	if ep == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if ep.Type != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderTypeEnvVar, Value: ep.Type})
-	}
-	if ep.GoogleKMS != nil {
-		kms := ep.GoogleKMS
-		if kms.ProjectID != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSProjectIDEnvVar, Value: kms.ProjectID})
-		}
-		if kms.Location != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSLocationEnvVar, Value: kms.Location})
-		}
-		if kms.KeyRotationPeriod != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderGoogleKMSKeyRotationPeriodEnvVar, Value: kms.KeyRotationPeriod})
-		}
-	}
-	if ep.Cache != nil {
-		if ep.Cache.Capacity > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderCacheCapacityEnvVar, Value: strconv.Itoa(ep.Cache.Capacity)})
-		}
-		if ep.Cache.CacheTimeout != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneEncryptionProviderCacheCacheTimeoutEnvVar, Value: ep.Cache.CacheTimeout})
-		}
-	}
-	return envVars
-}
-
-// getFeatureOverridesEnvVars returns env vars for feature flag overrides.
-// Returns nil when overrides is nil.
-func getFeatureOverridesEnvVars(o *bindplanev1alpha1.FeatureOverridesConfig) []corev1.EnvVar {
-	if o == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if o.GrowthLicense {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesGrowthLicenseEnvVar, Value: "true"})
-	}
-	if o.SecopsTheme {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSecopsThemeEnvVar, Value: "true"})
-	}
-	if o.SecopsIntegration {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSecopsIntegrationEnvVar, Value: "true"})
-	}
-	if o.LLMFeatures {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesLLMFeaturesEnvVar, Value: "true"})
-	}
-	if o.PipelineIntelligence {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceEnvVar, Value: "true"})
-	}
-	if o.PipelineIntelligenceSnapshotLogTypes {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceSnapshotLogTypesEnvVar, Value: "true"})
-	}
-	if o.PipelineIntelligenceOtelConfigImport {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceOtelConfigImportEnvVar, Value: "true"})
-	}
-	if o.PipelineIntelligenceChronicleForwarderConfigImport {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceChronicleForwarderConfigImportEnvVar, Value: "true"})
-	}
-	if o.PipelineIntelligenceParseField {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceParseFieldEnvVar, Value: "true"})
-	}
-	if o.PipelineIntelligenceGenerateProcessors {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceGenerateProcessorsEnvVar, Value: "true"})
-	}
-	if o.RawConfigLegacy {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesRawConfigLegacyEnvVar, Value: "true"})
-	}
-	if o.Notifications {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesNotificationsEnvVar, Value: "true"})
-	}
-	if o.SecopsGcsIntegration {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSecopsGCSIntegrationEnvVar, Value: "true"})
-	}
-	if o.SnapshotPipelineIntelligence {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesSnapshotPipelineIntelligenceEnvVar, Value: "true"})
-	}
-	if o.PipelineIntelligenceSplunkConfigImport {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesPipelineIntelligenceSplunkConfigImportEnvVar, Value: "true"})
-	}
-	if o.RawLogMetricViews {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesRawLogMetricViewsEnvVar, Value: "true"})
-	}
-	if o.Vault {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesVaultEnvVar, Value: "true"})
-	}
-	if o.Auth0SSO {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesAuth0SSOEnvVar, Value: "true"})
-	}
-	if o.AixPlatform {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesAixPlatformEnvVar, Value: "true"})
-	}
-	if o.AdvancedPipelineEditor {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesAdvancedPipelineEditorEnvVar, Value: "true"})
-	}
-	if o.IdentityTablesDualWrite {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesIdentityTablesDualWriteEnvVar, Value: "true"})
-	}
-	if o.IdentityTablesCutover {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesIdentityTablesCutoverEnvVar, Value: "true"})
-	}
-	if o.V2Configuration {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesV2ConfigurationEnvVar, Value: "true"})
-	}
-	if o.V2Connectors {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesV2ConnectorsEnvVar, Value: "true"})
-	}
-	if o.BindplaneBlueprints {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesBindplaneBlueprintsEnvVar, Value: "true"})
-	}
-	if o.Fleets {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneFeaturesOverridesFleetsEnvVar, Value: "true"})
-	}
-	return envVars
-}
-
-// getErrorsConfigEnvVars returns env vars for spec.config.errors.
-// Returns nil when errors is nil (error tracking is disabled).
-func getErrorsConfigEnvVars(e *bindplanev1alpha1.ErrorsConfig) []corev1.EnvVar {
-	if e == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-	if e.Enabled {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnabledEnvVar, Value: "true"})
-	}
-	if ev := secretOrValue(bindplaneErrorsBackendDSNEnvVar, e.BackendDSN, e.BackendDSNSecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if ev := secretOrValue(bindplaneErrorsFrontendDSNEnvVar, e.FrontendDSN, e.FrontendDSNSecretRef); ev != nil {
-		envVars = append(envVars, *ev)
-	}
-	if e.Environment != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnvironmentEnvVar, Value: e.Environment})
-	}
-	if e.Release != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsReleaseEnvVar, Value: e.Release})
-	}
-	if e.TracesSampleRate != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsTracesSampleRateEnvVar, Value: e.TracesSampleRate})
-	}
-	// Always emit Debug when errors is configured; false is a meaningful value
-	envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsDebugEnvVar, Value: strconv.FormatBool(e.Debug)})
-	return envVars
-}
-
-// getLLMConfigEnvVars returns env vars for spec.config.llm.
-// Returns nil when llm is nil (LLM features are disabled).
-func getLLMConfigEnvVars(llm *bindplanev1alpha1.LLMConfig) []corev1.EnvVar {
-	if llm == nil {
-		return nil
-	}
-	var envVars []corev1.EnvVar
-
-	if llm.Gemini != nil {
-		g := llm.Gemini
-		if g.ProjectID != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiProjectIDEnvVar, Value: g.ProjectID})
-		}
-		if g.Location != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiLocationEnvVar, Value: g.Location})
-		}
-		if g.CredentialsFile != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiCredentialsFileEnvVar, Value: g.CredentialsFile})
-		}
-		if g.MaxTokens > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiMaxTokensEnvVar, Value: strconv.Itoa(g.MaxTokens)})
-		}
-		if g.VectorSearchRedis != nil {
-			vsr := g.VectorSearchRedis
-			if vsr.Address != "" {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiVectorSearchRedisAddressEnvVar, Value: vsr.Address})
-			}
-			if vsr.EnableTLS {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMGeminiVectorSearchRedisEnableTLSEnvVar, Value: "true"})
-			}
-		}
-	}
-
-	if llm.Langsmith != nil {
-		ls := llm.Langsmith
-		if ls.Enabled {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithEnabledEnvVar, Value: "true"})
-		}
-		if ev := secretOrValue(bindplaneLLMLangsmithAPIKeyEnvVar, ls.APIKey, ls.APIKeySecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-		if ls.ProjectName != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithProjectNameEnvVar, Value: ls.ProjectName})
-		}
-		if ls.URL != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithURLEnvVar, Value: ls.URL})
-		}
-		if ls.SanitizeContent != nil {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithSanitizeContentEnvVar, Value: strconv.FormatBool(*ls.SanitizeContent)})
-		}
-		if len(ls.Tags) > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneLLMLangsmithTagsEnvVar, Value: strings.Join(ls.Tags, ",")})
-		}
-	}
-
-	if llm.OpenAI != nil {
-		if ev := secretOrValue(bindplaneLLMOpenAIAPIKeyEnvVar, llm.OpenAI.APIKey, llm.OpenAI.APIKeySecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-	}
-
-	if llm.Anthropic != nil {
-		if ev := secretOrValue(bindplaneLLMAnthropicAPIKeyEnvVar, llm.Anthropic.APIKey, llm.Anthropic.APIKeySecretRef); ev != nil {
-			envVars = append(envVars, *ev)
-		}
-	}
-
-	return envVars
-}
-
-// getAdvancedConfigEnvVars returns env vars for spec.config.advanced.
-// Returns nil when advanced is nil.
-func getAdvancedConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	if config == nil || config.Advanced == nil {
-		return nil
-	}
-	adv := config.Advanced
-	var envVars []corev1.EnvVar
-
-	if adv.Store != nil {
-		envVars = append(envVars, getAdvancedStoreStatsEnvVars(adv.Store.Stats)...)
-	}
-	if adv.Rollout != nil {
-		if adv.Rollout.DisableUpdater {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutDisableUpdaterEnvVar, Value: "true"})
-		}
-		if adv.Rollout.RetryInterval != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutRetryIntervalEnvVar, Value: adv.Rollout.RetryInterval})
-		}
-		if adv.Rollout.UpdateWorkerCount > 0 {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedRolloutUpdateWorkerCountEnvVar, Value: strconv.Itoa(adv.Rollout.UpdateWorkerCount)})
-		}
-	}
-	envVars = append(envVars, getAdvancedServerEnvVars(adv.Server)...)
-	if adv.Cache != nil {
-		c := adv.Cache
-		if c.Type != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedCacheTypeEnvVar, Value: c.Type})
-		}
-		envVars = append(envVars, getAdvancedCacheRedisEnvVars(c.Redis)...)
-	}
-	if adv.Agent != nil && adv.Agent.TelemetryPort != nil {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAdvancedAgentTelemetryPortEnvVar, Value: strconv.Itoa(int(*adv.Agent.TelemetryPort))})
-	}
-
 	return envVars
 }
 
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
-// component is used to set the default profiling service name (e.g. bindplane-node, bindplane-jobs).
-func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane, component string) []corev1.EnvVar {
+func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	config := &bindplane.Spec.Config
 	return combineEnvVars(
 		getBindplaneConfigEnvVars(bindplane),
 		getTSDBEnvVars(bindplane),
 		getTransformAgentEnvVars(bindplane),
 		getTransformAgentTLSEnvVars(bindplane),
-		getProfilingEnvVars(config, component),
-		getPprofEnvVars(config),
 		getStatusEnvVars(config),
-		getAnalyticsEnvVars(config),
 		getLoggingConfigEnvVars(config),
 		getEventBusHealthEnvVars(bindplane),
-		getAdvancedConfigEnvVars(config),
 	)
 }

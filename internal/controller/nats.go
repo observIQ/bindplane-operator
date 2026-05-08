@@ -167,7 +167,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 									getNatsExtraEnv(bindplane),
 									getKubernetesEnvVars(natsContainerName),
 									getNatsEnvVars(bindplane, headlessServiceName, replicas),
-									getBindplaneCommonEnvVars(bindplane, natsComponent),
+									getBindplaneCommonEnvVars(bindplane),
 								),
 								Resources: natsResources,
 								// TODO(jsirianni): When NATS TLS is enabled the HTTP port serves TLS; Kubernetes HTTPGet does not support TLS. Use TCPSocket for now; add Bindplane CLI healthchecks that support exec probes for proper TLS healthcheck when available.

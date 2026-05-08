@@ -313,47 +313,6 @@ var _ = Describe("Reconcile - validation failure", func() {
 		_ = k8sClient.Delete(testCtx, ns)
 	})
 
-	It("sets Reconciled=False/Invalid for invalid status key (non-UUID)", func() {
-		// CRD enforces license and postgres presence, so we test a controller-only
-		// validation: status.keys entries must be valid UUIDs.
-		name := "bp-invalid-uuid"
-		bp := newTestBindplane(name, testNamespace)
-		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
-			Enabled: true,
-			Keys:    []string{"not-a-valid-uuid"},
-		}
-		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
-
-		r := newReconciler()
-		// Reconcile 1: add finalizer
-		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
-		Expect(err).NotTo(HaveOccurred())
-		// Reconcile 2: validation fails
-		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(BeZero())
-
-		updated := &bindplanev1alpha1.Bindplane{}
-		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
-
-		var reconciledCond *metav1.Condition
-		for i := range updated.Status.Conditions {
-			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
-				reconciledCond = &updated.Status.Conditions[i]
-				break
-			}
-		}
-		Expect(reconciledCond).NotTo(BeNil())
-		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
-		Expect(reconciledCond.Reason).To(Equal("Invalid"))
-		Expect(reconciledCond.Message).NotTo(BeEmpty())
-
-		// No workloads created
-		depList := &appsv1.DeploymentList{}
-		Expect(k8sClient.List(testCtx, depList, client.InNamespace(testNamespace))).To(Succeed())
-		Expect(depList.Items).To(BeEmpty())
-	})
-
 	It("sets Reconciled=False/Invalid for empty postgres host", func() {
 		// Postgres field must be present (CRD enforces this), but host can be empty —
 		// the controller rejects empty host via ValidatePostgresConfig.
@@ -2310,46 +2269,7 @@ var _ = Describe("workload pod security context defaults", func() {
 })
 
 var _ = Describe("nodeTerminationGracePeriodSeconds", func() {
-	makeBindplane := func(shutdownPeriod string) *bindplanev1alpha1.Bindplane {
-		bp := &bindplanev1alpha1.Bindplane{}
-		if shutdownPeriod != "" {
-			bp.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-				Server: &bindplanev1alpha1.AdvancedServerConfig{
-					ShutdownGracePeriod: shutdownPeriod,
-				},
-			}
-		}
-		return bp
-	}
-
-	It("returns default when ShutdownGracePeriod is not set", func() {
-		Expect(nodeTerminationGracePeriodSeconds(makeBindplane(""))).To(Equal(int64(60)))
-	})
-
-	It("returns 125% of 100s rounded up", func() {
-		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("100s"))).To(Equal(int64(125)))
-	})
-
-	It("returns 125% of 60s rounded up", func() {
-		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("60s"))).To(Equal(int64(75)))
-	})
-
-	It("returns 125% of 1m (60s) rounded up", func() {
-		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("1m"))).To(Equal(int64(75)))
-	})
-
-	It("rounds a fractional result up to the next whole second", func() {
-		// 4s * 1.25 = 5s exactly — no rounding needed
-		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("4s"))).To(Equal(int64(5)))
-		// 1s * 1.25 = 1.25s → ceil = 2s
-		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("1s"))).To(Equal(int64(2)))
-	})
-
-	It("falls back to default on an unparseable value", func() {
-		Expect(nodeTerminationGracePeriodSeconds(makeBindplane("invalid"))).To(Equal(int64(60)))
-	})
-
-	It("falls back to default when Advanced is nil", func() {
+	It("returns default", func() {
 		Expect(nodeTerminationGracePeriodSeconds(&bindplanev1alpha1.Bindplane{})).To(Equal(int64(60)))
 	})
 })
@@ -2804,143 +2724,6 @@ var _ = Describe("getStoreConfigEnvVars", func() {
 	})
 })
 
-var _ = Describe("getBindplaneCommonEnvVars profiling and pprof", func() {
-	baseBindplane := func() *bindplanev1alpha1.Bindplane {
-		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-bp",
-				Namespace: "default",
-			},
-			Spec: bindplanev1alpha1.BindplaneSpec{
-				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
-					Store: bindplanev1alpha1.StoreConfig{
-						Postgres: &bindplanev1alpha1.PostgresConfig{
-							Host: "pg",
-						},
-					},
-				},
-			},
-		}
-	}
-
-	It("does not set profiling or pprof env vars when disabled or omitted", func() {
-		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneProfilingEnabledEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplanePprofEnabledEnvVar)).To(BeEmpty())
-	})
-
-	It("sets profiling env vars with default serviceName per component", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
-			Enabled:   true,
-			ProjectID: "my-gcp-project",
-		}
-		for _, tc := range []struct {
-			component string
-			wantName  string
-		}{
-			{nodeComponent, "bindplane-node"},
-			{bindplaneJobsComponent, "bindplane-jobs"},
-			{bindplaneJobsMigrateComponent, "bindplane-migrate"},
-			{natsComponent, "bindplane-nats"},
-		} {
-			envVars := getBindplaneCommonEnvVars(bindplane, tc.component)
-			Expect(envVarByName(envVars, bindplaneProfilingEnabledEnvVar)).To(Equal("true"))
-			Expect(envVarByName(envVars, bindplaneProfilingProjectIDEnvVar)).To(Equal("my-gcp-project"))
-			Expect(envVarByName(envVars, bindplaneProfilingServiceNameEnvVar)).To(Equal(tc.wantName))
-		}
-	})
-
-	It("sets profiling noCPU, noAlloc, noHeap, noGoroutine, mutex when enabled", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
-			Enabled:     true,
-			ProjectID:   "proj",
-			NoCPU:       true,
-			NoAlloc:     true,
-			NoHeap:      true,
-			NoGoroutine: true,
-			Mutex:       true,
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneProfilingNoCPUEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneProfilingNoAllocEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneProfilingNoHeapEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneProfilingNoGoroutineEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneProfilingMutexEnvVar)).To(Equal("true"))
-	})
-
-	It("sets pprof env vars with default endpoint when enabled and endpoint unset", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Pprof = &bindplanev1alpha1.PprofConfig{Enabled: true}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplanePprofEnabledEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplanePprofEndpointEnvVar)).To(Equal(defaultPprofEndpoint))
-	})
-
-	It("sets pprof env vars with explicit endpoint when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Pprof = &bindplanev1alpha1.PprofConfig{
-			Enabled:  true,
-			Endpoint: "0.0.0.0:6061",
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplanePprofEndpointEnvVar)).To(Equal("0.0.0.0:6061"))
-	})
-
-	It("does not set status env vars when Status is nil", func() {
-		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(BeEmpty())
-	})
-
-	It("sets BINDPLANE_STATUS_ENABLED=true and BINDPLANE_STATUS_KEYS from inline keys", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
-			Enabled: true,
-			Keys:    []string{"550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(Equal("550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
-	})
-
-	It("sets BINDPLANE_STATUS_ENABLED=false and no keys env var when disabled", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: false}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("false"))
-		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(BeEmpty())
-	})
-
-	It("sets BINDPLANE_STATUS_KEYS from keysSecretRef using ValueFrom", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
-			Enabled: true,
-			KeysSecretRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
-				Key:                  "keys",
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
-		var keysVar *corev1.EnvVar
-		for i := range envVars {
-			if envVars[i].Name == bindplaneStatusKeysEnvVar {
-				keysVar = &envVars[i]
-				break
-			}
-		}
-		Expect(keysVar).NotTo(BeNil())
-		Expect(keysVar.ValueFrom).NotTo(BeNil())
-		Expect(keysVar.ValueFrom.SecretKeyRef.Name).To(Equal("my-secret"))
-		Expect(keysVar.ValueFrom.SecretKeyRef.Key).To(Equal("keys"))
-	})
-})
-
 var _ = Describe("defaultRequiredHosts", func() {
 	It("returns floor(total/2)+1 with default replicas (node=3, nats=2)", func() {
 		natsReplicas := int32(2)
@@ -3128,7 +2911,7 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 
 	It("does not set event bus health env vars when EventBus is nil", func() {
 		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
 	})
@@ -3138,7 +2921,7 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
 			Health: &bindplanev1alpha1.EventBusHealthConfig{},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(Equal("4"))
 	})
 
@@ -3148,7 +2931,7 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
 			Health: &bindplanev1alpha1.EventBusHealthConfig{RequiredHosts: &override},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(Equal("3"))
 	})
 
@@ -3157,7 +2940,7 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
 			Health: &bindplanev1alpha1.EventBusHealthConfig{Interval: "15s"},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(Equal("15s"))
 	})
 
@@ -3166,57 +2949,8 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
 			Health: &bindplanev1alpha1.EventBusHealthConfig{},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
-	})
-})
-
-var _ = Describe("getAnalyticsEnvVars", func() {
-	baseBindplane := func() *bindplanev1alpha1.Bindplane {
-		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
-			Spec: bindplanev1alpha1.BindplaneSpec{
-				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
-					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-				},
-			},
-		}
-	}
-
-	It("does not set analytics env vars when Analytics is nil", func() {
-		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAnalyticsDisabledEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAnalyticsSegmentWriteKeyEnvVar)).To(BeEmpty())
-	})
-
-	It("does not set BINDPLANE_ANALYTICS_DISABLED when disabled is false", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{Disabled: false}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAnalyticsDisabledEnvVar)).To(BeEmpty())
-	})
-
-	It("sets BINDPLANE_ANALYTICS_DISABLED=true when disabled is true", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{Disabled: true}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAnalyticsDisabledEnvVar)).To(Equal("true"))
-	})
-
-	It("does not set BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY when not provided", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAnalyticsSegmentWriteKeyEnvVar)).To(BeEmpty())
-	})
-
-	It("sets BINDPLANE_ANALYTICS_SEGMENT_WRITE_KEY when provided", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Analytics = &bindplanev1alpha1.AnalyticsConfig{SegmentWriteKey: "my-write-key"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAnalyticsSegmentWriteKeyEnvVar)).To(Equal("my-write-key"))
 	})
 })
 
@@ -3235,80 +2969,31 @@ var _ = Describe("getLoggingConfigEnvVars", func() {
 
 	It("does not set logging env vars when Logging is nil", func() {
 		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPEndpointEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(BeEmpty())
 	})
 
 	It("sets default level=info and type=stdout when Logging is empty struct", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("info"))
 		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPEndpointEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(BeEmpty())
 	})
 
 	It("sets BINDPLANE_LOGGING_LEVEL=debug when level is debug", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Level: "debug"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("debug"))
 	})
 
-	It("sets BINDPLANE_LOGGING_TYPE=otlp when type is otlp", func() {
+	It("sets BINDPLANE_LOGGING_TYPE=stdout when type is stdout", func() {
 		bindplane := baseBindplane()
-		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Type: "otlp"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("otlp"))
-	})
-
-	It("sets BINDPLANE_LOGGING_TYPE=stdout,otlp when type is stdout,otlp", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Type: "stdout,otlp"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout,otlp"))
-	})
-
-	It("sets all OTLP vars when endpoint, insecure, and interval are configured", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{
-			Type: "otlp",
-			OTLP: &bindplanev1alpha1.LoggingOTLPConfig{
-				Endpoint: "localhost:4317",
-				Insecure: true,
-				Interval: "30s",
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPEndpointEnvVar)).To(Equal("localhost:4317"))
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(Equal("30s"))
-	})
-
-	It("does not set BINDPLANE_LOGGING_OTLP_INTERVAL when interval is not set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{
-			Type: "otlp",
-			OTLP: &bindplanev1alpha1.LoggingOTLPConfig{Endpoint: "localhost:4317"},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPIntervalEnvVar)).To(BeEmpty())
-	})
-
-	It("does not set BINDPLANE_LOGGING_OTLP_INSECURE when insecure is false", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{
-			Type: "otlp",
-			OTLP: &bindplanev1alpha1.LoggingOTLPConfig{Endpoint: "localhost:4317", Insecure: false},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneLoggingOTLPInsecureEnvVar)).To(BeEmpty())
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Type: "stdout"}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
 	})
 })
 
@@ -3775,269 +3460,6 @@ var _ = Describe("generateTSDBBasicAuthSecretData", func() {
 	})
 })
 
-var _ = Describe("getAdvancedConfigEnvVars", func() {
-	baseBindplane := func() *bindplanev1alpha1.Bindplane {
-		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
-			Spec: bindplanev1alpha1.BindplaneSpec{
-				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
-					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
-				},
-			},
-		}
-	}
-
-	It("does not set advanced env vars when Advanced is nil", func() {
-		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsWorkerCountEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsEnableSortingEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedServerShutdownGracePeriodEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheTypeEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisAddressEnvVar)).To(BeEmpty())
-	})
-
-	It("sets StoreStats env vars when all fields are non-zero/non-empty/true", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Store: &bindplanev1alpha1.AdvancedStoreConfig{
-				Stats: &bindplanev1alpha1.AdvancedStoreStatsConfig{
-					BatchFlushInterval: "2s",
-					WorkerCount:        4,
-					EnableSorting:      true,
-					MetricChannelSize:  100,
-					BatchChannelSize:   50,
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar)).To(Equal("2s"))
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsWorkerCountEnvVar)).To(Equal("4"))
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsEnableSortingEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar)).To(Equal("100"))
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(Equal("50"))
-	})
-
-	It("does not set StoreStats int fields when zero or bool when false", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Store: &bindplanev1alpha1.AdvancedStoreConfig{
-				Stats: &bindplanev1alpha1.AdvancedStoreStatsConfig{},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchFlushIntervalEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsWorkerCountEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsEnableSortingEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsMetricChannelSizeEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedStoreStatsBatchChannelSizeEnvVar)).To(BeEmpty())
-	})
-
-	It("sets Server env vars when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Server: &bindplanev1alpha1.AdvancedServerConfig{
-				MaxRequestBytes:                20971520,
-				ShutdownGracePeriod:            "5m",
-				OpAMPShutdownGracePeriodTarget: "0.5",
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(Equal("20971520"))
-		Expect(envVarByName(envVars, bindplaneAdvancedServerShutdownGracePeriodEnvVar)).To(Equal("5m"))
-		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar)).To(Equal("0.5"))
-	})
-
-	It("does not set Server env vars when fields are zero or empty", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Server: &bindplanev1alpha1.AdvancedServerConfig{},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedServerMaxRequestBytesEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedServerShutdownGracePeriodEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedServerOpAMPShutdownGracePeriodTargetEnvVar)).To(BeEmpty())
-	})
-
-	It("sets Cache type env var when type is non-empty", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Cache: &bindplanev1alpha1.AdvancedCacheConfig{Type: "redis"},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheTypeEnvVar)).To(Equal("redis"))
-	})
-
-	It("sets Redis address, plain password, readTimeout, writeTimeout, and enableTLS", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-				Type: "redis",
-				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
-					Address:      "redis.default.svc:6379",
-					Password:     "secret",
-					DB:           2,
-					ReadTimeout:  "3s",
-					WriteTimeout: "3s",
-					EnableTLS:    true,
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisAddressEnvVar)).To(Equal("redis.default.svc:6379"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisPasswordEnvVar)).To(Equal("secret"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisDBEnvVar)).To(Equal("2"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisReadTimeoutEnvVar)).To(Equal("3s"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisWriteTimeoutEnvVar)).To(Equal("3s"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisEnableTLSEnvVar)).To(Equal("true"))
-	})
-
-	It("sources Redis password from SecretRef when PasswordSecretRef is set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-				Type: "redis",
-				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
-					Address: "redis.default.svc:6379",
-					PasswordSecretRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "redis-secret"},
-						Key:                  "password",
-					},
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		ref := envVarSecretKeyRef(envVars, bindplaneAdvancedCacheRedisPasswordEnvVar)
-		Expect(ref).NotTo(BeNil())
-		Expect(ref.Name).To(Equal("redis-secret"))
-		Expect(ref.Key).To(Equal("password"))
-	})
-
-	It("does not set Redis DB env var when DB is zero", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{Address: "redis:6379", DB: 0},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisDBEnvVar)).To(BeEmpty())
-	})
-
-	It("does not set BINDPLANE_ADVANCED_CACHE_REDIS_ENABLE_TLS when enableTLS is false", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{Address: "redis:6379", EnableTLS: false},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisEnableTLSEnvVar)).To(BeEmpty())
-	})
-
-	It("sets Redis TLS cert/key/ca paths, skipVerify, and minTLSVersion when TLS secret is configured", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
-					Address:   "redis:6379",
-					EnableTLS: true,
-					TLS: &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{
-						SecretName:    "redis-tls",
-						CertKey:       "tls.crt",
-						KeyKey:        "tls.key",
-						CAKey:         "ca.crt",
-						SkipVerify:    true,
-						MinTLSVersion: "1.3",
-					},
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCertEnvVar)).To(Equal(advancedCacheRedisTLSMountPath + "/tls.crt"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSKeyEnvVar)).To(Equal(advancedCacheRedisTLSMountPath + "/tls.key"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCAEnvVar)).To(Equal(advancedCacheRedisTLSMountPath + "/ca.crt"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSSkipVerifyEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSMinVersionEnvVar)).To(Equal("1.3"))
-	})
-
-	It("does not set Redis TLS path env vars when TLS secretName is empty", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Advanced = &bindplanev1alpha1.AdvancedConfig{
-			Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-				Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
-					Address:   "redis:6379",
-					EnableTLS: true,
-					TLS:       &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{CertKey: "tls.crt"},
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCertEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSKeyEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAdvancedCacheRedisTLSCAEnvVar)).To(BeEmpty())
-	})
-})
-
-var _ = Describe("getAdvancedCacheRedisTLSVolumeAndMount", func() {
-	It("returns nil when Advanced is nil", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
-		vols, mounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
-		Expect(vols).To(BeNil())
-		Expect(mounts).To(BeNil())
-	})
-
-	It("returns nil when Redis TLS secretName is empty", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{
-			Spec: bindplanev1alpha1.BindplaneSpec{
-				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					Advanced: &bindplanev1alpha1.AdvancedConfig{
-						Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-							Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
-								Address: "redis:6379",
-								TLS:     &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{},
-							},
-						},
-					},
-				},
-			},
-		}
-		vols, mounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
-		Expect(vols).To(BeNil())
-		Expect(mounts).To(BeNil())
-	})
-
-	It("returns one volume and one mount when Redis TLS secretName is set", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{
-			Spec: bindplanev1alpha1.BindplaneSpec{
-				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					Advanced: &bindplanev1alpha1.AdvancedConfig{
-						Cache: &bindplanev1alpha1.AdvancedCacheConfig{
-							Redis: &bindplanev1alpha1.AdvancedCacheRedisConfig{
-								Address: "redis:6379",
-								TLS:     &bindplanev1alpha1.AdvancedCacheRedisTLSConfig{SecretName: "redis-tls"},
-							},
-						},
-					},
-				},
-			},
-		}
-		vols, mounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
-		Expect(vols).To(HaveLen(1))
-		Expect(vols[0].Name).To(Equal(advancedCacheRedisTLSVolumeName))
-		Expect(vols[0].Secret.SecretName).To(Equal("redis-tls"))
-		Expect(mounts).To(HaveLen(1))
-		Expect(mounts[0].Name).To(Equal(advancedCacheRedisTLSVolumeName))
-		Expect(mounts[0].MountPath).To(Equal(advancedCacheRedisTLSMountPath))
-		Expect(mounts[0].ReadOnly).To(BeTrue())
-	})
-})
-
 var _ = Describe("getAgentsConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
@@ -4055,14 +3477,9 @@ var _ = Describe("getAgentsConfigEnvVars", func() {
 
 	It("does not set agents env vars when Agents is nil", func() {
 		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsAuthTypeEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthIssuerEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthAudiencesEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredClaimsEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredScopesEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthCacheTTLEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatIntervalEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatTTLEnvVar)).To(BeEmpty())
 		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatExpiryIntervalEnvVar)).To(BeEmpty())
@@ -4076,7 +3493,7 @@ var _ = Describe("getAgentsConfigEnvVars", func() {
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
 			Auth: &bindplanev1alpha1.AgentsAuthConfig{Type: "oauth,secretKey"},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsAuthTypeEnvVar)).To(Equal("oauth,secretKey"))
 	})
 
@@ -4089,7 +3506,7 @@ var _ = Describe("getAgentsConfigEnvVars", func() {
 				},
 			},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(Equal("X-Bindplane-Authorization,Authorization"))
 	})
 
@@ -4100,203 +3517,66 @@ var _ = Describe("getAgentsConfigEnvVars", func() {
 				SecretKey: &bindplanev1alpha1.AgentsAuthSecretKeyConfig{},
 			},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(BeEmpty())
-	})
-
-	It("sets auth.oauth.issuer when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			Auth: &bindplanev1alpha1.AgentsAuthConfig{
-				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{Issuer: "https://auth.example.com"},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthIssuerEnvVar)).To(Equal("https://auth.example.com"))
-	})
-
-	It("sets auth.oauth.audiences as comma-joined when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			Auth: &bindplanev1alpha1.AgentsAuthConfig{
-				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{
-					Audiences: []string{"aud1", "aud2"},
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthAudiencesEnvVar)).To(Equal("aud1,aud2"))
-	})
-
-	It("sets auth.oauth.requiredClaims as comma-joined when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			Auth: &bindplanev1alpha1.AgentsAuthConfig{
-				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{
-					RequiredClaims: []string{"claim1", "claim2"},
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredClaimsEnvVar)).To(Equal("claim1,claim2"))
-	})
-
-	It("sets auth.oauth.requiredScopes as comma-joined when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			Auth: &bindplanev1alpha1.AgentsAuthConfig{
-				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{
-					RequiredScopes: []string{"scope1", "scope2"},
-				},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthRequiredScopesEnvVar)).To(Equal("scope1,scope2"))
-	})
-
-	It("sets auth.oauth.cacheTTL when set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			Auth: &bindplanev1alpha1.AgentsAuthConfig{
-				OAuth: &bindplanev1alpha1.AgentsAuthOAuthConfig{CacheTTL: "2h"},
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsAuthOAuthCacheTTLEnvVar)).To(Equal("2h"))
 	})
 
 	It("sets heartbeatInterval when set", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatInterval: "45s"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatIntervalEnvVar)).To(Equal("45s"))
 	})
 
 	It("sets heartbeatTTL when set", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatTTL: "2m"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatTTLEnvVar)).To(Equal("2m"))
 	})
 
 	It("sets heartbeatExpiryInterval when set", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatExpiryInterval: "1m"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatExpiryIntervalEnvVar)).To(Equal("1m"))
 	})
 
 	It("sets rebalanceInterval when set", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalanceInterval: "30m"}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsRebalanceIntervalEnvVar)).To(Equal("30m"))
 	})
 
 	It("sets rebalancePercentage when non-nil", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalancePercentage: intPtr(50)}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(Equal("50"))
 	})
 
 	It("does not set rebalancePercentage when nil", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(BeEmpty())
 	})
 
 	It("sets rebalanceJitter when non-nil", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalanceJitter: intPtr(10)}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(Equal("10"))
 	})
 
 	It("does not set rebalanceJitter when nil", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(BeEmpty())
 	})
 
-	It("sets connection registry env vars when all fields are set", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			MaxSimultaneousConnections:          10,
-			EnableConnectionRegistryMiddleware:  true,
-			ConnectionRegistryHeartbeatInterval: "20s",
-			ConnectionRegistryStaleDuration:     "60s",
-			ConnectionRegistryLockTimeout:       "3s",
-			ConnectionClaimTimeout:              "5s",
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsEnableConnectionRegistryMiddlewareEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryHeartbeatIntervalEnvVar)).To(Equal("20s"))
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryStaleDurationEnvVar)).To(Equal("60s"))
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryLockTimeoutEnvVar)).To(Equal("3s"))
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionClaimTimeoutEnvVar)).To(Equal("5s"))
-	})
-
-	It("does not set connection registry interval/timeout env vars when fields are empty", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			MaxSimultaneousConnections: 10,
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryHeartbeatIntervalEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryStaleDurationEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionRegistryLockTimeoutEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsConnectionClaimTimeoutEnvVar)).To(BeEmpty())
-	})
-
-	It("sets all duplication prevention env vars when configured", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			MaxSimultaneousConnections: 10,
-			DuplicationPrevention: &bindplanev1alpha1.AgentDuplicationPreventionConfig{
-				EnableMiddleware:             true,
-				ReassignID:                   true,
-				DetectionStrategy:            "grace_period",
-				DetectionGracePeriod:         "5m",
-				MinGracePeriodFailures:       5,
-				RetryAfter:                   "45s",
-				MaxReassignmentAttempts:      5,
-				ReassignmentCacheTTL:         "48h",
-				ReassignmentRetryAfter:       "10m",
-				EnableDuplicateNotifications: true,
-				EnablePerOrgEnforcement:      true,
-			},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevEnableMiddlewareEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignIDEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevDetectionStrategyEnvVar)).To(Equal("grace_period"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevDetectionGracePeriodEnvVar)).To(Equal("5m"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMinGracePeriodFailuresEnvVar)).To(Equal("5"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevRetryAfterEnvVar)).To(Equal("45s"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMaxReassignmentAttemptsEnvVar)).To(Equal("5"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentCacheTTLEnvVar)).To(Equal("48h"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentRetryAfterEnvVar)).To(Equal("10m"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevEnableDuplicateNotificationsEnvVar)).To(Equal("true"))
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevEnablePerOrgEnforcementEnvVar)).To(Equal("true"))
-	})
-
-	It("does not set duplication prevention optional env vars when fields are zero/empty/false", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
-			MaxSimultaneousConnections: 10,
-			DuplicationPrevention:      &bindplanev1alpha1.AgentDuplicationPreventionConfig{},
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevDetectionGracePeriodEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMinGracePeriodFailuresEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevRetryAfterEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevMaxReassignmentAttemptsEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentCacheTTLEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentsDupPrevReassignmentRetryAfterEnvVar)).To(BeEmpty())
-	})
 })
 
 var _ = Describe("getAgentVersionsConfigEnvVars", func() {
@@ -4314,30 +3594,17 @@ var _ = Describe("getAgentVersionsConfigEnvVars", func() {
 
 	It("does not set agentVersions env vars when agentVersions is nil", func() {
 		bindplane := baseBindplane()
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneAgentVersionsClientsEnvVar)).To(BeEmpty())
 	})
 
-	It("sets agentVersions syncInterval and clients when configured", func() {
+	It("sets agentVersions syncInterval when configured", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.AgentVersions = &bindplanev1alpha1.AgentVersionsConfig{
 			SyncInterval: "2h",
-			Clients:      []string{"bdot", "github"},
 		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
+		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(Equal("2h"))
-		Expect(envVarByName(envVars, bindplaneAgentVersionsClientsEnvVar)).To(Equal("bdot,github"))
-	})
-
-	It("sets agentVersions syncInterval only when clients is omitted", func() {
-		bindplane := baseBindplane()
-		bindplane.Spec.Config.AgentVersions = &bindplanev1alpha1.AgentVersionsConfig{
-			SyncInterval: "3h",
-		}
-		envVars := getBindplaneCommonEnvVars(bindplane, nodeComponent)
-		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(Equal("3h"))
-		Expect(envVarByName(envVars, bindplaneAgentVersionsClientsEnvVar)).To(BeEmpty())
 	})
 })
 

@@ -160,26 +160,6 @@ var _ = Describe("getOpAMPOverrideEnvVars", func() {
 		Expect(envVars).To(BeEmpty())
 	})
 
-	It("overrides profiling service name when profiling is enabled", func() {
-		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
-			Enabled:   true,
-			ProjectID: "my-project",
-		}
-		envVars := getOpAMPOverrideEnvVars(bindplane)
-		profilingVar := findEnvVar(envVars, bindplaneProfilingServiceNameEnvVar)
-		Expect(profilingVar).NotTo(BeNil())
-		Expect(profilingVar.Value).To(Equal("my-bp-opamp"))
-	})
-
-	It("does not override profiling service name when profiling is disabled", func() {
-		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
-			Enabled: false,
-		}
-		envVars := getOpAMPOverrideEnvVars(bindplane)
-		profilingVar := findEnvVar(envVars, bindplaneProfilingServiceNameEnvVar)
-		Expect(profilingVar).To(BeNil())
-	})
-
 	It("sets max simultaneous connections when configured", func() {
 		maxConn := int64(2000)
 		bindplane.Spec.OpAMP.MaxSimultaneousConnections = &maxConn
@@ -248,30 +228,6 @@ var _ = Describe("opampDeployment env ordering", func() {
 		Expect(envVars[lastIdx].Value).To(Equal("2000"), "last occurrence must be the OpAMP override value")
 	})
 
-	It("profiling service name override appears after the shared profiling service name", func() {
-		bindplane.Spec.Config.Profiling = &bindplanev1alpha1.ProfilingConfig{
-			Enabled:   true,
-			ProjectID: "my-project",
-		}
-
-		dep := r.opampDeployment(bindplane)
-		envVars := dep.Spec.Template.Spec.Containers[0].Env
-
-		sharedIdx := -1
-		overrideIdx := -1
-		for i, ev := range envVars {
-			if ev.Name == bindplaneProfilingServiceNameEnvVar {
-				if ev.Value == "bindplane-opamp" {
-					sharedIdx = i
-				} else if ev.Value == "my-bp-opamp" {
-					overrideIdx = i
-				}
-			}
-		}
-		Expect(sharedIdx).NotTo(Equal(-1), "shared profiling service name should be present")
-		Expect(overrideIdx).NotTo(Equal(-1), "override profiling service name should be present")
-		Expect(overrideIdx).To(BeNumerically(">", sharedIdx), "override must appear after shared value")
-	})
 })
 
 // --- Unit tests for opampService ---

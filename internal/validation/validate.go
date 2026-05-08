@@ -21,7 +21,6 @@ package validation
 
 import (
 	"fmt"
-	"net"
 	"regexp"
 	"strings"
 	"time"
@@ -89,13 +88,7 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 	if err := ValidateLicenseConfig(&bindplane.Spec.Config); err != nil {
 		return err
 	}
-	if err := ValidateProfilingConfig(&bindplane.Spec.Config); err != nil {
-		return err
-	}
 	if err := ValidateStatusConfig(&bindplane.Spec.Config); err != nil {
-		return err
-	}
-	if err := ValidatePprofConfig(&bindplane.Spec.Config); err != nil {
 		return err
 	}
 	if err := ValidateAuthConfig(&bindplane.Spec.Config); err != nil {
@@ -108,9 +101,6 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 		return err
 	}
 	if err := ValidatePostgresConfig(&bindplane.Spec.Config); err != nil {
-		return err
-	}
-	if err := ValidateAdvancedCacheConfig(&bindplane.Spec.Config); err != nil {
 		return err
 	}
 	if err := ValidateAgentVersionsConfig(&bindplane.Spec.Config); err != nil {
@@ -222,17 +212,6 @@ func ValidateLicenseConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error 
 	return nil
 }
 
-// ValidateProfilingConfig ensures projectID is set when profiling is enabled.
-func ValidateProfilingConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
-	if config == nil || config.Profiling == nil || !config.Profiling.Enabled {
-		return nil
-	}
-	if config.Profiling.ProjectID == "" {
-		return fmt.Errorf("projectID is required when profiling is enabled")
-	}
-	return nil
-}
-
 // ValidateStatusConfig ensures status check keys are valid UUIDs when set inline.
 func ValidateStatusConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
 	if config == nil || config.Status == nil {
@@ -246,17 +225,6 @@ func ValidateStatusConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
 		if !uuidRegex.MatchString(key) {
 			return fmt.Errorf("spec.config.status.keys[%d]: %q is not a valid UUID", i, key)
 		}
-	}
-	return nil
-}
-
-// ValidatePprofConfig ensures pprof endpoint is a valid host:port when set.
-func ValidatePprofConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
-	if config == nil || config.Pprof == nil || !config.Pprof.Enabled || config.Pprof.Endpoint == "" {
-		return nil
-	}
-	if _, _, err := net.SplitHostPort(config.Pprof.Endpoint); err != nil {
-		return fmt.Errorf("invalid pprof endpoint %q: %w", config.Pprof.Endpoint, err)
 	}
 	return nil
 }
@@ -373,25 +341,6 @@ func ValidatePostgresConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error
 	}
 	if config.Store.Postgres.Host == "" {
 		return fmt.Errorf("spec.config.store.postgres.host must not be empty")
-	}
-	return nil
-}
-
-// ValidateAdvancedCacheConfig validates the advanced cache configuration.
-// When cache type is redis, the redis address must be a valid host:port.
-func ValidateAdvancedCacheConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
-	if config == nil || config.Advanced == nil || config.Advanced.Cache == nil {
-		return nil
-	}
-	cache := config.Advanced.Cache
-	if cache.Type != "redis" {
-		return nil
-	}
-	if cache.Redis == nil {
-		return fmt.Errorf("spec.config.advanced.cache.redis is required when cache type is \"redis\"")
-	}
-	if _, _, err := net.SplitHostPort(cache.Redis.Address); err != nil {
-		return fmt.Errorf("spec.config.advanced.cache.redis.address %q is not a valid host:port: %w", cache.Redis.Address, err)
 	}
 	return nil
 }

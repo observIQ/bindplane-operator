@@ -156,7 +156,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 											Value: bindplaneJobsModeValue,
 										},
 									},
-									getBindplaneCommonEnvVars(bindplane, bindplaneJobsComponent),
+									getBindplaneCommonEnvVars(bindplane),
 									getNatsClientEnvVars(bindplane, true),
 								),
 								Resources: resources,
@@ -226,9 +226,8 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 	pgVols, pgMounts := getPostgresTLSVolumeAndMount(bindplane)
 	internalVols, internalMounts := getInternalTLSVolumesAndMounts(bindplane)
 	transformAgentVols, transformAgentMounts := getTransformAgentTLSVolumesAndMounts(bindplane)
-	redisVols, redisMounts := getAdvancedCacheRedisTLSVolumeAndMount(bindplane)
-	configVols := append(append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), transformAgentVols...), redisVols...)
-	configMounts := append(append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), transformAgentMounts...), redisMounts...)
+	configVols := append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), transformAgentVols...)
+	configMounts := append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), transformAgentMounts...)
 
 	migrateResources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
@@ -270,8 +269,7 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 								getBindplaneJobsMigrateExtraEnv(bindplane),
 								getKubernetesEnvVars(bindplaneJobsContainerName),
 								[]corev1.EnvVar{{Name: bindplaneModeEnvVar, Value: bindplaneJobsMigrateModeValue}},
-								getBindplaneCommonEnvVars(bindplane, bindplaneJobsMigrateComponent),
-								getJobsMigrateEncryptionEnvVars(bindplane),
+								getBindplaneCommonEnvVars(bindplane),
 							),
 							Resources:       migrateResources,
 							SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
@@ -283,16 +281,6 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 			),
 		},
 	}
-}
-
-// getJobsMigrateEncryptionEnvVars returns Jobs Migrate-only env vars for the encryption provider.
-// Currently only BINDPLANE_ENCRYPTIONPROVIDER_GOOGLEKMS_KEY_DELETION_JOB is Jobs Migrate-specific.
-func getJobsMigrateEncryptionEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
-	ep := bindplane.Spec.Config.EncryptionProvider
-	if ep == nil || ep.GoogleKMS == nil || !ep.GoogleKMS.KeyDeletionJob {
-		return nil
-	}
-	return []corev1.EnvVar{{Name: bindplaneEncryptionProviderGoogleKMSKeyDeletionJobEnvVar, Value: "true"}}
 }
 
 // reconcileMigrateJob ensures the migration batch/v1 Job runs to completion before downstream
