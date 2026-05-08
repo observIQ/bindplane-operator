@@ -1329,11 +1329,11 @@ func getErrorsConfigEnvVars(e *bindplanev1alpha1.ErrorsConfig) []corev1.EnvVar {
 	if e.Enabled {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnabledEnvVar, Value: "true"})
 	}
-	if e.BackendDSN != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsBackendDSNEnvVar, Value: e.BackendDSN})
+	if ev := secretOrValue(bindplaneErrorsBackendDSNEnvVar, e.BackendDSN, e.BackendDSNSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
 	}
-	if e.FrontendDSN != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsFrontendDSNEnvVar, Value: e.FrontendDSN})
+	if ev := secretOrValue(bindplaneErrorsFrontendDSNEnvVar, e.FrontendDSN, e.FrontendDSNSecretRef); ev != nil {
+		envVars = append(envVars, *ev)
 	}
 	if e.Environment != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneErrorsEnvironmentEnvVar, Value: e.Environment})
