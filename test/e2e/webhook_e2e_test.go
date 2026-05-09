@@ -64,6 +64,10 @@ var _ = Describe("Bindplane webhook", Ordered, func() {
 			"bindplane-invalid-name-too-long.yaml",
 			"is too long: must be at most",
 		),
+		Entry("when argoRollout and strategy are both set",
+			"bindplane-invalid-argo-rollout-strategy.yaml",
+			"mutually exclusive",
+		),
 	)
 
 	It("rejects invalid updates on an existing Bindplane custom resource", func() {

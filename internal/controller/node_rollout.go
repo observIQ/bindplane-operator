@@ -17,97 +17,31 @@ limitations under the License.
 package controller
 
 import (
-	"context"
-
-	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	rolloutsv1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
 const (
-	// nodeComponent is the component name for Bindplane Node
-	nodeComponent = "node"
-	// nodeContainerName is the container name for Bindplane Node
-	nodeContainerName = "server"
-	// nodeHTTPPort is the HTTP port for Bindplane Node
-	nodeHTTPPort = int32(3001)
-	// nodeHTTPPortName is the name of the HTTP port for Bindplane Node
-	nodeHTTPPortName = "http"
-	// nodeModeValue is the value for BINDPLANE_MODE
-	nodeModeValue = "node"
+	argoRolloutAPIVersion = "argoproj.io/v1alpha1"
+	argoRolloutKind       = "Rollout"
 )
 
-// reconcileNode reconciles all Bindplane Node resources
-func (r *BindplaneReconciler) reconcileNode(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
-	// Reconcile ServiceAccount
-	sa := r.nodeServiceAccount(bindplane)
-	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
-		return err
-	}
-
-	useRollout := bindplane.Spec.Bindplane.ArgoRollout != nil && bindplane.Spec.Bindplane.ArgoRollout.Enabled
-
-	if useRollout {
-		if err := r.deleteDeploymentIfExists(ctx, bindplane, nodeComponent, log); err != nil {
-			return err
-		}
-		rollout := r.nodeRollout(bindplane)
-		if err := r.reconcileRollout(ctx, bindplane, rollout, log); err != nil {
-			return err
-		}
-	} else {
-		if err := r.deleteRolloutIfExists(ctx, bindplane, nodeComponent, log); err != nil {
-			return err
-		}
-		deployment := r.nodeDeployment(bindplane)
-		if err := r.reconcileDeployment(ctx, bindplane, deployment, log); err != nil {
-			return err
-		}
-	}
-
-	// Reconcile Service
-	service := r.nodeService(bindplane, useRollout)
-	if err := r.reconcileService(ctx, bindplane, service, log); err != nil {
-		return err
-	}
-
-	// Reconcile PodDisruptionBudget
-	if !bindplane.Spec.Bindplane.DisablePodDisruptionBudget {
-		pdb := newPodDisruptionBudget(bindplane, nodeComponent)
-		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
-			return err
-		}
-	} else {
-		if err := r.deletePodDisruptionBudgetIfExists(ctx, bindplane, nodeComponent, log); err != nil {
-			return err
-		}
-	}
-
-	// Reconcile HorizontalPodAutoscaler
-	if err := r.reconcileNodeHPA(ctx, bindplane, log); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *BindplaneReconciler) nodeServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, nodeComponent)
-}
-
-func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {
-	// When autoscaling is enabled, do not set Replicas on the Deployment so the
-	// HorizontalPodAutoscaler has exclusive control over the replica count.
-	// Setting Replicas to nil here means reconcileDeployment will write nil back to
-	// the live object, which is the correct behavior — the HPA then manages scale.
+// nodeRollout builds the Argo Rollout for Bindplane Node. The pod template, name,
+// labels, and selector are identical to those used by nodeDeployment, so HPAs,
+// PDBs, and Services keep working without modification.
+func (r *BindplaneReconciler) nodeRollout(bindplane *bindplanev1alpha1.Bindplane) *rolloutsv1alpha1.Rollout {
 	var replicaPtr *int32
 	if bindplane.Spec.Bindplane.Autoscaling == nil || !bindplane.Spec.Bindplane.Autoscaling.Enabled {
-		replicas := *bindplane.Spec.Bindplane.Replicas
+		defaultReplicas := int32(3)
+		replicas := defaultReplicas
+		if bindplane.Spec.Bindplane.Replicas != nil {
+			replicas = *bindplane.Spec.Bindplane.Replicas
+		}
 		replicaPtr = &replicas
 	}
 
@@ -116,25 +50,9 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
 	terminationGracePeriod := nodeTerminationGracePeriodSeconds(bindplane)
 
-	// Default minReadySeconds to the termination grace period so that agents
-	// draining from the outgoing pod have time to reconnect to healthy nodes
-	// (including the new pod) before the next pod is taken out of service.
 	minReadySeconds := int32(terminationGracePeriod) // #nosec G115 -- grace period is always a small positive value
 	if bindplane.Spec.Bindplane.MinReadySeconds != nil {
 		minReadySeconds = *bindplane.Spec.Bindplane.MinReadySeconds
-	}
-
-	maxSurge := intstr.FromInt32(1)
-	maxUnavailable := intstr.FromInt32(0)
-	strategy := appsv1.DeploymentStrategy{
-		Type: appsv1.RollingUpdateDeploymentStrategyType,
-		RollingUpdate: &appsv1.RollingUpdateDeployment{
-			MaxSurge:       &maxSurge,
-			MaxUnavailable: &maxUnavailable,
-		},
-	}
-	if bindplane.Spec.Bindplane.Strategy != nil {
-		strategy = *bindplane.Spec.Bindplane.Strategy
 	}
 
 	nodeResources := corev1.ResourceRequirements{
@@ -150,16 +68,31 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 		nodeResources = *bindplane.Spec.Bindplane.Resources
 	}
 
-	return &appsv1.Deployment{
+	autoPromote := true
+	if bindplane.Spec.Bindplane.ArgoRollout != nil && bindplane.Spec.Bindplane.ArgoRollout.AutoPromotionEnabled != nil {
+		autoPromote = *bindplane.Spec.Bindplane.ArgoRollout.AutoPromotionEnabled
+	}
+
+	blueGreen := rolloutsv1alpha1.BlueGreenStrategy{
+		ActiveService:        getResourceName(bindplane, nodeComponent),
+		AutoPromotionEnabled: &autoPromote,
+	}
+	if bindplane.Spec.Bindplane.ArgoRollout != nil && bindplane.Spec.Bindplane.ArgoRollout.ScaleDownDelaySeconds != nil {
+		blueGreen.ScaleDownDelaySeconds = bindplane.Spec.Bindplane.ArgoRollout.ScaleDownDelaySeconds
+	}
+
+	return &rolloutsv1alpha1.Rollout{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, nodeComponent),
 			Namespace: bindplane.Namespace,
 			Labels:    labels,
 		},
-		Spec: appsv1.DeploymentSpec{
+		Spec: rolloutsv1alpha1.RolloutSpec{
 			Replicas:        replicaPtr,
 			MinReadySeconds: minReadySeconds,
-			Strategy:        strategy,
+			Strategy: rolloutsv1alpha1.RolloutStrategy{
+				BlueGreen: &blueGreen,
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
@@ -245,40 +178,4 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 			),
 		},
 	}
-}
-
-// getNodeEnvVars returns the Node-specific environment variables
-// Includes mode and NATS client configuration (but not NATS server config)
-func getNodeEnvVars() []corev1.EnvVar {
-	return []corev1.EnvVar{
-		{
-			Name:  bindplaneModeEnvVar,
-			Value: nodeModeValue,
-		},
-	}
-}
-
-// getNodeAffinity returns the default pod anti-affinity for Node pods.
-// Spreads pods across nodes by hostname (preferred, weight 100).
-// Overridden by the user's podTemplate.spec.affinity if provided.
-func getNodeAffinity(bindplane *bindplanev1alpha1.Bindplane) *corev1.Affinity {
-	return defaultPodAntiAffinity(bindplane, nodeComponent)
-}
-
-// getNodePodTemplate returns the user-provided pod template spec for Node
-func getNodePodTemplate(bindplane *bindplanev1alpha1.Bindplane) *bindplanev1alpha1.PodTemplateSpec {
-	return bindplane.Spec.Bindplane.PodTemplate
-}
-
-func (r *BindplaneReconciler) nodeService(bindplane *bindplanev1alpha1.Bindplane, useRollout bool) *corev1.Service {
-	opts := []serviceOption{WithPort(nodeHTTPPortName, nodeHTTPPort)}
-	if useRollout {
-		opts = append(opts, WithPreserveSelectorKey(rolloutsHashLabel))
-	}
-	return newService(bindplane, nodeComponent, opts...)
-}
-
-// nodeTerminationGracePeriodSeconds returns the termination grace period for the Node deployment.
-func nodeTerminationGracePeriodSeconds(_ *bindplanev1alpha1.Bindplane) int64 {
-	return defaultTerminationGracePeriodSeconds
 }

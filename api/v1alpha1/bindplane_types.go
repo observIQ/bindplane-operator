@@ -148,8 +148,23 @@ type BindplaneComponentSpec struct {
 	// Strategy defines the rollout strategy for the Bindplane Node Deployment.
 	// When omitted, defaults to RollingUpdate with maxSurge=1 and maxUnavailable=0,
 	// ensuring a replacement pod is running before the old pod is removed.
+	// Mutually exclusive with ArgoRollout.Enabled.
 	// +optional
 	Strategy *appsv1.DeploymentStrategy `json:"strategy,omitempty"`
+
+	// ArgoRollout, when set with Enabled=true, manages the primary Bindplane component
+	// as an Argo Rollouts Rollout (BlueGreen strategy) instead of a standard Deployment.
+	// The argoproj.io/v1alpha1 Rollout CRD and the Argo Rollouts controller must be
+	// installed in the cluster.
+	//
+	// When enabled, BindplaneComponentSpec.Strategy is rejected by validation
+	// (mutually exclusive — Rollout strategy is BlueGreen-only here).
+	//
+	// RECOMMENDED: also set spec.opamp.enabled=true. BlueGreen promotions cut over
+	// active traffic atomically; routing OpAMP/agent traffic to a dedicated Deployment
+	// prevents agent reconnect storms during promotion.
+	// +optional
+	ArgoRollout *ArgoRolloutSpec `json:"argoRollout,omitempty"`
 
 	// Autoscaling configures optional horizontal pod autoscaling for Bindplane Node.
 	// When autoscaling is enabled, spec.bindplane.replicas is ignored and the
@@ -173,6 +188,26 @@ type BindplaneComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+}
+
+// ArgoRolloutSpec configures BlueGreen Argo Rollouts management for the primary
+// Bindplane component. Only BlueGreen is supported in this release.
+type ArgoRolloutSpec struct {
+	// Enabled toggles Argo Rollout management for the primary Bindplane component.
+	// +optional
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// AutoPromotionEnabled controls whether the new ReplicaSet is automatically
+	// promoted to active once it becomes available. Defaults to true.
+	// +optional
+	AutoPromotionEnabled *bool `json:"autoPromotionEnabled,omitempty"`
+
+	// ScaleDownDelaySeconds is how long the previous ReplicaSet remains running
+	// after promotion. When omitted, Argo Rollouts applies its own default (30s).
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	ScaleDownDelaySeconds *int32 `json:"scaleDownDelaySeconds,omitempty"`
 }
 
 // OpAMPComponentSpec defines an optional dedicated Bindplane Deployment that

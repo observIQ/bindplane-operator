@@ -62,6 +62,20 @@ _Appears in:_
 | `rebalanceJitter` _integer_ | RebalanceJitter is the maximum percentage jitter to add to the rebalance interval (0–100).<br />Defaults to 0 (no jitter). |  | Maximum: 100 <br />Minimum: 0 <br />Optional: \{\} <br /> |
 | `maxSimultaneousConnections` _integer_ | MaxSimultaneousConnections is the maximum number of goroutines that will service<br />OpAMP connections concurrently. Generally set to the same value as<br />spec.config.maxConcurrency. Do not modify unless directed by Bindplane support. | 10 | Optional: \{\} <br /> |
 
+#### ArgoRolloutSpec
+
+ArgoRolloutSpec configures BlueGreen Argo Rollouts management for the primary
+Bindplane component. Only BlueGreen is supported in this release.
+
+_Appears in:_
+- [BindplaneComponentSpec](#bindplanecomponentspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled toggles Argo Rollout management for the primary Bindplane component. | false | Optional: \{\} <br /> |
+| `autoPromotionEnabled` _boolean_ | AutoPromotionEnabled controls whether the new ReplicaSet is automatically<br />promoted to active once it becomes available. Defaults to true. |  | Optional: \{\} <br /> |
+| `scaleDownDelaySeconds` _integer_ | ScaleDownDelaySeconds is how long the previous ReplicaSet remains running<br />after promotion. When omitted, Argo Rollouts applies its own default (30s). |  | Minimum: 0 <br />Optional: \{\} <br /> |
+
 #### AuditTrailConfig
 
 AuditTrailConfig defines audit trail configuration
@@ -120,7 +134,8 @@ _Appears in:_
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Bindplane Node |  | Type: object <br />Optional: \{\} <br /> |
 | `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. | false | Optional: \{\} <br /> |
 | `minReadySeconds` _integer_ | MinReadySeconds is the minimum number of seconds a newly created Node pod must be<br />ready (passing its readiness probe) before it is considered available. During a<br />rolling update the next pod is not replaced until this window elapses. When omitted,<br />the operator defaults this to the pod's termination grace period, giving agents<br />that were connected to the outgoing pod enough time to reconnect to healthy nodes<br />(including the new pod) before another pod is taken out of service. |  | Minimum: 0 <br />Optional: \{\} <br /> |
-| `strategy` _[DeploymentStrategy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#deploymentstrategy-v1-apps)_ | Strategy defines the rollout strategy for the Bindplane Node Deployment.<br />When omitted, defaults to RollingUpdate with maxSurge=1 and maxUnavailable=0,<br />ensuring a replacement pod is running before the old pod is removed. |  | Optional: \{\} <br /> |
+| `strategy` _[DeploymentStrategy](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#deploymentstrategy-v1-apps)_ | Strategy defines the rollout strategy for the Bindplane Node Deployment.<br />When omitted, defaults to RollingUpdate with maxSurge=1 and maxUnavailable=0,<br />ensuring a replacement pod is running before the old pod is removed.<br />Mutually exclusive with ArgoRollout.Enabled. |  | Optional: \{\} <br /> |
+| `argoRollout` _[ArgoRolloutSpec](#argorolloutspec)_ | ArgoRollout, when set with Enabled=true, manages the primary Bindplane component<br />as an Argo Rollouts Rollout (BlueGreen strategy) instead of a standard Deployment.<br />The argoproj.io/v1alpha1 Rollout CRD and the Argo Rollouts controller must be<br />installed in the cluster.<br />When enabled, BindplaneComponentSpec.Strategy is rejected by validation<br />(mutually exclusive — Rollout strategy is BlueGreen-only here).<br />RECOMMENDED: also set spec.opamp.enabled=true. BlueGreen promotions cut over<br />active traffic atomically; routing OpAMP/agent traffic to a dedicated Deployment<br />prevents agent reconnect storms during promotion. |  | Optional: \{\} <br /> |
 | `autoscaling` _[NodeAutoscalingSpec](#nodeautoscalingspec)_ | Autoscaling configures optional horizontal pod autoscaling for Bindplane Node.<br />When autoscaling is enabled, spec.bindplane.replicas is ignored and the<br />HorizontalPodAutoscaler controls the replica count. |  | Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 

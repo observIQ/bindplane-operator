@@ -1,0 +1,14 @@
+apiVersion: k8s.bindplane.com/v1alpha1
+kind: Bindplane
+metadata:
+  name: bindplane-argo-rollout
+spec:
+  config:
+    license: "test-license"
+    store:
+      postgres:
+        host: postgres.postgres.svc
+  bindplane:
+    replicas: 1
+    argoRollout:
+      enabled: true

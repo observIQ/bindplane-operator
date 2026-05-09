@@ -38,6 +38,10 @@ const (
 	pauseReconciliationAnnotation = "k8s.bindplane.com/pause-reconciliation"
 	bindplaneLicenseEnvVar        = "BINDPLANE_LICENSE"
 	ginkgoLabelRequiresLicense    = "requires-license"
+
+	ginkgoLabelRequiresArgoRollouts = "requires-argo-rollouts"
+	argoRolloutsNamespace           = "argo-rollouts"
+	argoRolloutsBindplaneName       = "bindplane-argo-rollout"
 )
 
 var (

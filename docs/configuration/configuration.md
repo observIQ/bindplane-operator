@@ -29,6 +29,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Extra environment variables](#extra-environment-variables)
   - [Reserved env names](#reserved-env-names)
   - [Pod template vs extraEnv](#pod-template-vs-extraenv)
+- [Argo Rollouts (primary Bindplane component)](#argo-rollouts-primary-bindplane-component)
 - [OpAMP deployment split](#opamp-deployment-split)
 - [Scope](#scope)
 - [Lifecycle](#lifecycle)
@@ -797,6 +798,59 @@ Names starting with `BINDPLANE_` are also rejected by default because they map t
 ### Pod template vs extraEnv
 
 The `podTemplate` field gives access to the full Kubernetes pod spec (tolerations, node selectors, affinity, security contexts, etc.). The operator intentionally **does not** merge environment variables from `podTemplate.spec.containers[*].env`—those entries are ignored for the primary container. Use `extraEnv` for all custom environment variable injection.
+
+## Argo Rollouts (primary Bindplane component)
+
+By default, the Bindplane Node workload is managed as a Kubernetes `Deployment`. When you set `spec.bindplane.argoRollout.enabled: true`, the operator switches the primary Node workload to an Argo Rollouts `Rollout` resource using the **BlueGreen** strategy.
+
+**Prerequisites:**
+- The [Argo Rollouts controller](https://argo-rollouts.readthedocs.io/en/stable/installation/) and its CRDs must be installed in the cluster.
+- Only the BlueGreen strategy is supported.
+
+> **Deployment order matters.** The Bindplane operator checks for the Argo Rollouts CRD at startup and registers a Kubernetes watch only when the CRD is present. Install the Argo Rollouts controller and CRDs **before** deploying the Bindplane operator. If you are migrating an existing installation to use Argo Rollouts, install Argo Rollouts first, then restart the Bindplane operator (`kubectl rollout restart deployment/<name> -n <namespace>`) so it picks up the new CRD and registers the watch.
+
+Toggling `argoRollout.enabled` deletes the existing workload (Deployment or Rollout) and creates the new one. This causes a brief interruption; plan accordingly.
+
+> **Note:** `spec.bindplane.strategy` and `spec.bindplane.argoRollout.enabled: true` are mutually exclusive. The operator will reject a CR that sets both.
+
+| CRD Field | Default | Description |
+|---|---|---|
+| `spec.bindplane.argoRollout.enabled` | `false` | Switches the primary Node workload from a Deployment to an Argo Rollout (BlueGreen) |
+| `spec.bindplane.argoRollout.autoPromotionEnabled` | `true` | Automatically promotes the new ReplicaSet to active once it is available |
+| `spec.bindplane.argoRollout.scaleDownDelaySeconds` | Argo default (30s) | Seconds the previous ReplicaSet stays running after promotion |
+
+> **Recommended: when `spec.bindplane.argoRollout.enabled: true`, also set `spec.opamp.enabled: true`.** BlueGreen promotions swap active traffic atomically; routing OpAMP/agent traffic to a dedicated Deployment prevents agent reconnect storms during promotion. See the [OpAMP deployment split](#opamp-deployment-split) section for details.
+
+### Minimal example (ArgoRollout only)
+
+```yaml
+apiVersion: k8s.bindplane.com/v1alpha1
+kind: Bindplane
+metadata:
+  name: bindplane-sample
+spec:
+  bindplane:
+    argoRollout:
+      enabled: true
+```
+
+### Recommended example (ArgoRollout + dedicated OpAMP)
+
+```yaml
+apiVersion: k8s.bindplane.com/v1alpha1
+kind: Bindplane
+metadata:
+  name: bindplane-sample
+spec:
+  bindplane:
+    argoRollout:
+      enabled: true
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 60
+  opamp:
+    enabled: true
+    replicas: 3
+```
 
 ## OpAMP deployment split
 

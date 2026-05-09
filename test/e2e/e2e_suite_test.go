@@ -36,6 +36,14 @@ var (
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
+
+	// Optional Environment Variables:
+	// - ARGO_ROLLOUTS_INSTALL_SKIP=true: Skips Argo Rollouts installation during test setup.
+	// - ARGO_ROLLOUTS_VERSION=vX.Y.Z: Chooses which Argo Rollouts manifest to install.
+	// Set ARGO_ROLLOUTS_INSTALL_SKIP=true when Argo Rollouts is not needed (e.g. make test-e2e).
+	skipArgoRolloutsInstall = os.Getenv("ARGO_ROLLOUTS_INSTALL_SKIP") == "true"
+	// isArgoRolloutsAlreadyInstalled will be set true when the Argo Rollouts CRD is found on the cluster
+	isArgoRolloutsAlreadyInstalled = false
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
@@ -80,6 +88,19 @@ var _ = BeforeSuite(func() {
 		}
 	}
 
+	// Install Argo Rollouts BEFORE deploying the operator so that the operator's
+	// SetupWithManager CRD check can find the Rollout CRD and register the watch.
+	if !skipArgoRolloutsInstall {
+		By("checking if Argo Rollouts is already installed")
+		isArgoRolloutsAlreadyInstalled = isArgoRolloutsCRDInstalled()
+		if !isArgoRolloutsAlreadyInstalled {
+			_, _ = fmt.Fprintf(GinkgoWriter, "Installing Argo Rollouts...\n")
+			Expect(installArgoRollouts()).To(Succeed(), "Failed to install Argo Rollouts")
+		} else {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Argo Rollouts is already installed. Skipping installation...\n")
+		}
+	}
+
 	By("setting up the operator test environment")
 	setupOperatorEnvironment()
 })
@@ -102,5 +123,11 @@ var _ = AfterSuite(func() {
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
 		uninstallCertManager()
+	}
+
+	// Teardown Argo Rollouts after the suite if not skipped and if it was not already installed
+	if !skipArgoRolloutsInstall && !isArgoRolloutsAlreadyInstalled {
+		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling Argo Rollouts...\n")
+		uninstallArgoRollouts()
 	}
 })

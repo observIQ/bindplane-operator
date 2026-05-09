@@ -22,8 +22,10 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
+	rolloutsv1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -280,6 +282,11 @@ const (
 	// Example: kubectl annotate bindplane my-bindplane k8s.bindplane.com/pause-reconciliation=true
 	annotationPauseReconciliation = "k8s.bindplane.com/pause-reconciliation"
 
+	// annotationPreserveSelectorKeys is an internal operator annotation placed on Service objects
+	// to signal which selector keys should be preserved from the live Service (e.g.
+	// rollouts-pod-template-hash written by Argo Rollouts during a BlueGreen cutover).
+	annotationPreserveSelectorKeys = "internal.k8s.bindplane.com/preserve-selector-keys"
+
 	// bindplaneFinalizer is the finalizer added to Bindplane CRs to ensure the operator
 	// can perform cleanup before the CR is removed from etcd.
 	bindplaneFinalizer = "k8s.bindplane.com/finalizer"
@@ -336,6 +343,13 @@ const (
 	probeTimeoutSeconds   int32 = 5
 )
 
+// Argo Rollouts constants
+const (
+	// rolloutsHashLabel is the selector key written by Argo Rollouts to the active Service
+	// during BlueGreen promotions. The operator must preserve this key so it does not flap it.
+	rolloutsHashLabel = rolloutsv1alpha1.DefaultRolloutUniqueLabelKey
+)
+
 // NATS constants
 const (
 	// natsServiceClientSuffix is the suffix for NATS client service name
@@ -380,6 +394,7 @@ type BindplaneReconciler struct {
 // +kubebuilder:rbac:groups=cert-manager.io,resources=issuers;clusterissuers,verbs=get;list;watch
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=argoproj.io,resources=rollouts,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -629,7 +644,7 @@ func (r *BindplaneReconciler) statefulSetReadyReplicas(ctx context.Context, name
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&bindplanev1alpha1.Bindplane{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&appsv1.StatefulSet{}).
@@ -637,9 +652,18 @@ func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
-		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
-		Named("bindplane").
-		Complete(r)
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{})
+
+	// Only add a Rollout watch if the Argo Rollouts CRD is installed.
+	// Watching a type whose CRD is absent blocks cache sync (CacheSyncTimeout = 2 min)
+	// and prevents the controller from starting, even when argoRollout is not enabled.
+	if gvks, _, err := mgr.GetScheme().ObjectKinds(&rolloutsv1alpha1.Rollout{}); err == nil && len(gvks) > 0 {
+		if _, err := mgr.GetRESTMapper().RESTMapping(gvks[0].GroupKind(), gvks[0].Version); err == nil {
+			b = b.Owns(&rolloutsv1alpha1.Rollout{})
+		}
+	}
+
+	return b.Named("bindplane").Complete(r)
 }
 
 // getLabels returns the standard labels for Bindplane resources
@@ -737,6 +761,67 @@ func (r *BindplaneReconciler) reconcileDeployment(ctx context.Context, bindplane
 	return r.Update(ctx, found)
 }
 
+// reconcileRollout creates or updates an Argo Rollout resource.
+// When the desired spec has Replicas=nil (HPA is managing scale), the live replica
+// count is preserved to avoid fighting the HPA on every reconcile.
+func (r *BindplaneReconciler) reconcileRollout(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, rollout *rolloutsv1alpha1.Rollout, log logr.Logger) error {
+	if err := controllerutil.SetControllerReference(bindplane, rollout, r.Scheme); err != nil {
+		return err
+	}
+
+	found := &rolloutsv1alpha1.Rollout{}
+	err := r.Get(ctx, types.NamespacedName{Name: rollout.Name, Namespace: rollout.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Rollout", "name", rollout.Name, "namespace", rollout.Namespace)
+		return r.Create(ctx, rollout)
+	} else if err != nil {
+		return err
+	}
+
+	desired := rollout.Spec.DeepCopy()
+	if desired.Replicas == nil {
+		desired.Replicas = found.Spec.Replicas
+	}
+
+	if equality.Semantic.DeepEqual(found.Spec, *desired) && equality.Semantic.DeepEqual(found.Labels, rollout.Labels) {
+		return nil
+	}
+
+	found.Spec = *desired
+	found.Labels = rollout.Labels
+	return r.Update(ctx, found)
+}
+
+// deleteDeploymentIfExists deletes the Deployment for a component if it exists.
+// Called when switching to Argo Rollout mode to clean up the previous Deployment.
+func (r *BindplaneReconciler) deleteDeploymentIfExists(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, component string, log logr.Logger) error {
+	dep := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: getResourceName(bindplane, component), Namespace: bindplane.Namespace}, dep)
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	log.Info("Deleting Deployment", "name", dep.Name)
+	return r.Delete(ctx, dep)
+}
+
+// deleteRolloutIfExists deletes the Argo Rollout for a component if it exists.
+// When the Argo Rollouts CRD is not installed, the error is treated as a no-op.
+func (r *BindplaneReconciler) deleteRolloutIfExists(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, component string, log logr.Logger) error {
+	rollout := &rolloutsv1alpha1.Rollout{}
+	err := r.Get(ctx, types.NamespacedName{Name: getResourceName(bindplane, component), Namespace: bindplane.Namespace}, rollout)
+	if errors.IsNotFound(err) || meta.IsNoMatchError(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	log.Info("Deleting Rollout", "name", rollout.Name)
+	return r.Delete(ctx, rollout)
+}
+
 func (r *BindplaneReconciler) reconcileStatefulSet(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, statefulSet *appsv1.StatefulSet, log logr.Logger) error {
 	if err := controllerutil.SetControllerReference(bindplane, statefulSet, r.Scheme); err != nil {
 		return err
@@ -783,6 +868,25 @@ func (r *BindplaneReconciler) reconcileService(ctx context.Context, bindplane *b
 	service.Spec.ClusterIPs = found.Spec.ClusterIPs
 	service.Spec.IPFamilies = found.Spec.IPFamilies
 	service.Spec.IPFamilyPolicy = found.Spec.IPFamilyPolicy
+
+	// If the desired Service was built with WithPreserveSelectorKey, copy those keys
+	// from the live Service into the desired selector so the operator does not remove
+	// them (e.g. rollouts-pod-template-hash written by Argo Rollouts during a BlueGreen
+	// cutover).
+	if preserveAnnotation, ok := service.Annotations[annotationPreserveSelectorKeys]; ok {
+		for _, key := range strings.Split(preserveAnnotation, ",") {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			if val, exists := found.Spec.Selector[key]; exists {
+				if service.Spec.Selector == nil {
+					service.Spec.Selector = make(map[string]string)
+				}
+				service.Spec.Selector[key] = val
+			}
+		}
+	}
 
 	// Skip the API call when nothing actually changed.
 	if equality.Semantic.DeepEqual(found.Spec.Ports, service.Spec.Ports) &&
@@ -999,7 +1103,8 @@ func newServiceAccount(bindplane *bindplanev1alpha1.Bindplane, component string)
 
 // serviceOptions holds configuration options for creating a Service
 type serviceOptions struct {
-	ports []corev1.ServicePort
+	ports                []corev1.ServicePort
+	preserveSelectorKeys []string
 }
 
 // serviceOption is a function that configures serviceOptions
@@ -1019,23 +1124,32 @@ func WithPort(name string, port int32) serviceOption {
 	}
 }
 
+// WithPreserveSelectorKey marks selector keys that should be copied from the live
+// Service into the desired Service before the equality comparison and update.
+// This prevents the operator from removing keys written externally (e.g., the
+// rollouts-pod-template-hash selector that Argo Rollouts writes during a BlueGreen
+// cutover).
+func WithPreserveSelectorKey(keys ...string) serviceOption {
+	return func(opts *serviceOptions) {
+		opts.preserveSelectorKeys = append(opts.preserveSelectorKeys, keys...)
+	}
+}
+
 // newService creates a ClusterIP Service for a component
-// It accepts variadic serviceOption functions to configure ports
+// It accepts variadic serviceOption functions to configure ports and selector preservation.
 func newService(bindplane *bindplanev1alpha1.Bindplane, component string, opts ...serviceOption) *corev1.Service {
 	labels := getLabels(bindplane, component)
 	selectorLabels := getSelectorLabels(bindplane, component)
 
-	// Apply default options
 	options := &serviceOptions{
 		ports: []corev1.ServicePort{},
 	}
 
-	// Apply all option functions
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	return &corev1.Service{
+	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, component),
 			Namespace: bindplane.Namespace,
@@ -1047,6 +1161,16 @@ func newService(bindplane *bindplanev1alpha1.Bindplane, component string, opts .
 			Ports:    options.ports,
 		},
 	}
+
+	// Store preserve-selector keys as an annotation so reconcileService can read them.
+	if len(options.preserveSelectorKeys) > 0 {
+		if svc.Annotations == nil {
+			svc.Annotations = make(map[string]string)
+		}
+		svc.Annotations[annotationPreserveSelectorKeys] = strings.Join(options.preserveSelectorKeys, ",")
+	}
+
+	return svc
 }
 
 // defaultPodAntiAffinity returns a preferred pod anti-affinity rule that spreads pods
