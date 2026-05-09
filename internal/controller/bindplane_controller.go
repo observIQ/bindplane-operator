@@ -644,7 +644,7 @@ func (r *BindplaneReconciler) statefulSetReadyReplicas(ctx context.Context, name
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		For(&bindplanev1alpha1.Bindplane{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&appsv1.StatefulSet{}).
@@ -652,10 +652,18 @@ func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
-		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
-		Owns(&rolloutsv1alpha1.Rollout{}).
-		Named("bindplane").
-		Complete(r)
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{})
+
+	// Only add a Rollout watch if the Argo Rollouts CRD is installed.
+	// Watching a type whose CRD is absent blocks cache sync (CacheSyncTimeout = 2 min)
+	// and prevents the controller from starting, even when argoRollout is not enabled.
+	if gvks, _, err := mgr.GetScheme().ObjectKinds(&rolloutsv1alpha1.Rollout{}); err == nil && len(gvks) > 0 {
+		if _, err := mgr.GetRESTMapper().RESTMapping(gvks[0].GroupKind(), gvks[0].Version); err == nil {
+			b = b.Owns(&rolloutsv1alpha1.Rollout{})
+		}
+	}
+
+	return b.Named("bindplane").Complete(r)
 }
 
 // getLabels returns the standard labels for Bindplane resources

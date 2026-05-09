@@ -47,6 +47,13 @@ const (
 	certManagerVersionEnvVar  = "CERT_MANAGER_VERSION"
 	certManagerVersionURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 	projectDirE2ESuffix       = "/test/e2e"
+
+	// defaultArgoRolloutsVersion is the pinned Argo Rollouts release used by default.
+	// Must match the github.com/argoproj/argo-rollouts version in go.mod.
+	// Override at runtime with ARGO_ROLLOUTS_VERSION=vX.Y.Z to test a different version.
+	defaultArgoRolloutsVersion = "v1.9.0"
+	argoRolloutsVersionEnvVar  = "ARGO_ROLLOUTS_VERSION"
+	argoRolloutsInstallURLTmpl = "https://github.com/argoproj/argo-rollouts/releases/download/%s/install.yaml"
 )
 
 var controllerPodName string
@@ -690,6 +697,108 @@ func uninstallCertManager() {
 	if _, err := run(cmd); err != nil {
 		warnError(err)
 	}
+}
+
+func getArgoRolloutsVersion() string {
+	version := os.Getenv(argoRolloutsVersionEnvVar)
+	if version == "" {
+		return defaultArgoRolloutsVersion
+	}
+	return version
+}
+
+func getArgoRolloutsURL() string {
+	return fmt.Sprintf(argoRolloutsInstallURLTmpl, getArgoRolloutsVersion())
+}
+
+func isArgoRolloutsCRDInstalled() bool {
+	cmd := exec.Command("kubectl", "get", "crd", "rollouts.argoproj.io") // #nosec G204 -- test utility
+	_, err := run(cmd)
+	return err == nil
+}
+
+func installArgoRollouts() error {
+	version := getArgoRolloutsVersion()
+	url := getArgoRolloutsURL()
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing Argo Rollouts %q from %s\n", version, url)
+
+	// Create the namespace first so that kubectl wait can target it immediately.
+	// Ignore "already exists" so the function is idempotent.
+	// #nosec G204 -- namespace is a constant
+	if out, err := run(exec.Command("kubectl", "create", "namespace", argoRolloutsNamespace)); err != nil {
+		if !strings.Contains(out, "already exists") {
+			return fmt.Errorf("failed to create %s namespace: %w", argoRolloutsNamespace, err)
+		}
+	}
+
+	applyCmd := exec.Command("kubectl", "apply", "--server-side", // #nosec G204 -- test utility
+		"--namespace", argoRolloutsNamespace, "-f", url)
+	if _, err := run(applyCmd); err != nil {
+		return err
+	}
+
+	// Poll until the Deployment object exists — apply returns before objects are created.
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		cmd := exec.Command("kubectl", "get", "deployment/argo-rollouts", // #nosec G204 -- constant
+			"--namespace", argoRolloutsNamespace)
+		if _, err := run(cmd); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for argo-rollouts Deployment to be created")
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	cmd := exec.Command("kubectl", "wait", "deployment/argo-rollouts", // #nosec G204 -- deployment name is a constant
+		"--for", "condition=Available",
+		"--namespace", argoRolloutsNamespace,
+		"--timeout", "8m",
+	)
+	if _, err := run(cmd); err != nil {
+		return fmt.Errorf("argo-rollouts deployment not Available: %w", err)
+	}
+	return nil
+}
+
+func uninstallArgoRollouts() {
+	url := getArgoRolloutsURL()
+	// #nosec G204 -- test utility, args are version-pinned constants
+	cmd := exec.Command("kubectl", "delete", "--namespace", argoRolloutsNamespace, "-f", url)
+	if _, err := run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+func waitForRolloutExists(name, namespace string, timeout time.Duration) {
+	Eventually(func(g Gomega) {
+		_, err := runCmd(kubectl(namespace, "get", "rollout", name))
+		g.Expect(err).NotTo(HaveOccurred())
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
+}
+
+// skipMigrateJob waits for the operator to create the migrate Job for a Bindplane instance,
+// then patches the Bindplane status so the migration gate is bypassed without running the Job.
+// This is used in tests that have no postgres, since the migrate Job requires a real postgres host.
+func skipMigrateJob(bindplaneName, namespace string, timeout time.Duration) {
+	jobName := bindplaneName + "-migrate"
+
+	var jobImage string
+	By("waiting for the migrate Job to be created")
+	Eventually(func(g Gomega) {
+		out, err := runCmd(kubectl(namespace, "get", "job", jobName,
+			"-o", "jsonpath={.spec.template.spec.containers[0].image}"))
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(strings.TrimSpace(out)).NotTo(BeEmpty())
+		jobImage = strings.TrimSpace(out)
+	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
+
+	By("patching migratedImage status to bypass the migration gate")
+	patch := fmt.Sprintf(`{"status":{"migratedImage":%q}}`, jobImage)
+	_, err := runCmd(kubectl(namespace, "patch", "bindplane", bindplaneName,
+		"--subresource=status", "--type=merge", "--patch", patch))
+	Expect(err).NotTo(HaveOccurred(), "failed to patch migratedImage status")
 }
 
 // verifyKubectlContext ensures the active kubectl context is the expected Kind
