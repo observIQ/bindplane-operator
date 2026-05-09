@@ -805,7 +805,7 @@ By default, the Bindplane Node workload is managed as a Kubernetes `Deployment`.
 
 **Prerequisites:**
 - The [Argo Rollouts controller](https://argo-rollouts.readthedocs.io/en/stable/installation/) and its CRDs must be installed in the cluster.
-- Only the BlueGreen strategy is supported in this release. Canary is out of scope.
+- Only the BlueGreen strategy is supported.
 
 > **Deployment order matters.** The Bindplane operator checks for the Argo Rollouts CRD at startup and registers a Kubernetes watch only when the CRD is present. Install the Argo Rollouts controller and CRDs **before** deploying the Bindplane operator. If you are migrating an existing installation to use Argo Rollouts, install Argo Rollouts first, then restart the Bindplane operator (`kubectl rollout restart deployment/<name> -n <namespace>`) so it picks up the new CRD and registers the watch.
 
