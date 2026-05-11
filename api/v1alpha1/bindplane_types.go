@@ -1362,7 +1362,3 @@ type BindplaneList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Bindplane `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&Bindplane{}, &BindplaneList{})
-}
