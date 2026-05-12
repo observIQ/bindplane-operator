@@ -52,5 +52,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sign container images and attach SBOM attestations
+      - name: Sign multi-arch manifests and attach SBOM attestations (by digest)
         run: .github/workflows/scripts/sign-and-attest.sh
