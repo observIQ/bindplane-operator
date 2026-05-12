@@ -48,10 +48,6 @@ docker_manifests:
     image_templates:
       - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-amd64"
       - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/observiq/bindplane-operator:latest"
-    image_templates:
-      - "ghcr.io/observiq/bindplane-operator:latest-amd64"
-      - "ghcr.io/observiq/bindplane-operator:latest-arm64"
 
 sboms:
   - artifacts: binary
