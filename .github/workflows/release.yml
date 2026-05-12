@@ -15,6 +15,13 @@ jobs:
     name: Release
     runs-on: ubuntu-latest-8-cores
     steps:
+      - name: Validate tag format
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            echo "Error: tag '${GITHUB_REF_NAME}' must not have a 'v' prefix (e.g. use '1.0.0' not 'v1.0.0')"
+            exit 1
+          fi
+
       - name: Clone the code
         uses: actions/checkout@v4
         with:
