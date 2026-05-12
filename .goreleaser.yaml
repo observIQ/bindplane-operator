@@ -65,6 +65,12 @@ release:
     - glob: tmp/install.yaml
     - glob: tmp/install-no-webhook.yaml
   header: |
+    ## Container Image
+
+    ```
+    ghcr.io/observiq/bindplane-operator:{{ .Version }}
+    ```
+
     ## Installation
 
     **Default install (includes validating admission webhook — requires [cert-manager](https://cert-manager.io/docs/installation/)):**
