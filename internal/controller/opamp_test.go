@@ -78,7 +78,7 @@ var _ = Describe("opampDeployment", func() {
 	It("uses the correct image", func() {
 		dep := r.opampDeployment(bindplane)
 		Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
-		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(getBindplaneEEImage(bindplane)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(getOpAMPImage(bindplane)))
 	})
 
 	It("sets BINDPLANE_MODE=node", func() {

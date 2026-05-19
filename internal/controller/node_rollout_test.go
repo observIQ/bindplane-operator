@@ -99,7 +99,7 @@ var _ = Describe("nodeRollout", func() {
 	It("uses the correct image", func() {
 		rollout := r.nodeRollout(bindplane)
 		Expect(rollout.Spec.Template.Spec.Containers).NotTo(BeEmpty())
-		Expect(rollout.Spec.Template.Spec.Containers[0].Image).To(Equal(getBindplaneEEImage(bindplane)))
+		Expect(rollout.Spec.Template.Spec.Containers[0].Image).To(Equal(getNodeImage(bindplane)))
 	})
 
 	It("uses operator-managed selector labels", func() {

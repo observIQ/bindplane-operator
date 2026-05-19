@@ -111,6 +111,52 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 		return err
 	}
 
+	if err := ValidateImageOverrides(bindplane); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateImageOverrides validates per-service image override fields.
+// It rejects values that contain whitespace or look like a URL (http:// / https:// scheme).
+func ValidateImageOverrides(bindplane *bindplanev1alpha1.Bindplane) error {
+	type imageField struct {
+		path  string
+		value string
+	}
+	fields := []imageField{
+		{"spec.bindplane.image", bindplane.Spec.Bindplane.Image},
+	}
+	if bindplane.Spec.OpAMP != nil {
+		fields = append(fields, imageField{"spec.opamp.image", bindplane.Spec.OpAMP.Image})
+	}
+	if bindplane.Spec.Nats != nil {
+		fields = append(fields, imageField{"spec.nats.image", bindplane.Spec.Nats.Image})
+	}
+	if bindplane.Spec.BindplaneJobs != nil {
+		fields = append(fields, imageField{"spec.bindplaneJobs.image", bindplane.Spec.BindplaneJobs.Image})
+	}
+	if bindplane.Spec.BindplaneJobsMigrate != nil {
+		fields = append(fields, imageField{"spec.bindplaneJobsMigrate.image", bindplane.Spec.BindplaneJobsMigrate.Image})
+	}
+	if bindplane.Spec.TransformAgent != nil {
+		fields = append(fields, imageField{"spec.transformAgent.image", bindplane.Spec.TransformAgent.Image})
+	}
+	if bindplane.Spec.TSDB != nil {
+		fields = append(fields, imageField{"spec.tsdb.image", bindplane.Spec.TSDB.Image})
+	}
+	for _, f := range fields {
+		if f.value == "" {
+			continue
+		}
+		if strings.ContainsAny(f.value, " \t\n\r") {
+			return fmt.Errorf("%s: image reference must not contain whitespace", f.path)
+		}
+		if strings.HasPrefix(f.value, "http://") || strings.HasPrefix(f.value, "https://") || strings.HasPrefix(f.value, "docker://") {
+			return fmt.Errorf("%s: image reference must not include a URL scheme (http://, https://, docker://)", f.path)
+		}
+	}
 	return nil
 }
 

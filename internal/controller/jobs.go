@@ -138,7 +138,7 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 						Containers: []corev1.Container{
 							{
 								Name:         bindplaneJobsContainerName,
-								Image:        getBindplaneEEImage(bindplane),
+								Image:        getBindplaneJobsImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{
@@ -262,7 +262,7 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 						Affinity:           getBindplaneJobsMigrateAffinity(bindplane),
 						Containers: []corev1.Container{{
 							Name:         bindplaneJobsContainerName,
-							Image:        getBindplaneEEImage(bindplane),
+							Image:        getBindplaneJobsMigrateImage(bindplane),
 							Command:      []string{"/bindplane", "migrate", "-y"},
 							VolumeMounts: configMounts,
 							Env: prependExtraEnv(
@@ -319,7 +319,7 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 		return false, nil // requeue; next reconcile will detect MigratedImage mismatch
 	}
 
-	desiredImage := getBindplaneEEImage(bindplane)
+	desiredImage := getBindplaneJobsMigrateImage(bindplane)
 
 	// Already migrated for this image — skip.
 	if bindplane.Status.MigratedImage == desiredImage {

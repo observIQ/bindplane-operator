@@ -31,6 +31,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Pod template vs extraEnv](#pod-template-vs-extraenv)
 - [Argo Rollouts (primary Bindplane component)](#argo-rollouts-primary-bindplane-component)
 - [OpAMP deployment split](#opamp-deployment-split)
+- [Container images](#container-images)
 - [Scope](#scope)
 - [Lifecycle](#lifecycle)
   - [Pause annotation](#pause-annotation)
@@ -954,6 +955,64 @@ spec:
 > **Note:** If you use BindplaneGateway to expose Bindplane, configure it to route OpAMP traffic to the `<name>-opamp` Service. Refer to the BindplaneGateway documentation for routing configuration. The operator does not configure BindplaneGateway.
 
 > **Note:** The operator provisions a regular ClusterIP Service for the OpAMP deployment (`<name>-opamp`). A headless Service is not created because agents do not require pod-direct DNS — load balancing through the ClusterIP Service is sufficient.
+
+## Container images
+
+By default, all service container images are derived from `spec.version` using three image repositories:
+
+| Service | Default image |
+|---|---|
+| Node, OpAMP, NATS, Jobs, Jobs Migrate | `ghcr.io/observiq/bindplane-ee:<version>` |
+| Transform Agent | `ghcr.io/observiq/bindplane-transform-agent:<version>-bindplane` |
+| TSDB (Prometheus) | `ghcr.io/observiq/bindplane-prometheus:<version>` |
+
+This is the recommended approach: change `spec.version` to roll all services together.
+
+### Per-service image override
+
+Each component spec exposes an `image` field that accepts a full OCI reference. When set, it is used verbatim — the value completely replaces the version-derived default for that service only. Other services continue to derive their image from `spec.version`.
+
+| CRD Field | Applies to |
+|---|---|
+| `spec.bindplane.image` | Bindplane Node |
+| `spec.opamp.image` | OpAMP dedicated deployment |
+| `spec.nats.image` | NATS |
+| `spec.bindplaneJobs.image` | Bindplane Jobs |
+| `spec.bindplaneJobsMigrate.image` | Bindplane Jobs Migrate (migration batch Job) |
+| `spec.transformAgent.image` | Transform Agent |
+| `spec.tsdb.image` | TSDB (Prometheus) |
+
+Example — mirror all images through a private registry while keeping the global version:
+
+```yaml
+spec:
+  version: "1.99.1"
+  bindplane:
+    image: "registry.corp.example.com/bindplane/bindplane-ee:1.99.1"
+  nats:
+    image: "registry.corp.example.com/bindplane/bindplane-ee:1.99.1"
+  bindplaneJobs:
+    image: "registry.corp.example.com/bindplane/bindplane-ee:1.99.1"
+  bindplaneJobsMigrate:
+    image: "registry.corp.example.com/bindplane/bindplane-ee:1.99.1"
+  transformAgent:
+    image: "registry.corp.example.com/bindplane/bindplane-transform-agent:1.99.1-bindplane"
+  tsdb:
+    image: "registry.corp.example.com/bindplane/bindplane-prometheus:1.99.1"
+```
+
+Example — pin only Jobs Migrate to a hotfix image:
+
+```yaml
+spec:
+  version: "1.99.1"
+  bindplaneJobsMigrate:
+    image: "ghcr.io/observiq/bindplane-ee:1.99.1-hotfix"
+```
+
+> **Warning:** `spec.bindplaneJobsMigrate.image` controls the image used by the database migration Job. The operator gates downstream rollouts on this Job completing successfully and records the migrate image in `status.migratedImage`. If you pin jobs-migrate to a different version than node, jobs, and nats, ensure the migration is compatible with the runtime image — the operator does not enforce this constraint.
+
+The `VERSION` column shown by `kubectl get bindplane` always reflects `spec.version`, regardless of per-service overrides.
 
 ## Scope
 
