@@ -292,20 +292,77 @@ const (
 	bindplaneFinalizer = "k8s.bindplane.com/finalizer"
 )
 
-// getBindplaneEEImage returns the Bindplane EE container image for the given Bindplane instance.
-// Used by Jobs, Jobs Migrate, NATS, and Node.
-func getBindplaneEEImage(bindplane *bindplanev1alpha1.Bindplane) string {
+// resolveImage returns override when non-empty, otherwise falls back to defaultRef.
+func resolveImage(override, defaultRef string) string {
+	if override != "" {
+		return override
+	}
+	return defaultRef
+}
+
+func defaultBindplaneEEImage(bindplane *bindplanev1alpha1.Bindplane) string {
 	return "ghcr.io/observiq/bindplane-ee:" + bindplane.Spec.Version
 }
 
-// getTransformAgentImage returns the Transform Agent container image for the given Bindplane instance.
-func getTransformAgentImage(bindplane *bindplanev1alpha1.Bindplane) string {
+func defaultTransformAgentImage(bindplane *bindplanev1alpha1.Bindplane) string {
 	return "ghcr.io/observiq/bindplane-transform-agent:" + bindplane.Spec.Version + "-bindplane"
 }
 
-// getTSDBImage returns the TSDB (Prometheus) container image for the given Bindplane instance.
-func getTSDBImage(bindplane *bindplanev1alpha1.Bindplane) string {
+func defaultTSDBImage(bindplane *bindplanev1alpha1.Bindplane) string {
 	return "ghcr.io/observiq/bindplane-prometheus:" + bindplane.Spec.Version
+}
+
+// getNodeImage returns the container image for Bindplane Node.
+func getNodeImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	return resolveImage(bindplane.Spec.Bindplane.Image, defaultBindplaneEEImage(bindplane))
+}
+
+// getOpAMPImage returns the container image for the OpAMP deployment.
+func getOpAMPImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	if bindplane.Spec.OpAMP == nil {
+		return defaultBindplaneEEImage(bindplane)
+	}
+	return resolveImage(bindplane.Spec.OpAMP.Image, defaultBindplaneEEImage(bindplane))
+}
+
+// getNatsImage returns the container image for NATS.
+func getNatsImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	if bindplane.Spec.Nats == nil {
+		return defaultBindplaneEEImage(bindplane)
+	}
+	return resolveImage(bindplane.Spec.Nats.Image, defaultBindplaneEEImage(bindplane))
+}
+
+// getBindplaneJobsImage returns the container image for Bindplane Jobs.
+func getBindplaneJobsImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	if bindplane.Spec.BindplaneJobs == nil {
+		return defaultBindplaneEEImage(bindplane)
+	}
+	return resolveImage(bindplane.Spec.BindplaneJobs.Image, defaultBindplaneEEImage(bindplane))
+}
+
+// getBindplaneJobsMigrateImage returns the container image for Bindplane Jobs Migrate.
+func getBindplaneJobsMigrateImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	if bindplane.Spec.BindplaneJobsMigrate == nil {
+		return defaultBindplaneEEImage(bindplane)
+	}
+	return resolveImage(bindplane.Spec.BindplaneJobsMigrate.Image, defaultBindplaneEEImage(bindplane))
+}
+
+// getTransformAgentImage returns the container image for Transform Agent.
+func getTransformAgentImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	if bindplane.Spec.TransformAgent == nil {
+		return defaultTransformAgentImage(bindplane)
+	}
+	return resolveImage(bindplane.Spec.TransformAgent.Image, defaultTransformAgentImage(bindplane))
+}
+
+// getTSDBImage returns the container image for TSDB (Prometheus).
+func getTSDBImage(bindplane *bindplanev1alpha1.Bindplane) string {
+	if bindplane.Spec.TSDB == nil {
+		return defaultTSDBImage(bindplane)
+	}
+	return resolveImage(bindplane.Spec.TSDB.Image, defaultTSDBImage(bindplane))
 }
 
 // Common security and pod constants

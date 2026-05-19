@@ -667,3 +667,115 @@ func TestValidateBindplane_RejectsArgoRolloutWithStrategy(t *testing.T) {
 		t.Error("expected ValidateBindplane to fail when argoRollout.enabled=true and strategy is set")
 	}
 }
+
+// ---- ValidateImageOverrides ----
+
+func newImageOverrideTestBindplane() *bindplanev1alpha1.Bindplane {
+	return &bindplanev1alpha1.Bindplane{
+		ObjectMeta: metav1.ObjectMeta{Name: "bindplane"},
+		Spec: bindplanev1alpha1.BindplaneSpec{
+			Version: "1.99.1",
+			Config: bindplanev1alpha1.BindplaneConfigSpec{
+				License: "test-license",
+				Store: bindplanev1alpha1.StoreConfig{
+					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres.example.com"},
+				},
+			},
+		},
+	}
+}
+
+func TestValidateImageOverrides_AcceptsEmpty(t *testing.T) {
+	bp := newImageOverrideTestBindplane()
+	if err := validation.ValidateImageOverrides(bp); err != nil {
+		t.Errorf("unexpected error with no image overrides set: %v", err)
+	}
+}
+
+func TestValidateImageOverrides_AcceptsValidImages(t *testing.T) {
+	valid := []string{
+		"ghcr.io/observiq/bindplane-ee:1.99.1",
+		"myregistry.example.com/bindplane-ee:custom-tag",
+		"ghcr.io/observiq/bindplane-ee@sha256:abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+		"bindplane-ee:latest",
+		"192.168.1.1:5000/bindplane-ee:1.99.1",
+	}
+	for _, img := range valid {
+		bp := newImageOverrideTestBindplane()
+		bp.Spec.Bindplane.Image = img
+		if err := validation.ValidateImageOverrides(bp); err != nil {
+			t.Errorf("unexpected error for valid image %q: %v", img, err)
+		}
+	}
+}
+
+func TestValidateImageOverrides_RejectsWhitespace(t *testing.T) {
+	cases := []struct {
+		name  string
+		image string
+	}{
+		{"space", "my image:tag"},
+		{"tab", "my\timage:tag"},
+		{"newline", "myimage:tag\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := newImageOverrideTestBindplane()
+			bp.Spec.Bindplane.Image = tc.image
+			if err := validation.ValidateImageOverrides(bp); err == nil {
+				t.Errorf("expected error for image with whitespace %q", tc.image)
+			}
+		})
+	}
+}
+
+func TestValidateImageOverrides_RejectsURLScheme(t *testing.T) {
+	cases := []string{
+		"http://myregistry.example.com/bindplane-ee:1.99.1",
+		"https://myregistry.example.com/bindplane-ee:1.99.1",
+		"docker://myregistry.example.com/bindplane-ee:1.99.1",
+	}
+	for _, img := range cases {
+		bp := newImageOverrideTestBindplane()
+		bp.Spec.Bindplane.Image = img
+		if err := validation.ValidateImageOverrides(bp); err == nil {
+			t.Errorf("expected error for image with URL scheme %q", img)
+		}
+	}
+}
+
+func TestValidateImageOverrides_ValidatesAllComponents(t *testing.T) {
+	invalid := "http://bad-image"
+	components := []struct {
+		name   string
+		mutate func(*bindplanev1alpha1.Bindplane)
+	}{
+		{"opamp", func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Spec.OpAMP = &bindplanev1alpha1.OpAMPComponentSpec{Image: invalid}
+		}},
+		{"nats", func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Spec.Nats = &bindplanev1alpha1.NatsComponentSpec{Image: invalid}
+		}},
+		{"bindplaneJobs", func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Spec.BindplaneJobs = &bindplanev1alpha1.BindplaneJobsComponentSpec{Image: invalid}
+		}},
+		{"bindplaneJobsMigrate", func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Spec.BindplaneJobsMigrate = &bindplanev1alpha1.BindplaneJobsMigrateComponentSpec{Image: invalid}
+		}},
+		{"transformAgent", func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{Image: invalid}
+		}},
+		{"tsdb", func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Spec.TSDB = &bindplanev1alpha1.TSDBComponentSpec{Image: invalid}
+		}},
+	}
+	for _, tc := range components {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := newImageOverrideTestBindplane()
+			tc.mutate(bp)
+			if err := validation.ValidateImageOverrides(bp); err == nil {
+				t.Errorf("expected error for invalid %s.image", tc.name)
+			}
+		})
+	}
+}

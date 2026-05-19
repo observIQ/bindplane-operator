@@ -176,7 +176,7 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 						Containers: []corev1.Container{
 							{
 								Name:         nodeContainerName,
-								Image:        getBindplaneEEImage(bindplane),
+								Image:        getNodeImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
 									{

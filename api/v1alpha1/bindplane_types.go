@@ -188,6 +188,13 @@ type BindplaneComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Image overrides the container image for Bindplane Node. When set, the value is used
+	// verbatim as a full OCI reference (e.g. "myregistry.example.com/bindplane-ee:1.99.1" or
+	// "ghcr.io/observiq/bindplane-ee@sha256:..."). When empty, the image is derived from spec.version.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image,omitempty"`
 }
 
 // ArgoRolloutSpec configures BlueGreen Argo Rollouts management for the primary
@@ -303,6 +310,12 @@ type OpAMPComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Image overrides the container image for the OpAMP deployment. When set, the value is used
+	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image,omitempty"`
 }
 
 // BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification
@@ -336,6 +349,12 @@ type BindplaneJobsComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Image overrides the container image for Bindplane Jobs. When set, the value is used
+	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image,omitempty"`
 }
 
 // BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification.
@@ -370,6 +389,14 @@ type BindplaneJobsMigrateComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Image overrides the container image for Bindplane Jobs Migrate. When set, the value is used
+	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.
+	// Setting this decouples jobs-migrate from spec.version — ensure the image is compatible with
+	// the bindplane-ee image used by node, jobs, and nats; the operator does not enforce this.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image,omitempty"`
 }
 
 // BindplaneConfigSpec defines Bindplane's configuration
@@ -850,6 +877,13 @@ type TransformAgentComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Image overrides the container image for Transform Agent. When set, the value is used
+	// verbatim as a full OCI reference. When empty, the image is derived from spec.version
+	// using the ghcr.io/observiq/bindplane-transform-agent registry.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image,omitempty"`
 }
 
 // TSDBComponentSpec defines the TSDB component pod specification.
@@ -892,6 +926,13 @@ type TSDBComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Image overrides the container image for TSDB (Prometheus). When set, the value is used
+	// verbatim as a full OCI reference. When empty, the image is derived from spec.version
+	// using the ghcr.io/observiq/bindplane-prometheus registry.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image,omitempty"`
 }
 
 // NatsComponentSpec defines the NATS component pod specification
@@ -934,6 +975,12 @@ type NatsComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Image overrides the container image for NATS. When set, the value is used
+	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image,omitempty"`
 }
 
 // StorageSpec defines persistent storage configuration

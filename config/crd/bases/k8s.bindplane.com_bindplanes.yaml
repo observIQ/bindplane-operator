@@ -497,6 +497,9 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  image:
+                    minLength: 1
+                    type: string
                   minReadySeconds:
                     format: int32
                     minimum: 0
@@ -4430,6 +4433,9 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  image:
+                    minLength: 1
+                    type: string
                   podTemplate:
                     properties:
                       metadata:
@@ -8337,6 +8343,9 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  image:
+                    minLength: 1
+                    type: string
                   podTemplate:
                     properties:
                       metadata:
@@ -12822,6 +12831,9 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  image:
+                    minLength: 1
+                    type: string
                   podTemplate:
                     properties:
                       metadata:
@@ -17090,6 +17102,9 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  image:
+                    minLength: 1
+                    type: string
                   maxSimultaneousConnections:
                     format: int64
                     minimum: 1
@@ -21032,6 +21047,9 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  image:
+                    minLength: 1
+                    type: string
                   podTemplate:
                     properties:
                       metadata:
@@ -24962,6 +24980,9 @@ spec:
                     x-kubernetes-list-map-keys:
                     - name
                     x-kubernetes-list-type: map
+                  image:
+                    minLength: 1
+                    type: string
                   podTemplate:
                     properties:
                       metadata:
