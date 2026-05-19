@@ -430,7 +430,7 @@ type BindplaneConfigSpec struct {
 	// +optional
 	Status *StatusConfig `json:"status,omitempty"`
 
-	// Logging configures the Bindplane log level and output destination.
+	// Logging configures Bindplane log behavior.
 	// +optional
 	Logging *LoggingConfig `json:"logging,omitempty"`
 
@@ -784,20 +784,14 @@ type MetricsPrometheusConfig struct {
 	PasswordSecretRef *corev1.SecretKeySelector `json:"passwordSecretRef,omitempty"`
 }
 
-// LoggingConfig defines logging configuration.
+// LoggingConfig defines user-configurable logging options.
+// The logging output destination is always stdout and is not user-configurable.
 type LoggingConfig struct {
 	// Level specifies the log level. One of: debug, info, warn, error.
 	// +optional
 	// +kubebuilder:validation:Enum=debug;info;warn;error
 	// +kubebuilder:default=info
 	Level string `json:"level,omitempty"`
-
-	// Type specifies the logging output destination.
-	// Use "stdout" to write logs to standard output.
-	// +optional
-	// +kubebuilder:default=stdout
-	// +kubebuilder:validation:Enum=stdout
-	Type string `json:"type,omitempty"`
 }
 
 // MetricsOTLPConfig defines OTLP metrics configuration

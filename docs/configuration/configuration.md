@@ -658,16 +658,15 @@ spec:
 
 ## Logging
 
-Logging configures the log level for Bindplane components. When `spec.config.logging` is omitted entirely, no logging environment variables are set and Bindplane uses its own internal defaults.
+Bindplane always logs to stdout; the output destination is operator-managed and not user-configurable. The `spec.config.logging` block exposes only the log level.
 
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.logging.level` | `BINDPLANE_LOGGING_LEVEL` | `info` | No |
-| `spec.config.logging.type` | `BINDPLANE_LOGGING_TYPE` | `stdout` | No |
 
 Valid values for `level`: `debug`, `info`, `warn`, `error`.
 
-Valid values for `type`: `stdout`.
+The operator also sets `BINDPLANE_LOGGING_TYPE=stdout` on every Bindplane pod. This is not user-configurable.
 
 Example:
 
@@ -676,7 +675,6 @@ spec:
   config:
     logging:
       level: debug
-      type: stdout
 ```
 
 ## Agents

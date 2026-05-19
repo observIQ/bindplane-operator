@@ -160,7 +160,7 @@ _Appears in:_
 | `tsdb` _[TSDBConfig](#tsdbconfig)_ | TSDB configures TLS and remote settings for Bindplane's TSDB integration. |  | Optional: \{\} <br /> |
 | `nats` _[NatsConfig](#natsconfig)_ | Nats configures TLS for the NATS event bus (client and server). Cert-manager only. |  | Optional: \{\} <br /> |
 | `eventBus` _[EventBusConfig](#eventbusconfig)_ | EventBus configures the event bus (NATS) integration, including health checks. |  | Optional: \{\} <br /> |
-| `logging` _[LoggingConfig](#loggingconfig)_ | Logging configures the Bindplane log level and output destination. |  | Optional: \{\} <br /> |
+| `logging` _[LoggingConfig](#loggingconfig)_ | Logging configures Bindplane log behavior. |  | Optional: \{\} <br /> |
 | `agents` _[AgentsConfig](#agentsconfig)_ | Agents configures Bindplane agent connection, heartbeat, rebalance, and authentication options. |  | Optional: \{\} <br /> |
 | `agentVersions` _[AgentVersionsConfig](#agentversionsconfig)_ | AgentVersions configures agent version sync behavior. |  | Optional: \{\} <br /> |
 
@@ -292,7 +292,8 @@ _Appears in:_
 
 #### LoggingConfig
 
-LoggingConfig defines logging configuration.
+LoggingConfig defines user-configurable logging options.
+The logging output destination is always stdout and is not user-configurable.
 
 _Appears in:_
 - [BindplaneConfigSpec](#bindplaneconfigspec)
@@ -300,7 +301,6 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `level` _string_ | Level specifies the log level. One of: debug, info, warn, error. | info | Enum: [debug info warn error] <br />Optional: \{\} <br /> |
-| `type` _string_ | Type specifies the logging output destination.<br />Use "stdout" to write logs to standard output. | stdout | Enum: [stdout] <br />Optional: \{\} <br /> |
 
 #### MetricsConfig
 

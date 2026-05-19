@@ -2967,32 +2967,33 @@ var _ = Describe("getLoggingConfigEnvVars", func() {
 		}
 	}
 
-	It("does not set logging env vars when Logging is nil", func() {
+	It("defaults BINDPLANE_LOGGING_LEVEL=info when Logging is nil", func() {
 		bindplane := baseBindplane()
 		envVars := getBindplaneCommonEnvVars(bindplane)
-		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(BeEmpty())
-		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("info"))
 	})
 
-	It("sets default level=info and type=stdout when Logging is empty struct", func() {
+	It("defaults BINDPLANE_LOGGING_LEVEL=info when Logging.Level is empty", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{}
 		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("info"))
-		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
 	})
 
-	It("sets BINDPLANE_LOGGING_LEVEL=debug when level is debug", func() {
+	It("propagates spec.config.logging.level to BINDPLANE_LOGGING_LEVEL", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Level: "debug"}
 		envVars := getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("debug"))
 	})
 
-	It("sets BINDPLANE_LOGGING_TYPE=stdout when type is stdout", func() {
+	It("always sets BINDPLANE_LOGGING_TYPE=stdout regardless of config", func() {
 		bindplane := baseBindplane()
-		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Type: "stdout"}
 		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
+
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Level: "warn"}
+		envVars = getBindplaneCommonEnvVars(bindplane)
 		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
 	})
 })

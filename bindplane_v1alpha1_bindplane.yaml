@@ -81,14 +81,6 @@ spec:
           name: bindplane-internal-issuer
           kind: Issuer
           group: cert-manager.io
-    analytics:
-      disabled: true
-    logging:
-      type: "stdout,otlp"
-      otlp:
-        endpoint: "bindplane-gateway-agent.bindplane-agent.svc.cluster.local:4317"
-        insecure: true
-        interval: "30s"
     eventBus:
       health:
         requiredHosts: 3

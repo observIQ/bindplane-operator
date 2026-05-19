@@ -12418,11 +12418,6 @@ spec:
                         - warn
                         - error
                         type: string
-                      type:
-                        default: stdout
-                        enum:
-                        - stdout
-                        type: string
                     type: object
                   maxConcurrency:
                     type: integer

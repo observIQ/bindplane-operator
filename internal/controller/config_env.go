@@ -602,26 +602,18 @@ func getEventBusHealthEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.E
 	return envVars
 }
 
-// getLoggingConfigEnvVars returns env vars for spec.config.logging.
-// Returns nil when logging is nil; Bindplane uses its own defaults in that case.
+// getLoggingConfigEnvVars returns the logging env vars.
+// BINDPLANE_LOGGING_TYPE is always stdout (operator-managed, not user-configurable).
+// BINDPLANE_LOGGING_LEVEL reads from spec.config.logging.level, defaulting to "info".
 func getLoggingConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	if config == nil || config.Logging == nil {
-		return nil
+	level := "info"
+	if config != nil && config.Logging != nil && config.Logging.Level != "" {
+		level = config.Logging.Level
 	}
-	l := config.Logging
-	level := l.Level
-	if level == "" {
-		level = "info"
-	}
-	loggingType := l.Type
-	if loggingType == "" {
-		loggingType = "stdout"
-	}
-	envVars := []corev1.EnvVar{
+	return []corev1.EnvVar{
 		{Name: bindplaneLoggingLevelEnvVar, Value: level},
-		{Name: bindplaneLoggingTypeEnvVar, Value: loggingType},
+		{Name: bindplaneLoggingTypeEnvVar, Value: "stdout"},
 	}
-	return envVars
 }
 
 // getAgentsConfigEnvVars returns env vars for spec.config.agents.
