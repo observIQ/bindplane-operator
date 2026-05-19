@@ -4326,6 +4326,13 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   strategy:
                     properties:
                       rollingUpdate:
@@ -8254,6 +8261,13 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                 type: object
               bindplaneJobsMigrate:
                 properties:
@@ -12162,6 +12176,13 @@ spec:
                           - type: string
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
                         type: object
                     type: object
                 type: object
@@ -16656,6 +16677,13 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                 type: object
               opamp:
                 properties:
@@ -20935,6 +20963,13 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   shutdownGracePeriodTarget:
                     type: string
                   strategy:
@@ -24872,6 +24907,13 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
                   tls:
                     properties:
                       certManager:
@@ -28799,6 +28841,13 @@ spec:
                           - type: string
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                  serviceAccount:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
                         type: object
                     type: object
                   storage:

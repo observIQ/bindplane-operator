@@ -139,6 +139,7 @@ _Appears in:_
 | `autoscaling` _[NodeAutoscalingSpec](#nodeautoscalingspec)_ | Autoscaling configures optional horizontal pod autoscaling for Bindplane Node.<br />When autoscaling is enabled, spec.bindplane.replicas is ignored and the<br />HorizontalPodAutoscaler controls the replica count. |  | Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 | `image` _string_ | Image overrides the container image for Bindplane Node. When set, the value is used<br />verbatim as a full OCI reference (e.g. "myregistry.example.com/bindplane-ee:1.99.1" or<br />"ghcr.io/observiq/bindplane-ee@sha256:..."). When empty, the image is derived from spec.version. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
 #### BindplaneConfigSpec
 
@@ -178,6 +179,7 @@ _Appears in:_
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for Bindplane Jobs<br />Note: Jobs are restricted to 1 replica and cannot be scaled |  | Type: object <br />Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 | `image` _string_ | Image overrides the container image for Bindplane Jobs. When set, the value is used<br />verbatim as a full OCI reference. When empty, the image is derived from spec.version. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
 #### BindplaneJobsMigrateComponentSpec
 
@@ -194,6 +196,7 @@ _Appears in:_
 | `podTemplate` _[PodTemplateSpec](#podtemplatespec)_ | PodTemplate defines pod template specification for the Bindplane Jobs Migrate batch/v1 Job |  | Type: object <br />Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 | `image` _string_ | Image overrides the container image for Bindplane Jobs Migrate. When set, the value is used<br />verbatim as a full OCI reference. When empty, the image is derived from spec.version.<br />Setting this decouples jobs-migrate from spec.version — ensure the image is compatible with<br />the bindplane-ee image used by node, jobs, and nats; the operator does not enforce this. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
 #### BindplaneSpec
 
@@ -360,6 +363,7 @@ _Appears in:_
 | `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. |  | Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 | `image` _string_ | Image overrides the container image for NATS. When set, the value is used<br />verbatim as a full OCI reference. When empty, the image is derived from spec.version. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
 #### NatsConfig
 
@@ -487,6 +491,7 @@ _Appears in:_
 | `shutdownGracePeriodTarget` _string_ | ShutdownGracePeriodTarget sets BINDPLANE_ADVANCED_SERVER_OPAMP_SHUTDOWN_GRACE_PERIOD_TARGET<br />for the OpAMP deployment. This is a 0-1 fraction (e.g. "0.6") of the OpAMP<br />shutdown grace period after which the server stops accepting new OpAMP<br />connections. Only applied when set. |  | Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 | `image` _string_ | Image overrides the container image for the OpAMP deployment. When set, the value is used<br />verbatim as a full OCI reference. When empty, the image is derived from spec.version. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
 #### PodTemplateSpec
 
@@ -552,6 +557,23 @@ _Appears in:_
 | `certKey` _string_ | CertKey is the key in the Secret for the client certificate (maps to sslCert). Set with KeyKey for mutual TLS. |  | Optional: \{\} <br /> |
 | `keyKey` _string_ | KeyKey is the key in the Secret for the client private key (maps to sslKey). Set with CertKey for mutual TLS. |  | Optional: \{\} <br /> |
 
+#### ServiceAccountSpec
+
+ServiceAccountSpec defines configuration for an operator-managed ServiceAccount.
+
+_Appears in:_
+- [BindplaneComponentSpec](#bindplanecomponentspec)
+- [BindplaneJobsComponentSpec](#bindplanejobscomponentspec)
+- [BindplaneJobsMigrateComponentSpec](#bindplanejobsmigratecomponentspec)
+- [NatsComponentSpec](#natscomponentspec)
+- [OpAMPComponentSpec](#opampcomponentspec)
+- [TSDBComponentSpec](#tsdbcomponentspec)
+- [TransformAgentComponentSpec](#transformagentcomponentspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `annotations` _object (keys:string, values:string)_ | Annotations are added to the ServiceAccount's metadata.annotations.<br />Use this to attach cloud workload identity annotations, e.g. AWS IRSA<br />(eks.amazonaws.com/role-arn) or GKE Workload Identity (iam.gke.io/gcp-service-account). |  | Optional: \{\} <br /> |
+
 #### StorageSpec
 
 StorageSpec defines persistent storage configuration
@@ -593,6 +615,7 @@ _Appears in:_
 | `tls` _[TSDBTLSConfig](#tsdbtlsconfig)_ | TLS configures TLS for the TSDB server (StatefulSet). Use either secretName (user-defined Secret)<br />or certManager (cert-manager Issuer/ClusterIssuer), not both. When set, the TSDB serves remote write over TLS. |  | Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 | `image` _string_ | Image overrides the container image for TSDB (Prometheus). When set, the value is used<br />verbatim as a full OCI reference. When empty, the image is derived from spec.version<br />using the ghcr.io/observiq/bindplane-prometheus registry. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
 #### TSDBConfig
 
@@ -693,6 +716,7 @@ _Appears in:_
 | `disablePodDisruptionBudget` _boolean_ | DisablePodDisruptionBudget disables the operator-managed PodDisruptionBudget for this component.<br />When false (default), the operator creates a PDB with minAvailable: 1. |  | Optional: \{\} <br /> |
 | `extraEnv` _[EnvVar](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#envvar-v1-core) array_ | ExtraEnv is a list of additional environment variables to inject into the<br />primary container of this component. These are prepended BEFORE the<br />operator-managed environment variables, so a duplicate Name set here will<br />be ignored — Kubernetes uses the LAST entry for a given Name and the<br />operator will not let user entries override its own values.<br />This is the supported way to add custom environment variables. Setting<br />env on podTemplate.spec.containers[<name>] is intentionally ignored.<br />Environment variable names starting with BINDPLANE_ are rejected by the<br />validating webhook unless the operator is started with --allow-bindplane-extra-env=true. |  | Optional: \{\} <br /> |
 | `image` _string_ | Image overrides the container image for Transform Agent. When set, the value is used<br />verbatim as a full OCI reference. When empty, the image is derived from spec.version<br />using the ghcr.io/observiq/bindplane-transform-agent registry. |  | MinLength: 1 <br />Optional: \{\} <br /> |
+| `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
 #### TransformAgentTLSConfig
 

@@ -32,6 +32,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Argo Rollouts (primary Bindplane component)](#argo-rollouts-primary-bindplane-component)
 - [OpAMP deployment split](#opamp-deployment-split)
 - [Container images](#container-images)
+- [Service account annotations](#service-account-annotations)
 - [Scope](#scope)
 - [Lifecycle](#lifecycle)
   - [Pause annotation](#pause-annotation)
@@ -1013,6 +1014,56 @@ spec:
 > **Warning:** `spec.bindplaneJobsMigrate.image` controls the image used by the database migration Job. The operator gates downstream rollouts on this Job completing successfully and records the migrate image in `status.migratedImage`. If you pin jobs-migrate to a different version than node, jobs, and nats, ensure the migration is compatible with the runtime image — the operator does not enforce this constraint.
 
 The `VERSION` column shown by `kubectl get bindplane` always reflects `spec.version`, regardless of per-service overrides.
+
+## Service account annotations
+
+Each operator-managed ServiceAccount supports user-defined annotations. This is the standard mechanism for binding a Kubernetes ServiceAccount to a cloud IAM identity without storing credentials in the cluster — used by AWS IRSA (IAM Roles for Service Accounts) and GKE Workload Identity.
+
+| CRD Field | Component |
+|---|---|
+| `spec.bindplane.serviceAccount.annotations` | Bindplane Node |
+| `spec.opamp.serviceAccount.annotations` | OpAMP dedicated deployment |
+| `spec.nats.serviceAccount.annotations` | NATS |
+| `spec.bindplaneJobs.serviceAccount.annotations` | Bindplane Jobs |
+| `spec.bindplaneJobsMigrate.serviceAccount.annotations` | Bindplane Jobs Migrate |
+| `spec.transformAgent.serviceAccount.annotations` | Transform Agent |
+| `spec.tsdb.serviceAccount.annotations` | TSDB (Prometheus) |
+
+Annotations are reconciled on every sync — adding, updating, or removing an annotation in the spec is reflected on the live ServiceAccount within one reconcile cycle.
+
+Example — AWS IRSA on the primary Bindplane Node:
+
+```yaml
+spec:
+  bindplane:
+    serviceAccount:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/bindplane-node-role
+```
+
+Example — GKE Workload Identity on the primary Bindplane Node:
+
+```yaml
+spec:
+  bindplane:
+    serviceAccount:
+      annotations:
+        iam.gke.io/gcp-service-account: bindplane@my-project.iam.gserviceaccount.com
+```
+
+Example — different IAM roles per component:
+
+```yaml
+spec:
+  bindplane:
+    serviceAccount:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/bindplane-node-role
+  tsdb:
+    serviceAccount:
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/bindplane-tsdb-role
+```
 
 ## Scope
 

@@ -453,7 +453,11 @@ func (r *BindplaneReconciler) reconcileTSDBWebConfigConfigMap(ctx context.Contex
 }
 
 func (r *BindplaneReconciler) tsdbServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, tsdbComponent)
+	var annotations map[string]string
+	if bindplane.Spec.TSDB != nil && bindplane.Spec.TSDB.ServiceAccount != nil {
+		annotations = bindplane.Spec.TSDB.ServiceAccount.Annotations
+	}
+	return newServiceAccount(bindplane, tsdbComponent, annotations)
 }
 
 func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindplane) *appsv1.StatefulSet {

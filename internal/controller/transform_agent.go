@@ -76,7 +76,11 @@ func (r *BindplaneReconciler) reconcileTransformAgent(ctx context.Context, bindp
 }
 
 func (r *BindplaneReconciler) transformAgentServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, transformAgentComponent)
+	var annotations map[string]string
+	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.ServiceAccount != nil {
+		annotations = bindplane.Spec.TransformAgent.ServiceAccount.Annotations
+	}
+	return newServiceAccount(bindplane, transformAgentComponent, annotations)
 }
 
 func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {

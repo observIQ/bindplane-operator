@@ -76,11 +76,19 @@ func (r *BindplaneReconciler) reconcileBindplaneJobsRegular(ctx context.Context,
 }
 
 func (r *BindplaneReconciler) bindplaneJobsMigrateServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, bindplaneJobsMigrateComponent)
+	var annotations map[string]string
+	if bindplane.Spec.BindplaneJobsMigrate != nil && bindplane.Spec.BindplaneJobsMigrate.ServiceAccount != nil {
+		annotations = bindplane.Spec.BindplaneJobsMigrate.ServiceAccount.Annotations
+	}
+	return newServiceAccount(bindplane, bindplaneJobsMigrateComponent, annotations)
 }
 
 func (r *BindplaneReconciler) bindplaneJobsServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, bindplaneJobsComponent)
+	var annotations map[string]string
+	if bindplane.Spec.BindplaneJobs != nil && bindplane.Spec.BindplaneJobs.ServiceAccount != nil {
+		annotations = bindplane.Spec.BindplaneJobs.ServiceAccount.Annotations
+	}
+	return newServiceAccount(bindplane, bindplaneJobsComponent, annotations)
 }
 
 func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {

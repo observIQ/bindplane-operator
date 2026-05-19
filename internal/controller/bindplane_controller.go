@@ -779,11 +779,12 @@ func (r *BindplaneReconciler) reconcileServiceAccount(ctx context.Context, bindp
 		return err
 	}
 
-	// ServiceAccount is mostly immutable; only update when labels have actually changed.
-	if equality.Semantic.DeepEqual(found.Labels, sa.Labels) {
+	// ServiceAccount is mostly immutable; only update when labels or annotations have changed.
+	if equality.Semantic.DeepEqual(found.Labels, sa.Labels) && equality.Semantic.DeepEqual(found.Annotations, sa.Annotations) {
 		return nil
 	}
 	found.Labels = sa.Labels
+	found.Annotations = sa.Annotations
 	return r.Update(ctx, found)
 }
 
@@ -1148,12 +1149,13 @@ func newContainerSecurityContext(opts ...securityContextOption) *corev1.Security
 }
 
 // newServiceAccount creates a ServiceAccount for a component
-func newServiceAccount(bindplane *bindplanev1alpha1.Bindplane, component string) *corev1.ServiceAccount {
+func newServiceAccount(bindplane *bindplanev1alpha1.Bindplane, component string, annotations map[string]string) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      getResourceName(bindplane, component),
-			Namespace: bindplane.Namespace,
-			Labels:    getLabels(bindplane, component),
+			Name:        getResourceName(bindplane, component),
+			Namespace:   bindplane.Namespace,
+			Labels:      getLabels(bindplane, component),
+			Annotations: annotations,
 		},
 	}
 }

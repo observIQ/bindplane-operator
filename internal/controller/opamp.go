@@ -144,7 +144,11 @@ func (r *BindplaneReconciler) deleteOpAMPResourcesIfExist(ctx context.Context, b
 }
 
 func (r *BindplaneReconciler) opampServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, opampComponent)
+	var annotations map[string]string
+	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.ServiceAccount != nil {
+		annotations = bindplane.Spec.OpAMP.ServiceAccount.Annotations
+	}
+	return newServiceAccount(bindplane, opampComponent, annotations)
 }
 
 func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {

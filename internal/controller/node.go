@@ -97,7 +97,11 @@ func (r *BindplaneReconciler) reconcileNode(ctx context.Context, bindplane *bind
 }
 
 func (r *BindplaneReconciler) nodeServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, nodeComponent)
+	var annotations map[string]string
+	if bindplane.Spec.Bindplane.ServiceAccount != nil {
+		annotations = bindplane.Spec.Bindplane.ServiceAccount.Annotations
+	}
+	return newServiceAccount(bindplane, nodeComponent, annotations)
 }
 
 func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindplane) *appsv1.Deployment {

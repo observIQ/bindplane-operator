@@ -93,7 +93,11 @@ func (r *BindplaneReconciler) reconcileNats(ctx context.Context, bindplane *bind
 }
 
 func (r *BindplaneReconciler) natsServiceAccount(bindplane *bindplanev1alpha1.Bindplane) *corev1.ServiceAccount {
-	return newServiceAccount(bindplane, natsComponent)
+	var annotations map[string]string
+	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.ServiceAccount != nil {
+		annotations = bindplane.Spec.Nats.ServiceAccount.Annotations
+	}
+	return newServiceAccount(bindplane, natsComponent, annotations)
 }
 
 func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindplane) *appsv1.StatefulSet {

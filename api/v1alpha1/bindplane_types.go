@@ -110,6 +110,15 @@ type NodeAutoscalingSpec struct {
 	Behavior *autoscalingv2.HorizontalPodAutoscalerBehavior `json:"behavior,omitempty"`
 }
 
+// ServiceAccountSpec defines configuration for an operator-managed ServiceAccount.
+type ServiceAccountSpec struct {
+	// Annotations are added to the ServiceAccount's metadata.annotations.
+	// Use this to attach cloud workload identity annotations, e.g. AWS IRSA
+	// (eks.amazonaws.com/role-arn) or GKE Workload Identity (iam.gke.io/gcp-service-account).
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
 // BindplaneComponentSpec defines the Bindplane component pod specification
 type BindplaneComponentSpec struct {
 	// Replicas specifies the number of replicas for Bindplane Node deployment
@@ -195,6 +204,10 @@ type BindplaneComponentSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
+
+	// ServiceAccount configures the operator-managed ServiceAccount for this component.
+	// +optional
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
 // ArgoRolloutSpec configures BlueGreen Argo Rollouts management for the primary
@@ -316,6 +329,10 @@ type OpAMPComponentSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
+
+	// ServiceAccount configures the operator-managed ServiceAccount for this component.
+	// +optional
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
 // BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification
@@ -355,6 +372,10 @@ type BindplaneJobsComponentSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
+
+	// ServiceAccount configures the operator-managed ServiceAccount for this component.
+	// +optional
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
 // BindplaneJobsMigrateComponentSpec defines the Bindplane Jobs Migrate component pod specification.
@@ -397,6 +418,10 @@ type BindplaneJobsMigrateComponentSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
+
+	// ServiceAccount configures the operator-managed ServiceAccount for this component.
+	// +optional
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
 // BindplaneConfigSpec defines Bindplane's configuration
@@ -884,6 +909,10 @@ type TransformAgentComponentSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
+
+	// ServiceAccount configures the operator-managed ServiceAccount for this component.
+	// +optional
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
 // TSDBComponentSpec defines the TSDB component pod specification.
@@ -933,6 +962,10 @@ type TSDBComponentSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
+
+	// ServiceAccount configures the operator-managed ServiceAccount for this component.
+	// +optional
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
 // NatsComponentSpec defines the NATS component pod specification
@@ -981,6 +1014,10 @@ type NatsComponentSpec struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image,omitempty"`
+
+	// ServiceAccount configures the operator-managed ServiceAccount for this component.
+	// +optional
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 }
 
 // StorageSpec defines persistent storage configuration
