@@ -203,6 +203,35 @@ var _ = Describe("opampDeployment env ordering", func() {
 		bindplane = newTestBindplaneWithOpAMP("my-bp", "default")
 	})
 
+	It("prepends spec.opamp.extraEnv before operator-managed env vars", func() {
+		bindplane.Spec.OpAMP.ExtraEnv = []corev1.EnvVar{
+			{Name: "HTTP_PROXY", Value: "http://proxy.example.com:3128"},
+			{Name: "NO_PROXY", Value: "localhost"},
+		}
+
+		dep := r.opampDeployment(bindplane)
+		envVars := dep.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envVars[0].Name).To(Equal("HTTP_PROXY"))
+		Expect(envVars[0].Value).To(Equal("http://proxy.example.com:3128"))
+		Expect(envVars[1].Name).To(Equal("NO_PROXY"))
+	})
+
+	It("operator-managed env vars win when spec.opamp.extraEnv duplicates a name", func() {
+		// User attempts to override BINDPLANE_MODE — the operator-managed value
+		// must appear last so Kubernetes uses it.
+		bindplane.Spec.OpAMP.ExtraEnv = []corev1.EnvVar{
+			{Name: bindplaneModeEnvVar, Value: "user-override"},
+		}
+
+		dep := r.opampDeployment(bindplane)
+		envVars := dep.Spec.Template.Spec.Containers[0].Env
+
+		modeVar := findEnvVar(envVars, bindplaneModeEnvVar)
+		Expect(modeVar).NotTo(BeNil())
+		Expect(modeVar.Value).To(Equal(opampModeValue), "operator-managed BINDPLANE_MODE must win over user override")
+	})
+
 	It("OpAMP max simultaneous connections override appears after the shared value", func() {
 		// Set the shared value via config.agents
 		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{

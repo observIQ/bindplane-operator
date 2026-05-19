@@ -286,6 +286,23 @@ type OpAMPComponentSpec struct {
 	// connections. Only applied when set.
 	// +optional
 	ShutdownGracePeriodTarget string `json:"shutdownGracePeriodTarget,omitempty"`
+
+	// ExtraEnv is a list of additional environment variables to inject into the
+	// primary container of this component. These are prepended BEFORE the
+	// operator-managed environment variables, so a duplicate Name set here will
+	// be ignored — Kubernetes uses the LAST entry for a given Name and the
+	// operator will not let user entries override its own values.
+	//
+	// This is the supported way to add custom environment variables. Setting
+	// env on podTemplate.spec.containers[<name>] is intentionally ignored.
+	//
+	// Environment variable names starting with BINDPLANE_ are rejected by the
+	// validating webhook unless the operator is started with --allow-bindplane-extra-env=true.
+	//
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 }
 
 // BindplaneJobsComponentSpec defines the Bindplane Jobs component pod specification

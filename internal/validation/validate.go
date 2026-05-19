@@ -158,6 +158,11 @@ func validateAllExtraEnv(bindplane *bindplanev1alpha1.Bindplane) error {
 			return err
 		}
 	}
+	if bindplane.Spec.OpAMP != nil {
+		if err := ValidateExtraEnv("spec.opamp.extraEnv", bindplane.Spec.OpAMP.ExtraEnv, allow); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

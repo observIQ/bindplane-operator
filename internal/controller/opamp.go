@@ -239,7 +239,8 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
-								Env: combineEnvVars(
+								Env: prependExtraEnv(
+									bindplane.Spec.OpAMP.ExtraEnv,
 									getKubernetesEnvVars(opampContainerName),
 									getNodeEnvVars(),
 									getBindplaneCommonEnvVars(bindplane),

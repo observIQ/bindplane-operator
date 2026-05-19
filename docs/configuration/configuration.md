@@ -751,6 +751,7 @@ Each component exposes an `extraEnv` field that injects arbitrary environment va
 | `spec.transformAgent.extraEnv` | Extra env vars for the Transform Agent Deployment. |
 | `spec.tsdb.extraEnv` | Extra env vars for the TSDB (Prometheus) StatefulSet. |
 | `spec.nats.extraEnv` | Extra env vars for the NATS StatefulSet. |
+| `spec.opamp.extraEnv` | Extra env vars for the dedicated OpAMP Deployment (only used when `spec.opamp.enabled` is true). |
 
 Each entry follows the standard Kubernetes `EnvVar` schema, which supports both inline values and references to Secrets or ConfigMaps via `valueFrom`.
 
