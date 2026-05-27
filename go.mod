@@ -6,7 +6,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.9.0
 	github.com/cert-manager/cert-manager v1.20.2
 	github.com/go-logr/logr v1.4.3
-	github.com/onsi/ginkgo/v2 v2.28.3
+	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.40.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.51.0
