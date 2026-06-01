@@ -674,23 +674,44 @@ func getAgentVersionsConfigEnvVars(av *bindplanev1alpha1.AgentVersionsConfig) []
 }
 
 // getStatusEnvVars returns environment variables for the status check endpoint configuration.
-func getStatusEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	if config == nil || config.Status == nil {
-		return nil
-	}
-	s := config.Status
+// Status checks are enabled by default (including when spec.config.status is omitted). When enabled
+// and the user has not supplied keys, BINDPLANE_STATUS_KEYS references the operator-managed
+// status secret. When explicitly disabled, only BINDPLANE_STATUS_ENABLED=false is emitted.
+func getStatusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	enabled := statusEnabled(bindplane)
 	envVars := []corev1.EnvVar{
-		{Name: bindplaneStatusEnabledEnvVar, Value: strconv.FormatBool(s.Enabled)},
+		{Name: bindplaneStatusEnabledEnvVar, Value: strconv.FormatBool(enabled)},
 	}
-	if s.KeysSecretRef != nil {
+	if !enabled {
+		return envVars
+	}
+
+	s := bindplane.Spec.Config.Status
+	switch {
+	case s != nil && s.KeysSecretRef != nil:
+		// (1) user-supplied secret reference
 		envVars = append(envVars, corev1.EnvVar{
 			Name:      bindplaneStatusKeysEnvVar,
 			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: s.KeysSecretRef},
 		})
-	} else if len(s.Keys) > 0 {
+	case s != nil && len(s.Keys) > 0:
+		// (2) user-supplied inline keys
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  bindplaneStatusKeysEnvVar,
 			Value: strings.Join(s.Keys, ","),
+		})
+	default:
+		// (3) operator-managed status secret (covers nil block and enabled-with-no-keys)
+		envVars = append(envVars, corev1.EnvVar{
+			Name: bindplaneStatusKeysEnvVar,
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: getResourceName(bindplane, statusSecretSuffix),
+					},
+					Key: statusSecretKey,
+				},
+			},
 		})
 	}
 	return envVars
@@ -704,7 +725,7 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 		getTSDBEnvVars(bindplane),
 		getTransformAgentEnvVars(bindplane),
 		getTransformAgentTLSEnvVars(bindplane),
-		getStatusEnvVars(config),
+		getStatusEnvVars(bindplane),
 		getLoggingConfigEnvVars(config),
 		getEventBusHealthEnvVars(bindplane),
 	)

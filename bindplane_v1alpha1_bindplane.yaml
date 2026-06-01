@@ -31,13 +31,6 @@ spec:
   ca:
     secretName: bindplane-internal-ca-secret
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: bindplane-status-keys
-stringData:
-  keys: "550e8400-e29b-41d4-a716-446655440000"
----
 apiVersion: k8s.bindplane.com/v1alpha1
 kind: Bindplane
 metadata:
@@ -85,11 +78,6 @@ spec:
       health:
         requiredHosts: 3
         interval: 5s
-    status:
-      enabled: true
-      keysSecretRef:
-        name: bindplane-status-keys
-        key: keys
   bindplane:
     replicas: 1
     podTemplate:
