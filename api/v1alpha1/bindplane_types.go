@@ -496,7 +496,6 @@ type BindplaneConfigSpec struct {
 }
 
 // StatusConfig configures the Bindplane status check endpoints.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))",message="at least one key must be configured when status is enabled"
 type StatusConfig struct {
 	// Enabled controls whether the status check endpoints are enabled.
 	// Defaults to true.

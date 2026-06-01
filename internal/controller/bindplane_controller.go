@@ -553,6 +553,12 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	// Reconcile status secret before workloads that consume it via BINDPLANE_STATUS_KEYS.
+	if err := r.reconcileStatusSecret(ctx, bindplane, log); err != nil {
+		log.Error(err, "unable to reconcile status secret")
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile Transform Agent resources
 	if err := r.reconcileTransformAgent(ctx, bindplane, log); err != nil {
 		log.Error(err, "unable to reconcile Transform Agent")

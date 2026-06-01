@@ -674,26 +674,42 @@ func getAgentVersionsConfigEnvVars(av *bindplanev1alpha1.AgentVersionsConfig) []
 }
 
 // getStatusEnvVars returns environment variables for the status check endpoint configuration.
-func getStatusEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev1.EnvVar {
-	if config == nil || config.Status == nil {
-		return nil
-	}
-	s := config.Status
+// BINDPLANE_STATUS_ENABLED is always set to true. BINDPLANE_STATUS_KEYS is sourced from, in
+// priority order: user's KeysSecretRef, user's inline Keys, or the operator-managed status secret.
+func getStatusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	envVars := []corev1.EnvVar{
-		{Name: bindplaneStatusEnabledEnvVar, Value: strconv.FormatBool(s.Enabled)},
+		{Name: bindplaneStatusEnabledEnvVar, Value: "true"},
 	}
-	if s.KeysSecretRef != nil {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:      bindplaneStatusKeysEnvVar,
-			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: s.KeysSecretRef},
-		})
-	} else if len(s.Keys) > 0 {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  bindplaneStatusKeysEnvVar,
-			Value: strings.Join(s.Keys, ","),
-		})
+
+	config := &bindplane.Spec.Config
+	if config.Status != nil {
+		s := config.Status
+		if s.KeysSecretRef != nil {
+			return append(envVars, corev1.EnvVar{
+				Name:      bindplaneStatusKeysEnvVar,
+				ValueFrom: &corev1.EnvVarSource{SecretKeyRef: s.KeysSecretRef},
+			})
+		}
+		if len(s.Keys) > 0 {
+			return append(envVars, corev1.EnvVar{
+				Name:  bindplaneStatusKeysEnvVar,
+				Value: strings.Join(s.Keys, ","),
+			})
+		}
 	}
-	return envVars
+
+	// Fall back to operator-managed secret.
+	return append(envVars, corev1.EnvVar{
+		Name: bindplaneStatusKeysEnvVar,
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: getResourceName(bindplane, statusSecretSuffix),
+				},
+				Key: statusSecretKey,
+			},
+		},
+	})
 }
 
 // getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
@@ -704,7 +720,7 @@ func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.
 		getTSDBEnvVars(bindplane),
 		getTransformAgentEnvVars(bindplane),
 		getTransformAgentTLSEnvVars(bindplane),
-		getStatusEnvVars(config),
+		getStatusEnvVars(bindplane),
 		getLoggingConfigEnvVars(config),
 		getEventBusHealthEnvVars(bindplane),
 	)

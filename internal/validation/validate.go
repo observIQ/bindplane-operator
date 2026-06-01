@@ -285,9 +285,6 @@ func ValidateStatusConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
 		return nil
 	}
 	s := config.Status
-	if s.Enabled && len(s.Keys) == 0 && s.KeysSecretRef == nil {
-		return fmt.Errorf("at least one key must be configured when status is enabled")
-	}
 	for i, key := range s.Keys {
 		if !uuidRegex.MatchString(key) {
 			return fmt.Errorf("spec.config.status.keys[%d]: %q is not a valid UUID", i, key)

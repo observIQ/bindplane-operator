@@ -12575,10 +12575,6 @@ spec:
                     required:
                     - enabled
                     type: object
-                    x-kubernetes-validations:
-                    - message: at least one key must be configured when status is
-                        enabled
-                      rule: '!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))'
                   store:
                     properties:
                       eventMergeWindow:

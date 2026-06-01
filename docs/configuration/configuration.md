@@ -20,6 +20,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Max concurrency](#max-concurrency)
 - [Audit trail](#audit-trail)
 - [Event bus](#event-bus)
+- [Status checks](#status-checks)
 - [Logging](#logging)
 - [Agents](#agents)
   - [Authentication](#agents-authentication)
@@ -656,6 +657,42 @@ spec:
       health:
         requiredHosts: 2
         interval: "30s"
+```
+
+## Status checks
+
+Status checks expose unauthenticated health endpoints in the Bindplane UI and API. The operator enables them automatically — no user configuration is required.
+
+On each reconcile the operator ensures a Kubernetes Secret named `{cr-name}-status-secret` exists in the same namespace. The Secret holds a single randomly-generated UUID under the key `status-keys`. If you delete the Secret it is recreated with a new UUID on the next reconcile; existing pods are **not** restarted because they reference the Secret via `secretKeyRef` and Kubernetes re-resolves the value.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.status.enabled` | `BINDPLANE_STATUS_ENABLED` | `true` (operator-managed) | No |
+| `spec.config.status.keys` | `BINDPLANE_STATUS_KEYS` | operator-managed Secret | No |
+| `spec.config.status.keysSecretRef` | `BINDPLANE_STATUS_KEYS` | — | No |
+
+`keysSecretRef` takes precedence over `keys`. Both take precedence over the operator-managed Secret. The Secret value is a comma-delimited list of UUIDs to support key rotation.
+
+Example (bring your own keys):
+
+```yaml
+spec:
+  config:
+    status:
+      keys:
+        - "550e8400-e29b-41d4-a716-446655440000"
+        - "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+```
+
+Example (reference an existing Secret):
+
+```yaml
+spec:
+  config:
+    status:
+      keysSecretRef:
+        name: my-status-keys
+        key: keys
 ```
 
 ## Logging
