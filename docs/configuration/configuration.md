@@ -21,6 +21,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Audit trail](#audit-trail)
 - [Event bus](#event-bus)
 - [Logging](#logging)
+- [Status checks](#status-checks)
 - [Agents](#agents)
   - [Authentication](#agents-authentication)
   - [Heartbeat](#heartbeat)
@@ -677,6 +678,55 @@ spec:
   config:
     logging:
       level: debug
+```
+
+## Status checks
+
+The `spec.config.status` section configures Bindplane's authenticated status check endpoints. Status checks are **enabled by default**, including when the `status` block is omitted entirely — no configuration is required to use them.
+
+Requests to the status endpoints are authenticated with one or more UUID keys. There are three ways the keys are supplied, in priority order:
+
+1. **`keysSecretRef`** — reference a Kubernetes Secret you manage (value is comma-delimited UUIDs, supporting rotation).
+2. **`keys`** — inline UUIDs (each must be a valid UUID; multiple entries support rotation).
+3. **Operator-managed (default)** — when status is enabled and you supply neither `keys` nor `keysSecretRef`, the operator generates a UUID and stores it in a Secret named `<bindplane-name>-status-secret` under the key `status-keys`. The Bindplane pods reference it via `secretKeyRef`. This Secret is owned by the Bindplane CR (garbage-collected on delete), created once, and never overwritten, so the key is stable across reconciles. If you later supply your own `keys` or `keysSecretRef`, the pods switch to your value and the operator stops managing the generated Secret.
+
+To rotate keys yourself, supply multiple UUIDs via `keys` or a comma-delimited `keysSecretRef`. Set `enabled: false` to turn the endpoints off entirely — no keys are emitted and no Secret is generated.
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.status.enabled` | `BINDPLANE_STATUS_ENABLED` | `true` | No |
+| `spec.config.status.keys` | `BINDPLANE_STATUS_KEYS` | auto-generated | No |
+| `spec.config.status.keysSecretRef` | `BINDPLANE_STATUS_KEYS` | auto-generated | No |
+
+Example — zero config (operator generates and manages the key):
+
+```yaml
+spec:
+  config: {}
+```
+
+Example — user-supplied inline keys:
+
+```yaml
+spec:
+  config:
+    status:
+      enabled: true
+      keys:
+        - "11111111-1111-1111-1111-111111111111"
+        - "22222222-2222-2222-2222-222222222222"
+```
+
+Example — user-managed Secret:
+
+```yaml
+spec:
+  config:
+    status:
+      enabled: true
+      keysSecretRef:
+        name: bindplane-status-keys
+        key: keys
 ```
 
 ## Agents
