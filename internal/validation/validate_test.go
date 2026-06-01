@@ -779,3 +779,54 @@ func TestValidateImageOverrides_ValidatesAllComponents(t *testing.T) {
 		})
 	}
 }
+
+// ---- ValidateStatusConfig ----
+
+func TestValidateStatusConfig_NilStatusOK(t *testing.T) {
+	cfg := &bindplanev1alpha1.BindplaneConfigSpec{}
+	if err := validation.ValidateStatusConfig(cfg); err != nil {
+		t.Errorf("expected no error for nil status, got %v", err)
+	}
+}
+
+func TestValidateStatusConfig_EnabledWithNoKeysOK(t *testing.T) {
+	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+		Status: &bindplanev1alpha1.StatusConfig{Enabled: true},
+	}
+	if err := validation.ValidateStatusConfig(cfg); err != nil {
+		t.Errorf("expected no error for enabled status with no keys (operator auto-manages), got %v", err)
+	}
+}
+
+func TestValidateStatusConfig_DisabledWithNoKeysOK(t *testing.T) {
+	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+		Status: &bindplanev1alpha1.StatusConfig{Enabled: false},
+	}
+	if err := validation.ValidateStatusConfig(cfg); err != nil {
+		t.Errorf("expected no error for disabled status, got %v", err)
+	}
+}
+
+func TestValidateStatusConfig_ValidInlineKeysOK(t *testing.T) {
+	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+		Status: &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"},
+		},
+	}
+	if err := validation.ValidateStatusConfig(cfg); err != nil {
+		t.Errorf("expected no error for valid inline UUID keys, got %v", err)
+	}
+}
+
+func TestValidateStatusConfig_InvalidInlineKeyRejected(t *testing.T) {
+	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+		Status: &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"not-a-uuid"},
+		},
+	}
+	if err := validation.ValidateStatusConfig(cfg); err == nil {
+		t.Error("expected error for invalid UUID key")
+	}
+}

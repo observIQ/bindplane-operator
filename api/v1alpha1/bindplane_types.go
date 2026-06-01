@@ -496,7 +496,6 @@ type BindplaneConfigSpec struct {
 }
 
 // StatusConfig configures the Bindplane status check endpoints.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || (size(self.keys) > 0 || has(self.keysSecretRef))",message="at least one key must be configured when status is enabled"
 type StatusConfig struct {
 	// Enabled controls whether the status check endpoints are enabled.
 	// Defaults to true.
@@ -504,7 +503,9 @@ type StatusConfig struct {
 	Enabled bool `json:"enabled"`
 
 	// Keys are UUIDs used to authenticate requests to the status check endpoints.
-	// Supports multiple keys to allow rotation. At least one is required when enabled is true.
+	// Supports multiple keys to allow rotation. Optional: when status is enabled and no
+	// keys (or keysSecretRef) are supplied, the operator generates and manages a key
+	// automatically in a Kubernetes Secret.
 	// +optional
 	Keys []string `json:"keys,omitempty"`
 

@@ -279,15 +279,14 @@ func ValidateLicenseConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error 
 	return nil
 }
 
-// ValidateStatusConfig ensures status check keys are valid UUIDs when set inline.
+// ValidateStatusConfig ensures any inline status check keys are valid UUIDs.
+// Keys are optional: when status is enabled and no keys are supplied, the operator
+// generates and manages a key automatically.
 func ValidateStatusConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error {
 	if config == nil || config.Status == nil {
 		return nil
 	}
 	s := config.Status
-	if s.Enabled && len(s.Keys) == 0 && s.KeysSecretRef == nil {
-		return fmt.Errorf("at least one key must be configured when status is enabled")
-	}
 	for i, key := range s.Keys {
 		if !uuidRegex.MatchString(key) {
 			return fmt.Errorf("spec.config.status.keys[%d]: %q is not a valid UUID", i, key)

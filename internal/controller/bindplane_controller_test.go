@@ -20,6 +20,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -2517,6 +2518,84 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 	})
 })
 
+var _ = Describe("getStatusEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+			},
+		}
+	}
+
+	It("enables status and references the managed secret when status is omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-status-secret"))
+		Expect(ref.Key).To(Equal(statusSecretKey))
+	})
+
+	It("references the managed secret when enabled with no keys", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: true}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-status-secret"))
+		Expect(ref.Key).To(Equal(statusSecretKey))
+	})
+
+	It("emits only ENABLED=false and no keys when explicitly disabled", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: false}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("false"))
+		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(BeEmpty())
+		Expect(envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)).To(BeNil())
+	})
+
+	It("injects inline keys as a comma-joined value", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"},
+		}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(Equal("11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222"))
+		Expect(envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)).To(BeNil())
+	})
+
+	It("references the user secret when keysSecretRef is set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			KeysSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "user-status-secret"},
+				Key:                  "keys",
+			},
+		}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("user-status-secret"))
+		Expect(ref.Key).To(Equal("keys"))
+	})
+})
+
 var _ = Describe("getNetworkTLSVolumeAndMount", func() {
 	It("returns nil when Network or TLS is nil", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
@@ -3702,6 +3781,141 @@ var _ = Describe("reconcileSessionSecret", func() {
 		secret := &corev1.Secret{}
 		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)
 		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("reconcileStatusSecret", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-status-secret")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates a status secret with a generated UUID when status is omitted", func() {
+		name := "bp-status-auto"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey(statusSecretKey))
+		_, perr := uuid.Parse(string(secret.Data[statusSecretKey]))
+		Expect(perr).NotTo(HaveOccurred())
+	})
+
+	It("creates a status secret when status is enabled with no keys", func() {
+		name := "bp-status-enabled"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: true}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey(statusSecretKey))
+	})
+
+	It("does not create a status secret when status is explicitly disabled", func() {
+		name := "bp-status-disabled"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: false}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not create a status secret when inline keys are set", func() {
+		name := "bp-status-keys"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"11111111-1111-1111-1111-111111111111"},
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not create a status secret when keysSecretRef is set", func() {
+		name := "bp-status-ref"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			KeysSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "external-status-secret"},
+				Key:                  "keys",
+			},
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not overwrite an existing status secret on re-reconcile", func() {
+		name := "bp-status-stable"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		firstValue := string(secret.Data[statusSecretKey])
+
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret = &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(string(secret.Data[statusSecretKey])).To(Equal(firstValue))
 	})
 })
 
