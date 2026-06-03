@@ -282,6 +282,10 @@ const (
 	// Example: kubectl annotate bindplane my-bindplane k8s.bindplane.com/pause-reconciliation=true
 	annotationPauseReconciliation = "k8s.bindplane.com/pause-reconciliation"
 
+	// annotationValueTrue is the string value that enables a boolean operator annotation
+	// (e.g. pause-reconciliation, force-migrate).
+	annotationValueTrue = "true"
+
 	// annotationPreserveSelectorKeys is an internal operator annotation placed on Service objects
 	// to signal which selector keys should be preserved from the live Service (e.g.
 	// rollouts-pod-template-hash written by Argo Rollouts during a BlueGreen cutover).
@@ -500,7 +504,7 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Check for pause annotation — if set to "true", skip reconciliation entirely.
-	if bindplane.Annotations[annotationPauseReconciliation] == "true" {
+	if bindplane.Annotations[annotationPauseReconciliation] == annotationValueTrue {
 		log.Info("Reconciliation paused via annotation; skipping", "annotation", annotationPauseReconciliation)
 		condition := metav1.Condition{
 			Type:               "Reconciled",
@@ -572,14 +576,27 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Reconcile the Jobs Migrate batch/v1 Job; block downstream workloads until it completes.
-	migrationComplete, err := r.reconcileMigrateJob(ctx, bindplane, log)
+	state, err := r.reconcileMigrateJob(ctx, bindplane, log)
 	if err != nil {
 		log.Error(err, "unable to reconcile Jobs Migrate Job")
 		return ctrl.Result{}, err
 	}
-	if !migrationComplete {
+	switch state {
+	case migrateFailed:
+		// The MigrationFailed condition and Degraded phase are set inside
+		// reconcileMigrateJob. Do not requeue: a terminal Failed Job will not change
+		// state on its own, so requeueing would only spam logs. A spec change or the
+		// k8s.bindplane.com/force-migrate annotation triggers a fresh reconcile via
+		// the CR watch.
+		log.Info("Jobs Migrate Job failed; halting rollout. Inspect the failed Job's pods for logs, "+
+			"then set the k8s.bindplane.com/force-migrate annotation to retry",
+			"job", getResourceName(bindplane, bindplaneJobsMigrateComponent))
+		return ctrl.Result{}, nil
+	case migrateInProgress:
 		log.Info("waiting for Jobs Migrate Job to complete")
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	case migrateComplete:
+		// Migration is complete for the desired image; proceed to downstream workloads.
 	}
 
 	// Reconcile Bindplane Jobs resources

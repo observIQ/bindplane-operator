@@ -629,8 +629,11 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 
 		markJobFailed(testCtx, name+"-migrate", testNamespace)
 
-		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
 		Expect(err).NotTo(HaveOccurred())
+		// A terminal Failed Job must NOT requeue — otherwise the operator spams
+		// "waiting for Jobs Migrate Job to complete" forever.
+		Expect(result.RequeueAfter).To(BeZero(), "failed migration must not requeue")
 
 		updated := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
@@ -648,6 +651,69 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		dep := &appsv1.Deployment{}
 		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)
 		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("force-migrate annotation recreates the Job after a failure", func() {
+		name := "bp-migrate-force"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		jobName := reconcileUntilMigration(testCtx, r, name, testNamespace)
+
+		// Capture the original Job UID so we can prove a fresh Job is created later.
+		origJob := &batchv1.Job{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, origJob)).To(Succeed())
+		origUID := origJob.UID
+
+		// Fail the Job; operator halts without requeueing.
+		markJobFailed(testCtx, jobName, testNamespace)
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		// Set the force-migrate annotation.
+		patched := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, patched)).To(Succeed())
+		if patched.Annotations == nil {
+			patched.Annotations = map[string]string{}
+		}
+		patched.Annotations["k8s.bindplane.com/force-migrate"] = "true"
+		Expect(k8sClient.Update(testCtx, patched)).To(Succeed())
+
+		// Reconcile: operator deletes the existing Job, clears the annotation, resets MigratedImage.
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		afterForce := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, afterForce)).To(Succeed())
+		Expect(afterForce.Annotations).NotTo(HaveKey("k8s.bindplane.com/force-migrate"))
+		Expect(afterForce.Status.MigratedImage).To(BeEmpty())
+
+		// Simulate garbage collection: envtest has no GC controller, so foreground
+		// deletion leaves the Job terminating with a finalizer. Clear it so the
+		// apiserver completes deletion.
+		lingering := &batchv1.Job{}
+		if err := k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, lingering); err == nil {
+			if len(lingering.Finalizers) > 0 {
+				lingering.SetFinalizers(nil)
+				Expect(k8sClient.Update(testCtx, lingering)).To(Succeed())
+			}
+		}
+		Eventually(func() bool {
+			return errors.IsNotFound(k8sClient.Get(testCtx,
+				types.NamespacedName{Name: jobName, Namespace: testNamespace}, &batchv1.Job{}))
+		}).Should(BeTrue())
+
+		// Reconcile: operator creates a fresh Job and requeues to await it.
+		result, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).NotTo(BeZero(), "expected requeue while awaiting the recreated migrate Job")
+
+		freshJob := &batchv1.Job{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, freshJob)).To(Succeed())
+		Expect(freshJob.UID).NotTo(Equal(origUID), "expected a freshly created Job, not the failed one")
+		Expect(isJobFailed(freshJob)).To(BeFalse())
 	})
 })
 
@@ -2928,9 +2994,9 @@ var _ = Describe("migrate Job helpers", func() {
 			Expect(containers[0].Command).To(Equal([]string{"/bindplane", "migrate", "-y"}))
 		})
 
-		It("sets RestartPolicy to OnFailure", func() {
+		It("sets RestartPolicy to Never", func() {
 			job := r.bindplaneJobsMigrateJob(bindplane)
-			Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyOnFailure))
+			Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
 		})
 
 		It("sets BackoffLimit to 3", func() {

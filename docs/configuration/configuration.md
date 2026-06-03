@@ -1134,7 +1134,9 @@ kubectl patch bindplane <name> -n <namespace> \
   -p '{"metadata":{"annotations":{"k8s.bindplane.com/force-migrate":"true"}}}'
 ```
 
-The controller clears this annotation and resets `status.migratedImage` on the next reconcile, then creates a new Jobs Migrate Job via the normal image-change flow.
+On the next reconcile the controller **deletes the existing Jobs Migrate Job** (along with its pods), clears this annotation, and resets `status.migratedImage`. It then creates a fresh Jobs Migrate Job via the normal image-change flow. Deleting the existing Job is what allows a retry at an unchanged image — for example, re-running after a failure.
+
+The migrate Job runs with `RestartPolicy: Never` and `backoffLimit: 3`, so each failed attempt runs in its own pod and those pods are retained for log inspection (`kubectl logs <migrate-pod>`) until the Job's TTL (24h) elapses.
 
 ## Lifecycle
 
@@ -1203,9 +1205,9 @@ The `status.observedGeneration` field is set to the `metadata.generation` of the
 When `spec.version` changes (or the `k8s.bindplane.com/force-migrate` annotation is set), the operator:
 
 1. Creates a new `Jobs Migrate` (`batch/v1 Job`) before updating any long-running workloads (Jobs, NATS, Node).
-2. Blocks all downstream workload updates until the Jobs Migrate Job completes successfully (requeues every 10 seconds while waiting).
+2. Blocks all downstream workload updates until the Jobs Migrate Job completes successfully (requeues every 10 seconds while the Job is still running).
 3. On success, records the migrated image in `status.migratedImage` and proceeds to roll out updated workloads.
-4. On failure, sets the `Reconciled` condition to `False` with `Reason: MigrationFailed` and halts the rollout until the Job is retried or force-migrate is set.
+4. On failure (the Job reaches a terminal `Failed` state after exhausting `backoffLimit`), sets the `Reconciled` condition to `False` with `Reason: MigrationFailed`, sets `status.phase = Degraded`, and **halts the rollout without requeueing** — a terminal Job will not change state on its own, so the operator stops retrying to avoid log spam. The failure remains visible in status until you intervene: inspect the retained failed pods for logs, fix the underlying cause, then change `spec.version` or set the `k8s.bindplane.com/force-migrate` annotation (see [Force migration](#force-migration)) to retry. Either action triggers a fresh reconcile.
 
 This ordering guarantees that the database schema is always compatible with all running workloads before any new binary version is activated.
 
