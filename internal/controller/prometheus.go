@@ -279,7 +279,6 @@ func (r *BindplaneReconciler) deleteTSDBLocalResourcesIfExist(ctx context.Contex
 // reconcileTSDB reconciles all Prometheus resources
 func (r *BindplaneReconciler) reconcileTSDB(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	if isTSDBRemoteEnabled(bindplane) {
-		log.Info("Remote TSDB enabled; deleting any previously-created local TSDB resources")
 		return r.deleteTSDBLocalResourcesIfExist(ctx, bindplane, log)
 	}
 	// Reconcile Prometheus basic auth Secret first (create-only) so it exists for StatefulSet and Bindplane pods
