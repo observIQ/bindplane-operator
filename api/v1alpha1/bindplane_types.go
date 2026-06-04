@@ -198,6 +198,23 @@ type BindplaneComponentSpec struct {
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 
+	// ExtraVolumes is a list of additional volumes to add to this component's pod.
+	// Volume names must be unique and must not collide with operator-managed volume names.
+	// Allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI.
+	// hostPath and other sources are rejected by the validating webhook.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts is a list of additional volume mounts for this component's primary container.
+	// Each mount's name must reference a volume defined in extraVolumes on the same component.
+	// mountPath must be absolute and must not collide with an operator-managed mount path.
+	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
 	// Image overrides the container image for Bindplane Node. When set, the value is used
 	// verbatim as a full OCI reference (e.g. "myregistry.example.com/bindplane-ee:1.99.1" or
 	// "ghcr.io/observiq/bindplane-ee@sha256:..."). When empty, the image is derived from spec.version.
@@ -324,6 +341,23 @@ type OpAMPComponentSpec struct {
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 
+	// ExtraVolumes is a list of additional volumes to add to this component's pod.
+	// Volume names must be unique and must not collide with operator-managed volume names.
+	// Allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI.
+	// hostPath and other sources are rejected by the validating webhook.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts is a list of additional volume mounts for this component's primary container.
+	// Each mount's name must reference a volume defined in extraVolumes on the same component.
+	// mountPath must be absolute and must not collide with an operator-managed mount path.
+	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
 	// Image overrides the container image for the OpAMP deployment. When set, the value is used
 	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.
 	// +optional
@@ -366,6 +400,23 @@ type BindplaneJobsComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// ExtraVolumes is a list of additional volumes to add to this component's pod.
+	// Volume names must be unique and must not collide with operator-managed volume names.
+	// Allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI.
+	// hostPath and other sources are rejected by the validating webhook.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts is a list of additional volume mounts for this component's primary container.
+	// Each mount's name must reference a volume defined in extraVolumes on the same component.
+	// mountPath must be absolute and must not collide with an operator-managed mount path.
+	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 
 	// Image overrides the container image for Bindplane Jobs. When set, the value is used
 	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.
@@ -410,6 +461,23 @@ type BindplaneJobsMigrateComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// ExtraVolumes is a list of additional volumes to add to this component's pod.
+	// Volume names must be unique and must not collide with operator-managed volume names.
+	// Allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI.
+	// hostPath and other sources are rejected by the validating webhook.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts is a list of additional volume mounts for this component's primary container.
+	// Each mount's name must reference a volume defined in extraVolumes on the same component.
+	// mountPath must be absolute and must not collide with an operator-managed mount path.
+	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 
 	// Image overrides the container image for Bindplane Jobs Migrate. When set, the value is used
 	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.
@@ -904,6 +972,23 @@ type TransformAgentComponentSpec struct {
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 
+	// ExtraVolumes is a list of additional volumes to add to this component's pod.
+	// Volume names must be unique and must not collide with operator-managed volume names.
+	// Allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI.
+	// hostPath and other sources are rejected by the validating webhook.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts is a list of additional volume mounts for this component's primary container.
+	// Each mount's name must reference a volume defined in extraVolumes on the same component.
+	// mountPath must be absolute and must not collide with an operator-managed mount path.
+	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
 	// Image overrides the container image for Transform Agent. When set, the value is used
 	// verbatim as a full OCI reference. When empty, the image is derived from spec.version
 	// using the ghcr.io/observiq/bindplane-transform-agent registry.
@@ -957,6 +1042,23 @@ type TSDBComponentSpec struct {
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
 
+	// ExtraVolumes is a list of additional volumes to add to this component's pod.
+	// Volume names must be unique and must not collide with operator-managed volume names.
+	// Allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI.
+	// hostPath and other sources are rejected by the validating webhook.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts is a list of additional volume mounts for this component's primary container.
+	// Each mount's name must reference a volume defined in extraVolumes on the same component.
+	// mountPath must be absolute and must not collide with an operator-managed mount path.
+	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
 	// Image overrides the container image for TSDB (Prometheus). When set, the value is used
 	// verbatim as a full OCI reference. When empty, the image is derived from spec.version
 	// using the ghcr.io/observiq/bindplane-prometheus registry.
@@ -1009,6 +1111,23 @@ type NatsComponentSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// ExtraVolumes is a list of additional volumes to add to this component's pod.
+	// Volume names must be unique and must not collide with operator-managed volume names.
+	// Allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI.
+	// hostPath and other sources are rejected by the validating webhook.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts is a list of additional volume mounts for this component's primary container.
+	// Each mount's name must reference a volume defined in extraVolumes on the same component.
+	// mountPath must be absolute and must not collide with an operator-managed mount path.
+	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 
 	// Image overrides the container image for NATS. When set, the value is used
 	// verbatim as a full OCI reference. When empty, the image is derived from spec.version.

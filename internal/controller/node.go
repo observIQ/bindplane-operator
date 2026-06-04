@@ -118,6 +118,8 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
+	configVols = appendExtraVolumes(configVols, getNodeExtraVolumes(bindplane))
+	configMounts = appendExtraVolumeMounts(configMounts, getNodeExtraVolumeMounts(bindplane))
 	terminationGracePeriod := nodeTerminationGracePeriodSeconds(bindplane)
 
 	// Default minReadySeconds to the termination grace period so that agents

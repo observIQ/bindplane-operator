@@ -1,3 +1,13 @@
+# Example Secret: a custom CA certificate to be mounted into all Bindplane components.
+# In practice, replace ca.crt with the actual base64-encoded PEM certificate.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: custom-ca-cert
+type: Opaque
+data:
+  ca.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCi4uLgotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+---
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -80,6 +90,14 @@ spec:
         interval: 5s
   bindplane:
     replicas: 1
+    extraVolumes:
+      - name: custom-ca-cert
+        secret:
+          secretName: custom-ca-cert
+    extraVolumeMounts:
+      - name: custom-ca-cert
+        mountPath: /etc/custom-ca
+        readOnly: true
     podTemplate:
       spec:
         containers:
@@ -91,6 +109,14 @@ spec:
               limits:
                 memory: 512Mi
   bindplaneJobs:
+    extraVolumes:
+      - name: custom-ca-cert
+        secret:
+          secretName: custom-ca-cert
+    extraVolumeMounts:
+      - name: custom-ca-cert
+        mountPath: /etc/custom-ca
+        readOnly: true
     podTemplate:
       spec:
         containers:
@@ -102,6 +128,14 @@ spec:
               limits:
                 memory: 512Mi
   bindplaneJobsMigrate:
+    extraVolumes:
+      - name: custom-ca-cert
+        secret:
+          secretName: custom-ca-cert
+    extraVolumeMounts:
+      - name: custom-ca-cert
+        mountPath: /etc/custom-ca
+        readOnly: true
     podTemplate:
       spec:
         containers:
@@ -119,6 +153,14 @@ spec:
         name: bindplane-internal-issuer
         kind: Issuer
         group: cert-manager.io
+    extraVolumes:
+      - name: custom-ca-cert
+        secret:
+          secretName: custom-ca-cert
+    extraVolumeMounts:
+      - name: custom-ca-cert
+        mountPath: /etc/custom-ca
+        readOnly: true
     podTemplate:
       spec:
         containers:
@@ -131,6 +173,14 @@ spec:
                 memory: 512Mi
   nats:
     replicas: 1
+    extraVolumes:
+      - name: custom-ca-cert
+        secret:
+          secretName: custom-ca-cert
+    extraVolumeMounts:
+      - name: custom-ca-cert
+        mountPath: /etc/custom-ca
+        readOnly: true
     podTemplate:
       spec:
         containers:
@@ -142,6 +192,16 @@ spec:
               limits:
                 cpu: 500m
                 memory: 256Mi
+  opamp:
+    enabled: true
+    extraVolumes:
+      - name: custom-ca-cert
+        secret:
+          secretName: custom-ca-cert
+    extraVolumeMounts:
+      - name: custom-ca-cert
+        mountPath: /etc/custom-ca
+        readOnly: true
   # TSDB server mTLS: StatefulSet serves remote write over TLS; operator issues server + probe client certs from this issuer.
   # Together with config.tsdb.tls above, this enables full mTLS (server cert on TSDB, client cert on Bindplane).
   tsdb:
@@ -150,6 +210,14 @@ spec:
         name: bindplane-internal-issuer
         kind: Issuer
         group: cert-manager.io
+    extraVolumes:
+      - name: custom-ca-cert
+        secret:
+          secretName: custom-ca-cert
+    extraVolumeMounts:
+      - name: custom-ca-cert
+        mountPath: /etc/custom-ca
+        readOnly: true
     podTemplate:
       spec:
         containers:

@@ -88,6 +88,8 @@ func (r *BindplaneReconciler) transformAgentDeployment(bindplane *bindplanev1alp
 	labels := getLabels(bindplane, transformAgentComponent)
 	selectorLabels := getSelectorLabels(bindplane, transformAgentComponent)
 	tlsVols, tlsMounts := getTransformAgentTLSVolumesAndMounts(bindplane)
+	tlsVols = appendExtraVolumes(tlsVols, getTransformAgentExtraVolumes(bindplane))
+	tlsMounts = appendExtraVolumeMounts(tlsMounts, getTransformAgentExtraVolumeMounts(bindplane))
 
 	maxSurge := intstr.FromInt32(1)
 	maxUnavailable := intstr.FromInt32(1)

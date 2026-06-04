@@ -30,6 +30,10 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Extra environment variables](#extra-environment-variables)
   - [Reserved env names](#reserved-env-names)
   - [Pod template vs extraEnv](#pod-template-vs-extraenv)
+- [Extra volumes and volume mounts](#extra-volumes-and-volume-mounts)
+  - [Allowed volume sources](#allowed-volume-sources)
+  - [Reserved volume names and mount paths](#reserved-volume-names-and-mount-paths)
+  - [Pod template vs extraVolumeMounts](#pod-template-vs-extravolumemounts)
 - [Argo Rollouts (primary Bindplane component)](#argo-rollouts-primary-bindplane-component)
 - [OpAMP deployment split](#opamp-deployment-split)
 - [Container images](#container-images)
@@ -849,6 +853,109 @@ Names starting with `BINDPLANE_` are also rejected by default because they map t
 ### Pod template vs extraEnv
 
 The `podTemplate` field gives access to the full Kubernetes pod spec (tolerations, node selectors, affinity, security contexts, etc.). The operator intentionally **does not** merge environment variables from `podTemplate.spec.containers[*].env`—those entries are ignored for the primary container. Use `extraEnv` for all custom environment variable injection.
+
+## Extra volumes and volume mounts
+
+Each component exposes `extraVolumes` and `extraVolumeMounts` fields that mount arbitrary files or directories into its primary container. Configuration is per-component: each component independently declares which volumes it needs.
+
+| CRD Field | Description |
+|---|---|
+| `spec.bindplane.extraVolumes` / `spec.bindplane.extraVolumeMounts` | Extra volumes/mounts for the Bindplane Node Deployment. |
+| `spec.bindplaneJobs.extraVolumes` / `spec.bindplaneJobs.extraVolumeMounts` | Extra volumes/mounts for the Bindplane Jobs Deployment. |
+| `spec.bindplaneJobsMigrate.extraVolumes` / `spec.bindplaneJobsMigrate.extraVolumeMounts` | Extra volumes/mounts for the Bindplane Jobs Migrate batch/v1 Job. |
+| `spec.transformAgent.extraVolumes` / `spec.transformAgent.extraVolumeMounts` | Extra volumes/mounts for the Transform Agent Deployment. |
+| `spec.tsdb.extraVolumes` / `spec.tsdb.extraVolumeMounts` | Extra volumes/mounts for the TSDB (Prometheus) StatefulSet. |
+| `spec.nats.extraVolumes` / `spec.nats.extraVolumeMounts` | Extra volumes/mounts for the NATS StatefulSet. |
+| `spec.opamp.extraVolumes` / `spec.opamp.extraVolumeMounts` | Extra volumes/mounts for the dedicated OpAMP Deployment (only when `spec.opamp.enabled` is true). |
+
+Each entry in `extraVolumes` follows the standard Kubernetes `Volume` schema. Each entry in `extraVolumeMounts` follows the standard Kubernetes `VolumeMount` schema.
+
+**Mount references are component-scoped.** Every `extraVolumeMounts[].name` must reference a volume defined in the **same component's** `extraVolumes`. You cannot reference operator-managed volumes or volumes from another component's `extraVolumes`.
+
+Example — Redis CA certificate mounted into Node, OpAMP, and Jobs (not Migrate, NATS, Transform Agent, or TSDB):
+
+```yaml
+spec:
+  bindplane:
+    extraVolumes:
+      - name: redis-ca
+        secret:
+          secretName: redis-ca-cert
+    extraVolumeMounts:
+      - name: redis-ca
+        mountPath: /etc/redis-ca
+  opamp:
+    enabled: true
+    extraVolumes:
+      - name: redis-ca
+        secret:
+          secretName: redis-ca-cert
+    extraVolumeMounts:
+      - name: redis-ca
+        mountPath: /etc/redis-ca
+  bindplaneJobs:
+    extraVolumes:
+      - name: redis-ca
+        secret:
+          secretName: redis-ca-cert
+    extraVolumeMounts:
+      - name: redis-ca
+        mountPath: /etc/redis-ca
+```
+
+Example — Extra Prometheus rules ConfigMap mounted only into TSDB:
+
+```yaml
+spec:
+  tsdb:
+    extraVolumes:
+      - name: prom-rules
+        configMap:
+          name: my-prometheus-rules
+    extraVolumeMounts:
+      - name: prom-rules
+        mountPath: /etc/prometheus/rules.d
+```
+
+### Allowed volume sources
+
+The validating webhook restricts which volume source types are permitted. Only the following are accepted:
+
+| Source | Notes |
+|---|---|
+| `secret` | Mount a Kubernetes Secret |
+| `configMap` | Mount a Kubernetes ConfigMap |
+| `projected` | Projected volume combining secrets, configMaps, serviceAccountTokens, or downwardAPI |
+| `csi` | CSI ephemeral inline volume (e.g. for secrets-store-csi-driver) |
+| `emptyDir` | Ephemeral scratch space; useful when the container needs a writable directory |
+| `downwardAPI` | Expose pod/container metadata as files |
+
+`hostPath` and all other sources are rejected for security reasons.
+
+### Reserved volume names and mount paths
+
+The following volume names and mount paths are managed by the operator and may not be used in `extraVolumes` or `extraVolumeMounts`:
+
+| Reserved volume name | Reserved mount path |
+|---|---|
+| `ldap-tls` | `/etc/bindplane/ldap-tls` |
+| `network-tls` | `/etc/bindplane/network-tls` |
+| `postgres-tls` | `/etc/bindplane/postgres-tls` |
+| `tsdb-remote-write-tls` | `/etc/bindplane/tsdb-remote-write-tls` |
+| `nats-tls` | `/etc/bindplane/nats-tls` |
+| `transform-agent-tls` | `/etc/bindplane/transform-agent-tls` |
+| `tsdb-web-config` | `/etc/prometheus` |
+| `tsdb-tls` | `/etc/tsdb-tls` |
+| `tsdb-web-server-tls` | `/etc/tsdb-web-tls` |
+| `tsdb-probe-client-tls` | `/etc/tsdb-probe-client` |
+| `tsdb-probe-auth` | `/etc/tsdb-probe-auth` |
+| `<name>-tsdb-data` _(dynamic)_ | `/prometheus` |
+
+The `<name>-tsdb-data` volume is the TSDB StatefulSet's persistent data volume, named after the Bindplane CR (e.g. `my-bindplane-tsdb-data` for a CR named `my-bindplane`). Any `extraVolumes` entry for the TSDB component with that name is rejected.
+
+### Pod template vs extraVolumeMounts
+
+The `podTemplate` field gives access to the full Kubernetes pod spec. The operator intentionally **does not** merge volume mounts from `podTemplate.spec.containers[*].volumeMounts`—those entries are ignored for the primary container. Use `extraVolumeMounts` for all custom volume mount injection.
 
 ## Argo Rollouts (primary Bindplane component)
 

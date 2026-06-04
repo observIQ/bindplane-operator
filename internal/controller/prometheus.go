@@ -466,6 +466,8 @@ func (r *BindplaneReconciler) tsdbStatefulSet(bindplane *bindplanev1alpha1.Bindp
 	serviceName := getResourceName(bindplane, tsdbComponent)
 	volumes := getTSDBVolumes(bindplane)
 	volumeMounts := getTSDBVolumeMounts(bindplane)
+	volumes = appendExtraVolumes(volumes, getTSDBExtraVolumes(bindplane))
+	volumeMounts = appendExtraVolumeMounts(volumeMounts, getTSDBExtraVolumeMounts(bindplane))
 
 	tsdbResources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{

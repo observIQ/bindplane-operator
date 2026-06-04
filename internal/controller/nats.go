@@ -107,6 +107,8 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 	serviceName := getResourceName(bindplane, natsComponent)
 	headlessServiceName := getNatsClusterServiceName(bindplane)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
+	configVols = appendExtraVolumes(configVols, getNatsExtraVolumes(bindplane))
+	configMounts = appendExtraVolumeMounts(configMounts, getNatsExtraVolumeMounts(bindplane))
 
 	natsResources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{

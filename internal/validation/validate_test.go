@@ -830,3 +830,266 @@ func TestValidateStatusConfig_InvalidInlineKeyRejected(t *testing.T) {
 		t.Error("expected error for invalid UUID key")
 	}
 }
+
+// ---- ValidateExtraVolumes ----
+
+func secretVolume(name string) corev1.Volume {
+	return corev1.Volume{
+		Name:         name,
+		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: name + "-secret"}},
+	}
+}
+
+func configMapVolume(name string) corev1.Volume {
+	return corev1.Volume{
+		Name: name,
+		VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{Name: name + "-cm"},
+		}},
+	}
+}
+
+func emptyDirVolume(name string) corev1.Volume {
+	return corev1.Volume{
+		Name:         name,
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	}
+}
+
+func mount(volName, mountPath string) corev1.VolumeMount {
+	return corev1.VolumeMount{Name: volName, MountPath: mountPath}
+}
+
+func TestValidateExtraVolumes_ValidSecretVolume(t *testing.T) {
+	vols := []corev1.Volume{secretVolume("my-ca")}
+	mounts := []corev1.VolumeMount{mount("my-ca", "/etc/my-ca")}
+	if err := validation.ValidateExtraVolumes("spec.bindplane", vols, mounts, nil); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateExtraVolumes_ValidConfigMapVolume(t *testing.T) {
+	vols := []corev1.Volume{configMapVolume("prom-rules")}
+	mounts := []corev1.VolumeMount{mount("prom-rules", "/etc/prometheus/rules.d")}
+	if err := validation.ValidateExtraVolumes("spec.tsdb", vols, mounts, nil); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateExtraVolumes_ValidEmptyDir(t *testing.T) {
+	vols := []corev1.Volume{emptyDirVolume("scratch")}
+	mounts := []corev1.VolumeMount{mount("scratch", "/tmp/scratch")}
+	if err := validation.ValidateExtraVolumes("spec.bindplane", vols, mounts, nil); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateExtraVolumes_HostPathRejected(t *testing.T) {
+	hostPath := "/host/path"
+	vols := []corev1.Volume{{
+		Name:         "host-vol",
+		VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: hostPath}},
+	}}
+	err := validation.ValidateExtraVolumes("spec.bindplane", vols, nil, nil)
+	if err == nil {
+		t.Error("expected error for hostPath volume")
+	}
+	if !strings.Contains(err.Error(), "hostPath") {
+		t.Errorf("error should mention hostPath, got: %v", err)
+	}
+}
+
+func TestValidateExtraVolumes_NoSourceRejected(t *testing.T) {
+	vols := []corev1.Volume{{Name: "empty-source"}}
+	err := validation.ValidateExtraVolumes("spec.bindplane", vols, nil, nil)
+	if err == nil {
+		t.Error("expected error for volume with no source")
+	}
+}
+
+func TestValidateExtraVolumes_InvalidDNS1123Name(t *testing.T) {
+	vols := []corev1.Volume{{
+		Name:         "Invalid_Name",
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	}}
+	err := validation.ValidateExtraVolumes("spec.bindplane", vols, nil, nil)
+	if err == nil {
+		t.Error("expected error for invalid DNS-1123 name")
+	}
+}
+
+func TestValidateExtraVolumes_DuplicateName(t *testing.T) {
+	vols := []corev1.Volume{secretVolume("my-ca"), secretVolume("my-ca")}
+	err := validation.ValidateExtraVolumes("spec.bindplane", vols, nil, nil)
+	if err == nil {
+		t.Error("expected error for duplicate volume name")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error should mention duplicate, got: %v", err)
+	}
+}
+
+func TestValidateExtraVolumes_ReservedNameRejected(t *testing.T) {
+	for _, reservedName := range []string{"ldap-tls", "network-tls", "postgres-tls", "nats-tls", "transform-agent-tls", "tsdb-remote-write-tls"} {
+		vols := []corev1.Volume{{
+			Name:         reservedName,
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		}}
+		err := validation.ValidateExtraVolumes("spec.bindplane", vols, nil, nil)
+		if err == nil {
+			t.Errorf("expected error for reserved volume name %q", reservedName)
+		}
+		if !strings.Contains(err.Error(), "reserved") {
+			t.Errorf("error should mention reserved for %q, got: %v", reservedName, err)
+		}
+	}
+}
+
+func TestValidateExtraVolumes_AdditionalReservedName(t *testing.T) {
+	extra := map[string]struct{}{"my-bp-tsdb-data": {}}
+	vols := []corev1.Volume{{
+		Name:         "my-bp-tsdb-data",
+		VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+	}}
+	err := validation.ValidateExtraVolumes("spec.tsdb", vols, nil, extra)
+	if err == nil {
+		t.Error("expected error for additional reserved volume name")
+	}
+}
+
+func TestValidateExtraVolumes_ReservedMountPathRejected(t *testing.T) {
+	for _, reserved := range []string{
+		"/etc/bindplane/ldap-tls",
+		"/etc/bindplane/nats-tls",
+		"/etc/prometheus",
+		"/prometheus",
+	} {
+		vols := []corev1.Volume{secretVolume("my-vol")}
+		mounts := []corev1.VolumeMount{mount("my-vol", reserved)}
+		err := validation.ValidateExtraVolumes("spec.bindplane", vols, mounts, nil)
+		if err == nil {
+			t.Errorf("expected error for reserved mount path %q", reserved)
+		}
+		if !strings.Contains(err.Error(), "reserved") {
+			t.Errorf("error should mention reserved for path %q, got: %v", reserved, err)
+		}
+	}
+}
+
+func TestValidateExtraVolumes_DuplicateMountPath(t *testing.T) {
+	vols := []corev1.Volume{secretVolume("vol-a"), secretVolume("vol-b")}
+	mounts := []corev1.VolumeMount{mount("vol-a", "/etc/mypath"), mount("vol-b", "/etc/mypath")}
+	err := validation.ValidateExtraVolumes("spec.bindplane", vols, mounts, nil)
+	if err == nil {
+		t.Error("expected error for duplicate mountPath")
+	}
+}
+
+func TestValidateExtraVolumes_NonAbsoluteMountPath(t *testing.T) {
+	vols := []corev1.Volume{secretVolume("my-ca")}
+	mounts := []corev1.VolumeMount{mount("my-ca", "relative/path")}
+	err := validation.ValidateExtraVolumes("spec.bindplane", vols, mounts, nil)
+	if err == nil {
+		t.Error("expected error for non-absolute mountPath")
+	}
+	if !strings.Contains(err.Error(), "absolute") {
+		t.Errorf("error should mention absolute, got: %v", err)
+	}
+}
+
+func TestValidateExtraVolumes_MountReferencesOperatorVolume(t *testing.T) {
+	// No extraVolumes defined, but tries to mount an operator-managed name
+	mounts := []corev1.VolumeMount{mount("nats-tls", "/etc/custom")}
+	err := validation.ValidateExtraVolumes("spec.bindplane", nil, mounts, nil)
+	if err == nil {
+		t.Error("expected error when mounting a volume not in extraVolumes")
+	}
+}
+
+func TestValidateExtraVolumes_MountReferencesNonexistentVolume(t *testing.T) {
+	vols := []corev1.Volume{secretVolume("vol-a")}
+	mounts := []corev1.VolumeMount{mount("nonexistent", "/etc/custom")}
+	err := validation.ValidateExtraVolumes("spec.bindplane", vols, mounts, nil)
+	if err == nil {
+		t.Error("expected error when mount references nonexistent extraVolume")
+	}
+}
+
+func TestValidateExtraVolumes_EmptyIsValid(t *testing.T) {
+	if err := validation.ValidateExtraVolumes("spec.bindplane", nil, nil, nil); err != nil {
+		t.Errorf("nil/empty should be valid, got: %v", err)
+	}
+}
+
+// TestValidateExtraVolumes_RedisCACertExample covers the plan's example:
+// bindplane, opamp, jobs each mount a redis CA secret.
+func TestValidateExtraVolumes_RedisCACertExample(t *testing.T) {
+	redisVol := secretVolume("redis-ca")
+	redisMount := mount("redis-ca", "/etc/redis-ca")
+
+	for _, path := range []string{"spec.bindplane", "spec.opamp", "spec.bindplaneJobs"} {
+		if err := validation.ValidateExtraVolumes(path, []corev1.Volume{redisVol}, []corev1.VolumeMount{redisMount}, nil); err != nil {
+			t.Errorf("redis CA example should be valid for %s: %v", path, err)
+		}
+	}
+}
+
+// TestValidateExtraVolumes_TSDBRulesExample covers the plan's example:
+// tsdb mounts a prometheus rules ConfigMap.
+func TestValidateExtraVolumes_TSDBRulesExample(t *testing.T) {
+	rulesVol := configMapVolume("prom-rules")
+	rulesMount := mount("prom-rules", "/etc/prometheus/rules.d")
+
+	if err := validation.ValidateExtraVolumes("spec.tsdb", []corev1.Volume{rulesVol}, []corev1.VolumeMount{rulesMount}, nil); err != nil {
+		t.Errorf("tsdb rules example should be valid: %v", err)
+	}
+}
+
+// TestValidateBindplane_ExtraVolumesValidated ensures ValidateBindplane calls volume validation.
+func TestValidateBindplane_ExtraVolumesValidated(t *testing.T) {
+	bp := minimalBindplane()
+	bp.Spec.Bindplane.ExtraVolumes = []corev1.Volume{{
+		Name:         "bad",
+		VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/host"}},
+	}}
+	if err := validation.ValidateBindplane(bp); err == nil {
+		t.Error("expected error for hostPath in extraVolumes via ValidateBindplane")
+	}
+}
+
+// TestValidateBindplane_TSDBDataVolumeReserved ensures the computed TSDB data volume name is reserved.
+func TestValidateBindplane_TSDBDataVolumeReserved(t *testing.T) {
+	bp := minimalBindplane()
+	// The TSDB data volume name is "<bindplane.Name>-tsdb-data"
+	dataVolName := bp.Name + "-tsdb-data"
+	bp.Spec.TSDB = &bindplanev1alpha1.TSDBComponentSpec{
+		ExtraVolumes: []corev1.Volume{{
+			Name:         dataVolName,
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		}},
+	}
+	if err := validation.ValidateBindplane(bp); err == nil {
+		t.Errorf("expected error: tsdb data volume name %q should be reserved", dataVolName)
+	}
+}
+
+// minimalBindplane returns a minimal valid Bindplane for testing validation.
+func minimalBindplane() *bindplanev1alpha1.Bindplane {
+	replicas := int32(1)
+	return &bindplanev1alpha1.Bindplane{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+		Spec: bindplanev1alpha1.BindplaneSpec{
+			Version: "1.99.0",
+			Bindplane: bindplanev1alpha1.BindplaneComponentSpec{
+				Replicas: &replicas,
+				Strategy: &appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType},
+			},
+			Config: bindplanev1alpha1.BindplaneConfigSpec{
+				License: "test-license",
+				Store: bindplanev1alpha1.StoreConfig{
+					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres"},
+				},
+			},
+		},
+	}
+}

@@ -1095,6 +1095,130 @@ func prependExtraEnv(extraEnv []corev1.EnvVar, operatorEnv ...[]corev1.EnvVar) [
 	return out
 }
 
+// appendExtraVolumes appends user-supplied extra volumes after the operator-managed volumes.
+// Nil/empty extras return the operator slice unchanged.
+func appendExtraVolumes(operatorVols []corev1.Volume, extra []corev1.Volume) []corev1.Volume {
+	if len(extra) == 0 {
+		return operatorVols
+	}
+	return append(operatorVols, extra...)
+}
+
+// appendExtraVolumeMounts appends user-supplied extra volume mounts after the operator-managed mounts.
+// Nil/empty extras return the operator slice unchanged.
+func appendExtraVolumeMounts(operatorMounts []corev1.VolumeMount, extra []corev1.VolumeMount) []corev1.VolumeMount {
+	if len(extra) == 0 {
+		return operatorMounts
+	}
+	return append(operatorMounts, extra...)
+}
+
+// getNodeExtraVolumes returns the user-supplied extra volumes for Bindplane Node.
+func getNodeExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	return bindplane.Spec.Bindplane.ExtraVolumes
+}
+
+// getNodeExtraVolumeMounts returns the user-supplied extra volume mounts for Bindplane Node.
+func getNodeExtraVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+	return bindplane.Spec.Bindplane.ExtraVolumeMounts
+}
+
+// getOpAMPExtraVolumes returns the user-supplied extra volumes for the OpAMP deployment, or nil.
+func getOpAMPExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	if bindplane.Spec.OpAMP != nil {
+		return bindplane.Spec.OpAMP.ExtraVolumes
+	}
+	return nil
+}
+
+// getOpAMPExtraVolumeMounts returns the user-supplied extra volume mounts for the OpAMP deployment, or nil.
+func getOpAMPExtraVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+	if bindplane.Spec.OpAMP != nil {
+		return bindplane.Spec.OpAMP.ExtraVolumeMounts
+	}
+	return nil
+}
+
+// getBindplaneJobsExtraVolumes returns the user-supplied extra volumes for Bindplane Jobs, or nil.
+func getBindplaneJobsExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	if bindplane.Spec.BindplaneJobs != nil {
+		return bindplane.Spec.BindplaneJobs.ExtraVolumes
+	}
+	return nil
+}
+
+// getBindplaneJobsExtraVolumeMounts returns the user-supplied extra volume mounts for Bindplane Jobs, or nil.
+func getBindplaneJobsExtraVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+	if bindplane.Spec.BindplaneJobs != nil {
+		return bindplane.Spec.BindplaneJobs.ExtraVolumeMounts
+	}
+	return nil
+}
+
+// getBindplaneJobsMigrateExtraVolumes returns the user-supplied extra volumes for Bindplane Jobs Migrate, or nil.
+func getBindplaneJobsMigrateExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	if bindplane.Spec.BindplaneJobsMigrate != nil {
+		return bindplane.Spec.BindplaneJobsMigrate.ExtraVolumes
+	}
+	return nil
+}
+
+// getBindplaneJobsMigrateExtraVolumeMounts returns the user-supplied extra volume mounts for Bindplane Jobs Migrate, or nil.
+func getBindplaneJobsMigrateExtraVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+	if bindplane.Spec.BindplaneJobsMigrate != nil {
+		return bindplane.Spec.BindplaneJobsMigrate.ExtraVolumeMounts
+	}
+	return nil
+}
+
+// getNatsExtraVolumes returns the user-supplied extra volumes for NATS, or nil.
+func getNatsExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	if bindplane.Spec.Nats != nil {
+		return bindplane.Spec.Nats.ExtraVolumes
+	}
+	return nil
+}
+
+// getNatsExtraVolumeMounts returns the user-supplied extra volume mounts for NATS, or nil.
+func getNatsExtraVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+	if bindplane.Spec.Nats != nil {
+		return bindplane.Spec.Nats.ExtraVolumeMounts
+	}
+	return nil
+}
+
+// getTransformAgentExtraVolumes returns the user-supplied extra volumes for Transform Agent, or nil.
+func getTransformAgentExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	if bindplane.Spec.TransformAgent != nil {
+		return bindplane.Spec.TransformAgent.ExtraVolumes
+	}
+	return nil
+}
+
+// getTransformAgentExtraVolumeMounts returns the user-supplied extra volume mounts for Transform Agent, or nil.
+func getTransformAgentExtraVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+	if bindplane.Spec.TransformAgent != nil {
+		return bindplane.Spec.TransformAgent.ExtraVolumeMounts
+	}
+	return nil
+}
+
+// getTSDBExtraVolumes returns the user-supplied extra volumes for TSDB, or nil.
+func getTSDBExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
+	if bindplane.Spec.TSDB != nil {
+		return bindplane.Spec.TSDB.ExtraVolumes
+	}
+	return nil
+}
+
+// getTSDBExtraVolumeMounts returns the user-supplied extra volume mounts for TSDB, or nil.
+func getTSDBExtraVolumeMounts(bindplane *bindplanev1alpha1.Bindplane) []corev1.VolumeMount {
+	if bindplane.Spec.TSDB != nil {
+		return bindplane.Spec.TSDB.ExtraVolumeMounts
+	}
+	return nil
+}
+
 func getKubernetesEnvVars(containerName string) []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{

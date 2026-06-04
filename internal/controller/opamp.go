@@ -172,6 +172,8 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 	labels := getLabels(bindplane, opampComponent)
 	selectorLabels := getSelectorLabels(bindplane, opampComponent)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
+	configVols = appendExtraVolumes(configVols, getOpAMPExtraVolumes(bindplane))
+	configMounts = appendExtraVolumeMounts(configMounts, getOpAMPExtraVolumeMounts(bindplane))
 	terminationGracePeriod := nodeTerminationGracePeriodSeconds(bindplane)
 
 	// Default minReadySeconds to the termination grace period so that agents

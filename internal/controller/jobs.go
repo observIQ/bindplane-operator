@@ -129,6 +129,8 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 	labels := getLabels(bindplane, bindplaneJobsComponent)
 	selectorLabels := getSelectorLabels(bindplane, bindplaneJobsComponent)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
+	configVols = appendExtraVolumes(configVols, getBindplaneJobsExtraVolumes(bindplane))
+	configMounts = appendExtraVolumeMounts(configMounts, getBindplaneJobsExtraVolumeMounts(bindplane))
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -251,6 +253,8 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 	transformAgentVols, transformAgentMounts := getTransformAgentTLSVolumesAndMounts(bindplane)
 	configVols := append(append(append(append(ldapVols, netVols...), pgVols...), internalVols...), transformAgentVols...)
 	configMounts := append(append(append(append(ldapMounts, netMounts...), pgMounts...), internalMounts...), transformAgentMounts...)
+	configVols = appendExtraVolumes(configVols, getBindplaneJobsMigrateExtraVolumes(bindplane))
+	configMounts = appendExtraVolumeMounts(configMounts, getBindplaneJobsMigrateExtraVolumeMounts(bindplane))
 
 	migrateResources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{

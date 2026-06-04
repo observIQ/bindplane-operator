@@ -48,6 +48,8 @@ func (r *BindplaneReconciler) nodeRollout(bindplane *bindplanev1alpha1.Bindplane
 	labels := getLabels(bindplane, nodeComponent)
 	selectorLabels := getSelectorLabels(bindplane, nodeComponent)
 	configVols, configMounts := getConfigTLSVolumesAndMounts(bindplane)
+	configVols = appendExtraVolumes(configVols, getNodeExtraVolumes(bindplane))
+	configMounts = appendExtraVolumeMounts(configMounts, getNodeExtraVolumeMounts(bindplane))
 	terminationGracePeriod := nodeTerminationGracePeriodSeconds(bindplane)
 
 	minReadySeconds := int32(terminationGracePeriod) // #nosec G115 -- grace period is always a small positive value

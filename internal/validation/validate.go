@@ -38,6 +38,9 @@ const maxResourceNamePrefixLen = 63 - 1 - len("transform-agent") // 47
 // uuidRegex matches standard UUID format (case-insensitive).
 var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// dns1123LabelRegexp matches a valid DNS-1123 label (used for Kubernetes volume names).
+var dns1123LabelRegexp = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
 // reservedExtraEnvNames is the set of exact env var names that may never be set via extraEnv
 // because they are always managed by the operator.
 var reservedExtraEnvNames = map[string]struct{}{
@@ -47,6 +50,43 @@ var reservedExtraEnvNames = map[string]struct{}{
 	"GOMEMLIMIT":                {},
 	"GOMAXPROCS":                {},
 }
+
+// reservedVolumeNames is the set of static volume names always managed by the operator.
+// If you add a new operator-managed volume name constant in the controller, add it here too.
+var reservedVolumeNames = map[string]struct{}{
+	"ldap-tls":              {},
+	"network-tls":           {},
+	"postgres-tls":          {},
+	"tsdb-remote-write-tls": {},
+	"nats-tls":              {},
+	"transform-agent-tls":   {},
+	"tsdb-web-config":       {},
+	"tsdb-tls":              {},
+	"tsdb-web-server-tls":   {},
+	"tsdb-probe-client-tls": {},
+	"tsdb-probe-auth":       {},
+}
+
+// reservedMountPaths is the set of mount paths always managed by the operator.
+// If you add a new operator-managed mount path constant in the controller, add it here too.
+var reservedMountPaths = map[string]struct{}{
+	"/etc/bindplane/ldap-tls":              {},
+	"/etc/bindplane/network-tls":           {},
+	"/etc/bindplane/postgres-tls":          {},
+	"/etc/bindplane/tsdb-remote-write-tls": {},
+	"/etc/bindplane/nats-tls":              {},
+	"/etc/bindplane/transform-agent-tls":   {},
+	"/etc/prometheus":                      {},
+	"/etc/tsdb-tls":                        {},
+	"/etc/tsdb-web-tls":                    {},
+	"/etc/tsdb-probe-client":               {},
+	"/etc/tsdb-probe-auth":                 {},
+	"/prometheus":                          {},
+}
+
+// tsdbDataVolumeSuffix mirrors the same constant in the controller package; kept in sync manually.
+// Used to compute the per-CR TSDB data volume name: "<bindplane.Name>-tsdb-data".
+const tsdbDataVolumeSuffix = "tsdb-data"
 
 // AllowBindplaneExtraEnv controls whether extraEnv entries with names starting with
 // "BINDPLANE_" are accepted. Set this once at operator startup via the
@@ -82,6 +122,10 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 	}
 
 	if err := validateAllExtraEnv(bindplane); err != nil {
+		return err
+	}
+
+	if err := validateAllExtraVolumes(bindplane); err != nil {
 		return err
 	}
 
@@ -423,6 +467,120 @@ func ValidateAgentVersionsConfig(config *bindplanev1alpha1.BindplaneConfigSpec) 
 	}
 	if d < time.Hour {
 		return fmt.Errorf("spec.config.agentVersions.syncInterval %q must be at least 1h", config.AgentVersions.SyncInterval)
+	}
+	return nil
+}
+
+// validateAllExtraVolumes validates extraVolumes and extraVolumeMounts for every component.
+func validateAllExtraVolumes(bindplane *bindplanev1alpha1.Bindplane) error {
+	// Compute the TSDB data volume name, which is per-CR (not static).
+	tsdbDataVolumeName := bindplane.Name + "-" + tsdbDataVolumeSuffix
+
+	if err := ValidateExtraVolumes("spec.bindplane", bindplane.Spec.Bindplane.ExtraVolumes, bindplane.Spec.Bindplane.ExtraVolumeMounts, nil); err != nil {
+		return err
+	}
+	if bindplane.Spec.BindplaneJobs != nil {
+		if err := ValidateExtraVolumes("spec.bindplaneJobs", bindplane.Spec.BindplaneJobs.ExtraVolumes, bindplane.Spec.BindplaneJobs.ExtraVolumeMounts, nil); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.BindplaneJobsMigrate != nil {
+		if err := ValidateExtraVolumes("spec.bindplaneJobsMigrate", bindplane.Spec.BindplaneJobsMigrate.ExtraVolumes, bindplane.Spec.BindplaneJobsMigrate.ExtraVolumeMounts, nil); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.TransformAgent != nil {
+		if err := ValidateExtraVolumes("spec.transformAgent", bindplane.Spec.TransformAgent.ExtraVolumes, bindplane.Spec.TransformAgent.ExtraVolumeMounts, nil); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.TSDB != nil {
+		extraNames := map[string]struct{}{tsdbDataVolumeName: {}}
+		if err := ValidateExtraVolumes("spec.tsdb", bindplane.Spec.TSDB.ExtraVolumes, bindplane.Spec.TSDB.ExtraVolumeMounts, extraNames); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.Nats != nil {
+		if err := ValidateExtraVolumes("spec.nats", bindplane.Spec.Nats.ExtraVolumes, bindplane.Spec.Nats.ExtraVolumeMounts, nil); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.OpAMP != nil {
+		if err := ValidateExtraVolumes("spec.opamp", bindplane.Spec.OpAMP.ExtraVolumes, bindplane.Spec.OpAMP.ExtraVolumeMounts, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateExtraVolumes validates extra volumes and extra volume mounts for a single component.
+// componentPath is used in error messages (e.g. "spec.bindplane").
+// additionalReservedNames is an optional extra set of reserved volume names (used for TSDB's dynamic data volume name).
+func ValidateExtraVolumes(componentPath string, volumes []corev1.Volume, mounts []corev1.VolumeMount, additionalReservedNames map[string]struct{}) error {
+	volNames := make(map[string]struct{}, len(volumes))
+	volPath := componentPath + ".extraVolumes"
+	for i, vol := range volumes {
+		fp := fmt.Sprintf("%s[%d]", volPath, i)
+		// DNS-1123 label validation
+		if !dns1123LabelRegexp.MatchString(vol.Name) || len(vol.Name) > 63 {
+			return fmt.Errorf("%s: name %q is not a valid DNS-1123 label (lowercase alphanumeric and hyphens, must start and end with alphanumeric, max 63 chars)", fp, vol.Name)
+		}
+		// Uniqueness within this component
+		if _, dup := volNames[vol.Name]; dup {
+			return fmt.Errorf("%s: duplicate volume name %q", fp, vol.Name)
+		}
+		volNames[vol.Name] = struct{}{}
+		// Reserved name collision
+		if _, reserved := reservedVolumeNames[vol.Name]; reserved {
+			return fmt.Errorf("%s: volume name %q is reserved and managed by the operator", fp, vol.Name)
+		}
+		if additionalReservedNames != nil {
+			if _, reserved := additionalReservedNames[vol.Name]; reserved {
+				return fmt.Errorf("%s: volume name %q is reserved and managed by the operator", fp, vol.Name)
+			}
+		}
+		// Source allowlist
+		if err := validateExtraVolumeSource(fp, vol.VolumeSource); err != nil {
+			return err
+		}
+	}
+
+	mountPaths := make(map[string]struct{}, len(mounts))
+	mountPath := componentPath + ".extraVolumeMounts"
+	for i, m := range mounts {
+		fp := fmt.Sprintf("%s[%d]", mountPath, i)
+		// mountPath must be absolute
+		if !strings.HasPrefix(m.MountPath, "/") {
+			return fmt.Errorf("%s: mountPath %q must be an absolute path (start with /)", fp, m.MountPath)
+		}
+		// Uniqueness within this component
+		if _, dup := mountPaths[m.MountPath]; dup {
+			return fmt.Errorf("%s: duplicate mountPath %q", fp, m.MountPath)
+		}
+		mountPaths[m.MountPath] = struct{}{}
+		// Reserved path collision
+		if _, reserved := reservedMountPaths[m.MountPath]; reserved {
+			return fmt.Errorf("%s: mountPath %q is reserved and managed by the operator", fp, m.MountPath)
+		}
+		// Mount must reference a volume in this component's extraVolumes
+		if _, ok := volNames[m.Name]; !ok {
+			return fmt.Errorf("%s: name %q does not reference a volume in %s (operator-managed volumes cannot be referenced here)", fp, m.Name, volPath)
+		}
+	}
+	return nil
+}
+
+// validateExtraVolumeSource checks that a volume uses only an allowed source type.
+// hostPath is explicitly rejected; only secret, configMap, projected, csi, emptyDir,
+// and downwardAPI are permitted.
+func validateExtraVolumeSource(fieldPath string, vs corev1.VolumeSource) error {
+	if vs.HostPath != nil {
+		return fmt.Errorf("%s: hostPath volumes are not allowed; use secret, configMap, projected, csi, emptyDir, or downwardAPI", fieldPath)
+	}
+	hasAllowed := vs.Secret != nil || vs.ConfigMap != nil || vs.Projected != nil ||
+		vs.CSI != nil || vs.EmptyDir != nil || vs.DownwardAPI != nil
+	if !hasAllowed {
+		return fmt.Errorf("%s: volume must use one of the allowed sources: secret, configMap, projected, csi, emptyDir, downwardAPI", fieldPath)
 	}
 	return nil
 }
