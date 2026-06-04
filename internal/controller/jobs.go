@@ -58,6 +58,21 @@ const (
 	migrateJobTTLSeconds = int32(86400)
 )
 
+// migrateState describes the outcome of reconciling the Jobs Migrate Job.
+type migrateState int
+
+const (
+	// migrateInProgress means the Job is running, was just created, or is being
+	// (re)created; the reconciler should requeue and wait.
+	migrateInProgress migrateState = iota
+	// migrateComplete means migration for the desired image succeeded (or was
+	// already recorded); downstream workloads may proceed.
+	migrateComplete
+	// migrateFailed means the Job reached a terminal Failed state; the reconciler
+	// should surface the failure and stop, awaiting a manual retry.
+	migrateFailed
+)
+
 // reconcileBindplaneJobsRegular reconciles the Bindplane Jobs deployment
 func (r *BindplaneReconciler) reconcileBindplaneJobsRegular(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) error {
 	// Reconcile ServiceAccount
@@ -263,7 +278,11 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 				corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{Labels: selectorLabels},
 					Spec: corev1.PodSpec{
-						RestartPolicy:      corev1.RestartPolicyOnFailure,
+						// RestartPolicyNever (not OnFailure) so each backoff attempt runs in
+						// its own pod and failed pods are retained for log inspection until the
+						// Job's TTL elapses. OnFailure restarts the container in place, discarding
+						// the logs of earlier failed attempts.
+						RestartPolicy:      corev1.RestartPolicyNever,
 						ServiceAccountName: getResourceName(bindplane, bindplaneJobsMigrateComponent),
 						Volumes:            configVols,
 						SecurityContext:    newPodSecurityContext(),
@@ -292,8 +311,8 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 }
 
 // reconcileMigrateJob ensures the migration batch/v1 Job runs to completion before downstream
-// workloads (NATS, Jobs, Node) are reconciled. Returns (migrationComplete, error).
-func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) (bool, error) {
+// workloads (NATS, Jobs, Node) are reconciled. Returns the migrate state and an error.
+func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) (migrateState, error) {
 	jobName := getResourceName(bindplane, bindplaneJobsMigrateComponent)
 	ns := bindplane.Namespace
 
@@ -309,49 +328,68 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 	// Reconcile ServiceAccount (always needed).
 	sa := r.bindplaneJobsMigrateServiceAccount(bindplane)
 	if err := r.reconcileServiceAccount(ctx, bindplane, sa, log); err != nil {
-		return false, err
+		return migrateInProgress, err
 	}
 
-	// Handle force annotation: clear it and reset MigratedImage so the normal
-	// image-change flow triggers Job creation on the next reconcile.
-	if bindplane.Annotations[forceMigrateAnnotation] == "true" {
+	// Handle force annotation: delete any existing Job, clear the annotation, and reset
+	// MigratedImage so a fresh Job is created on the next reconcile. Deleting the existing
+	// Job is required to retry at an unchanged image (e.g. after a failure) — otherwise the
+	// next reconcile would just re-read the old Job's terminal state.
+	if bindplane.Annotations[forceMigrateAnnotation] == annotationValueTrue {
+		existingJob := &batchv1.Job{}
+		if err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ns}, existingJob); err == nil {
+			log.Info("force-migrate: deleting existing Jobs Migrate Job", "name", jobName)
+			if err := r.deleteJobWithPods(ctx, existingJob, log); err != nil {
+				return migrateInProgress, err
+			}
+		} else if !errors.IsNotFound(err) {
+			return migrateInProgress, err
+		}
+
 		patch := client.MergeFrom(bindplane.DeepCopy())
 		delete(bindplane.Annotations, forceMigrateAnnotation)
 		if err := r.Patch(ctx, bindplane, patch); err != nil {
-			return false, err
+			return migrateInProgress, err
 		}
 		bindplane.Status.MigratedImage = ""
 		if err := r.Status().Update(ctx, bindplane); err != nil {
-			return false, err
+			return migrateInProgress, err
 		}
-		return false, nil // requeue; next reconcile will detect MigratedImage mismatch
+		return migrateInProgress, nil // requeue; next reconcile will detect MigratedImage mismatch
 	}
 
 	desiredImage := getBindplaneJobsMigrateImage(bindplane)
 
 	// Already migrated for this image — skip.
 	if bindplane.Status.MigratedImage == desiredImage {
-		return true, nil
+		return migrateComplete, nil
 	}
 
 	// Look up existing Job.
 	existingJob := &batchv1.Job{}
 	err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ns}, existingJob)
 	if err != nil && !errors.IsNotFound(err) {
-		return false, err
+		return migrateInProgress, err
 	}
 
 	if errors.IsNotFound(err) {
 		// No Job yet — create it.
 		job := r.bindplaneJobsMigrateJob(bindplane)
 		if err := controllerutil.SetControllerReference(bindplane, job, r.Scheme); err != nil {
-			return false, err
+			return migrateInProgress, err
 		}
 		log.Info("creating Jobs Migrate Job", "name", jobName, "image", desiredImage)
 		if err := r.Create(ctx, job); err != nil {
-			return false, err
+			return migrateInProgress, err
 		}
-		return false, nil // requeue to check status
+		return migrateInProgress, nil // requeue to check status
+	}
+
+	// Job is being deleted (force-migrate or stale-image cleanup in progress with
+	// foreground propagation). Wait for it to clear before reading its status or
+	// recreating it.
+	if existingJob.DeletionTimestamp != nil {
+		return migrateInProgress, nil
 	}
 
 	// Job exists — check image.
@@ -359,29 +397,29 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 		// Stale Job from a previous image version — delete and requeue.
 		log.Info("deleting stale Jobs Migrate Job", "name", jobName)
 		if err := r.deleteJobWithPods(ctx, existingJob, log); err != nil {
-			return false, err
+			return migrateInProgress, err
 		}
-		return false, nil
+		return migrateInProgress, nil
 	}
 
 	if isJobSucceeded(existingJob) {
 		bindplane.Status.MigratedImage = desiredImage
 		if err := r.Status().Update(ctx, bindplane); err != nil {
-			return false, err
+			return migrateInProgress, err
 		}
-		return true, nil
+		return migrateComplete, nil
 	}
 
 	if isJobFailed(existingJob) {
 		setMigrateFailureCondition(bindplane)
 		if err := r.Status().Update(ctx, bindplane); err != nil {
-			return false, err
+			return migrateInProgress, err
 		}
-		return false, nil
+		return migrateFailed, nil
 	}
 
 	// Job is still active (running).
-	return false, nil
+	return migrateInProgress, nil
 }
 
 // isJobSucceeded returns true when the Job's Complete condition is True.
