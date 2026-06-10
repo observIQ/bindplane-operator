@@ -230,7 +230,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `version` _string_ | Version specifies the Bindplane release version used for all component container images.<br />Changing this value triggers a rolling update of all Bindplane workloads and a new<br />database migration Job before downstream workloads are updated. | 1.99.1 | Optional: \{\} <br /> |
+| `version` _string_ | Version specifies the default Bindplane release version used to derive container images<br />for all components. Individual components can override their image via their own image<br />field (e.g. spec.bindplane.image); those overrides take precedence over this value.<br />Changing this value triggers a rolling update of every component that does not have an<br />explicit image override, plus a new database migration Job before downstream workloads<br />are updated. | 1.99.1 | Optional: \{\} <br /> |
 | `config` _[BindplaneConfigSpec](#bindplaneconfigspec)_ | Config contains Bindplane's configuration (license, auth, network, store, eventBus)<br />This config is shared by Node, Jobs, and Jobs Migrate |  |  |
 | `bindplane` _[BindplaneComponentSpec](#bindplanecomponentspec)_ | Bindplane configuration and pod specification | \{  \} | Optional: \{\} <br /> |
 | `bindplaneJobs` _[BindplaneJobsComponentSpec](#bindplanejobscomponentspec)_ | Bindplane Jobs pod specification |  | Optional: \{\} <br /> |

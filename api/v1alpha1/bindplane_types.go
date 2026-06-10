@@ -27,9 +27,12 @@ import (
 
 // BindplaneSpec defines the desired state of Bindplane.
 type BindplaneSpec struct {
-	// Version specifies the Bindplane release version used for all component container images.
-	// Changing this value triggers a rolling update of all Bindplane workloads and a new
-	// database migration Job before downstream workloads are updated.
+	// Version specifies the default Bindplane release version used to derive container images
+	// for all components. Individual components can override their image via their own image
+	// field (e.g. spec.bindplane.image); those overrides take precedence over this value.
+	// Changing this value triggers a rolling update of every component that does not have an
+	// explicit image override, plus a new database migration Job before downstream workloads
+	// are updated.
 	// +optional
 	// +kubebuilder:default="1.99.1"
 	Version string `json:"version,omitempty"`

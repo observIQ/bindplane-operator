@@ -1124,7 +1124,7 @@ By default, all service container images are derived from `spec.version` using t
 | Transform Agent | `ghcr.io/observiq/bindplane-transform-agent:<version>-bindplane` |
 | TSDB (Prometheus) | `ghcr.io/observiq/bindplane-prometheus:<version>` |
 
-This is the recommended approach: change `spec.version` to roll all services together.
+This is the recommended approach for coordinated upgrades: changing `spec.version` rolls every component that does not have a per-component image override.
 
 ### Per-service image override
 
