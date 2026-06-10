@@ -688,7 +688,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		afterForce := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, afterForce)).To(Succeed())
 		Expect(afterForce.Annotations).NotTo(HaveKey("k8s.bindplane.com/force-migrate"))
-		Expect(afterForce.Status.MigratedImage).To(BeEmpty())
+		Expect(afterForce.Status.Components.JobsMigrate.Image).To(BeEmpty())
 
 		// Simulate garbage collection: envtest has no GC controller, so foreground
 		// deletion leaves the Job terminating with a finalizer. Clear it so the
@@ -890,7 +890,7 @@ var _ = Describe("Reconcile - status", func() {
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
 		// In envtest, no pods run, so ready replicas are 0 => ApplyingChanges
 		Expect(updated.Status.Phase).To(Equal("ApplyingChanges"))
-		Expect(updated.Status.NodeReadyReplicas).To(BeNumerically("==", 0))
+		Expect(updated.Status.Components.Bindplane.ReadyReplicas).To(BeNumerically("==", 0))
 	})
 
 	It("sets Reconciled=True on successful reconcile", func() {

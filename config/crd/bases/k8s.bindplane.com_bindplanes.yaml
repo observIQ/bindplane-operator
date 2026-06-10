@@ -15,16 +15,12 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Bindplane version
-      jsonPath: .spec.version
-      name: Version
-      type: string
     - description: Overall deployment phase
       jsonPath: .status.phase
       name: Phase
       type: string
     - description: Ready Node replicas
-      jsonPath: .status.nodeReadyReplicas
+      jsonPath: .status.components.bindplane.readyReplicas
       name: Node Ready
       type: integer
     - jsonPath: .metadata.creationTimestamp
@@ -34806,9 +34802,65 @@ spec:
             type: object
           status:
             properties:
-              bindplaneJobsReadyReplicas:
-                format: int32
-                type: integer
+              components:
+                properties:
+                  bindplane:
+                    properties:
+                      image:
+                        type: string
+                      readyReplicas:
+                        format: int32
+                        type: integer
+                    type: object
+                  jobs:
+                    properties:
+                      image:
+                        type: string
+                      readyReplicas:
+                        format: int32
+                        type: integer
+                    type: object
+                  jobsMigrate:
+                    properties:
+                      image:
+                        type: string
+                      readyReplicas:
+                        format: int32
+                        type: integer
+                    type: object
+                  nats:
+                    properties:
+                      image:
+                        type: string
+                      readyReplicas:
+                        format: int32
+                        type: integer
+                    type: object
+                  opamp:
+                    properties:
+                      image:
+                        type: string
+                      readyReplicas:
+                        format: int32
+                        type: integer
+                    type: object
+                  transformAgent:
+                    properties:
+                      image:
+                        type: string
+                      readyReplicas:
+                        format: int32
+                        type: integer
+                    type: object
+                  tsdb:
+                    properties:
+                      image:
+                        type: string
+                      readyReplicas:
+                        format: int32
+                        type: integer
+                    type: object
+                type: object
               conditions:
                 items:
                   properties:
@@ -34845,14 +34897,6 @@ spec:
                   - type
                   type: object
                 type: array
-              migratedImage:
-                type: string
-              natsReadyReplicas:
-                format: int32
-                type: integer
-              nodeReadyReplicas:
-                format: int32
-                type: integer
               observedGeneration:
                 format: int64
                 type: integer
@@ -34865,12 +34909,6 @@ spec:
                 - Paused
                 - Deleting
                 type: string
-              transformAgentReadyReplicas:
-                format: int32
-                type: integer
-              tsdbReadyReplicas:
-                format: int32
-                type: integer
             type: object
         type: object
     served: true

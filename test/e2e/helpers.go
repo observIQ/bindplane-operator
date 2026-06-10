@@ -794,11 +794,11 @@ func skipMigrateJob(bindplaneName, namespace string, timeout time.Duration) {
 		jobImage = strings.TrimSpace(out)
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 
-	By("patching migratedImage status to bypass the migration gate")
-	patch := fmt.Sprintf(`{"status":{"migratedImage":%q}}`, jobImage)
+	By("patching jobsMigrate status to bypass the migration gate")
+	patch := fmt.Sprintf(`{"status":{"components":{"jobsMigrate":{"image":%q}}}}`, jobImage)
 	_, err := runCmd(kubectl(namespace, "patch", "bindplane", bindplaneName,
 		"--subresource=status", "--type=merge", "--patch", patch))
-	Expect(err).NotTo(HaveOccurred(), "failed to patch migratedImage status")
+	Expect(err).NotTo(HaveOccurred(), "failed to patch status.components.jobsMigrate.image")
 }
 
 // verifyKubectlContext ensures the active kubectl context is the expected Kind

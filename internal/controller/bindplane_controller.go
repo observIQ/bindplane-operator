@@ -636,6 +636,8 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Populate per-component ready replica counts and overall phase.
 	r.updateReadyReplicaStatus(ctx, bindplane)
+	// Populate resolved images for each deployed component.
+	updateImageStatus(bindplane)
 	bindplane.Status.ObservedGeneration = bindplane.Generation
 
 	if err := r.Status().Update(ctx, bindplane); err != nil {
@@ -653,17 +655,24 @@ func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bind
 	taReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, transformAgentComponent), bindplane.Namespace)
 	jobsReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, bindplaneJobsComponent), bindplane.Namespace)
 
-	bindplane.Status.NodeReadyReplicas = nodeReady
-	bindplane.Status.NatsReadyReplicas = natsReady
-	bindplane.Status.TransformAgentReadyReplicas = taReady
-	bindplane.Status.BindplaneJobsReadyReplicas = jobsReady
+	bindplane.Status.Components.Bindplane.ReadyReplicas = nodeReady
+	bindplane.Status.Components.Nats.ReadyReplicas = natsReady
+	bindplane.Status.Components.TransformAgent.ReadyReplicas = taReady
+	bindplane.Status.Components.Jobs.ReadyReplicas = jobsReady
 
 	// Only report TSDB readiness when local TSDB is deployed (not when remote TSDB is enabled).
 	var tsdbReady int32
 	if !isTSDBRemoteEnabled(bindplane) {
 		tsdbReady = r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, tsdbComponent), bindplane.Namespace)
 	}
-	bindplane.Status.TSDBReadyReplicas = tsdbReady
+	bindplane.Status.Components.TSDB.ReadyReplicas = tsdbReady
+
+	// OpAMP is an optional dedicated deployment; track its readiness separately.
+	var opampReady int32
+	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.Enabled {
+		opampReady = r.deploymentReadyReplicas(ctx, getResourceName(bindplane, opampComponent), bindplane.Namespace)
+	}
+	bindplane.Status.Components.OpAMP.ReadyReplicas = opampReady
 
 	nodeDesired := *bindplane.Spec.Bindplane.Replicas
 	var natsDesired int32
@@ -684,6 +693,28 @@ func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bind
 		bindplane.Status.Phase = "Ready"
 	} else {
 		bindplane.Status.Phase = "ApplyingChanges"
+	}
+}
+
+// updateImageStatus records the resolved container image for each deployed component into
+// status.images. JobsMigrate is intentionally omitted — it is managed by the migration gate
+// in jobs.go and only reflects images for which migration has completed.
+func updateImageStatus(bindplane *bindplanev1alpha1.Bindplane) {
+	bindplane.Status.Components.Bindplane.Image = getNodeImage(bindplane)
+	bindplane.Status.Components.Jobs.Image = getBindplaneJobsImage(bindplane)
+	bindplane.Status.Components.Nats.Image = getNatsImage(bindplane)
+	bindplane.Status.Components.TransformAgent.Image = getTransformAgentImage(bindplane)
+
+	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.Enabled {
+		bindplane.Status.Components.OpAMP.Image = getOpAMPImage(bindplane)
+	} else {
+		bindplane.Status.Components.OpAMP.Image = ""
+	}
+
+	if !isTSDBRemoteEnabled(bindplane) {
+		bindplane.Status.Components.TSDB.Image = getTSDBImage(bindplane)
+	} else {
+		bindplane.Status.Components.TSDB.Image = ""
 	}
 }
 

@@ -161,3 +161,81 @@ func TestResolveImage_NonEmptyOverrideWins(t *testing.T) {
 		t.Errorf("resolveImage(\"override\", \"default\") = %q, want %q", got, "override")
 	}
 }
+
+func TestUpdateImageStatus_DefaultImages(t *testing.T) {
+	bp := newImageTestBindplane()
+	updateImageStatus(bp)
+
+	wantEE := "ghcr.io/observiq/bindplane-ee:" + testVersion
+	wantTA := "ghcr.io/observiq/bindplane-transform-agent:" + testVersion + "-bindplane"
+	wantTSDB := "ghcr.io/observiq/bindplane-prometheus:" + testVersion
+
+	if bp.Status.Components.Bindplane.Image != wantEE {
+		t.Errorf("Bindplane.Image = %q, want %q", bp.Status.Components.Bindplane.Image, wantEE)
+	}
+	if bp.Status.Components.Jobs.Image != wantEE {
+		t.Errorf("Jobs.Image = %q, want %q", bp.Status.Components.Jobs.Image, wantEE)
+	}
+	if bp.Status.Components.Nats.Image != wantEE {
+		t.Errorf("Nats.Image = %q, want %q", bp.Status.Components.Nats.Image, wantEE)
+	}
+	if bp.Status.Components.TransformAgent.Image != wantTA {
+		t.Errorf("TransformAgent.Image = %q, want %q", bp.Status.Components.TransformAgent.Image, wantTA)
+	}
+	if bp.Status.Components.TSDB.Image != wantTSDB {
+		t.Errorf("TSDB.Image = %q, want %q", bp.Status.Components.TSDB.Image, wantTSDB)
+	}
+	// OpAMP disabled by default — field must be empty.
+	if bp.Status.Components.OpAMP.Image != "" {
+		t.Errorf("OpAMP.Image = %q, want empty (OpAMP not enabled)", bp.Status.Components.OpAMP.Image)
+	}
+	// JobsMigrate is managed by migration gate, not updateImageStatus.
+	if bp.Status.Components.JobsMigrate.Image != "" {
+		t.Errorf("JobsMigrate.Image = %q, want empty (set by migration gate only)", bp.Status.Components.JobsMigrate.Image)
+	}
+}
+
+func TestUpdateImageStatus_OpAMPEnabled(t *testing.T) {
+	bp := newImageTestBindplane()
+	bp.Spec.OpAMP = &bindplanev1alpha1.OpAMPComponentSpec{Enabled: true}
+	updateImageStatus(bp)
+
+	want := "ghcr.io/observiq/bindplane-ee:" + testVersion
+	if bp.Status.Components.OpAMP.Image != want {
+		t.Errorf("OpAMP.Image = %q, want %q", bp.Status.Components.OpAMP.Image, want)
+	}
+}
+
+func TestUpdateImageStatus_OpAMPDisabled_ClearsField(t *testing.T) {
+	bp := newImageTestBindplane()
+	bp.Status.Components.OpAMP.Image = "stale-image"
+	bp.Spec.OpAMP = &bindplanev1alpha1.OpAMPComponentSpec{Enabled: false}
+	updateImageStatus(bp)
+
+	if bp.Status.Components.OpAMP.Image != "" {
+		t.Errorf("OpAMP.Image = %q, want empty when OpAMP disabled", bp.Status.Components.OpAMP.Image)
+	}
+}
+
+func TestUpdateImageStatus_TSDBRemote_ClearsField(t *testing.T) {
+	bp := newImageTestBindplane()
+	bp.Status.Components.TSDB.Image = "stale-image"
+	bp.Spec.Config.TSDB = &bindplanev1alpha1.TSDBConfig{
+		Remote: &bindplanev1alpha1.TSDBRemoteConfig{Enable: true},
+	}
+	updateImageStatus(bp)
+
+	if bp.Status.Components.TSDB.Image != "" {
+		t.Errorf("TSDB.Image = %q, want empty when remote TSDB enabled", bp.Status.Components.TSDB.Image)
+	}
+}
+
+func TestUpdateImageStatus_ImageOverride(t *testing.T) {
+	bp := newImageTestBindplane()
+	bp.Spec.Bindplane.Image = customImage
+	updateImageStatus(bp)
+
+	if bp.Status.Components.Bindplane.Image != customImage {
+		t.Errorf("Bindplane.Image = %q, want %q (override)", bp.Status.Components.Bindplane.Image, customImage)
+	}
+}

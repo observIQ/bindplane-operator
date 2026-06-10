@@ -143,6 +143,23 @@ _Appears in:_
 | `image` _string_ | Image overrides the container image for Bindplane Node. When set, the value is used<br />verbatim as a full OCI reference (e.g. "myregistry.example.com/bindplane-ee:1.99.1" or<br />"ghcr.io/observiq/bindplane-ee@sha256:..."). When empty, the image is derived from spec.version. |  | MinLength: 1 <br />Optional: \{\} <br /> |
 | `serviceAccount` _[ServiceAccountSpec](#serviceaccountspec)_ | ServiceAccount configures the operator-managed ServiceAccount for this component. |  | Optional: \{\} <br /> |
 
+#### BindplaneComponents
+
+BindplaneComponents groups the per-component status for all Bindplane components.
+
+_Appears in:_
+- [BindplaneStatus](#bindplanestatus)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `bindplane` _[ComponentStatus](#componentstatus)_ | Bindplane reports the image and ready replica count for the Bindplane Node deployment. |  | Optional: \{\} <br /> |
+| `opamp` _[ComponentStatus](#componentstatus)_ | OpAMP reports the image and ready replica count for the OpAMP deployment.<br />Empty when OpAMP is not enabled. |  | Optional: \{\} <br /> |
+| `jobs` _[ComponentStatus](#componentstatus)_ | Jobs reports the image and ready replica count for the Bindplane Jobs deployment. |  | Optional: \{\} <br /> |
+| `jobsMigrate` _[ComponentStatus](#componentstatus)_ | JobsMigrate reports the image for which a successful database migration has completed.<br />The controller uses this to determine whether migration must run before applying<br />an image change to NATS, Jobs, and Node workloads. ReadyReplicas is not set because<br />the migration Job is transient. |  | Optional: \{\} <br /> |
+| `nats` _[ComponentStatus](#componentstatus)_ | Nats reports the image and ready replica count for the NATS StatefulSet. |  | Optional: \{\} <br /> |
+| `transformAgent` _[ComponentStatus](#componentstatus)_ | TransformAgent reports the image and ready replica count for the Transform Agent deployment. |  | Optional: \{\} <br /> |
+| `tsdb` _[ComponentStatus](#componentstatus)_ | TSDB reports the image and ready replica count for the TSDB (Prometheus) StatefulSet.<br />Empty when remote TSDB is enabled. |  | Optional: \{\} <br /> |
+
 #### BindplaneConfigSpec
 
 BindplaneConfigSpec defines Bindplane's configuration
@@ -238,6 +255,18 @@ _Appears in:_
 | `name` _string_ | Name is the name of the Issuer or ClusterIssuer resource. |  |  |
 | `kind` _string_ | Kind is the type of issuer. Either "Issuer" (namespaced) or "ClusterIssuer" (cluster-scoped). | Issuer | Enum: [Issuer ClusterIssuer] <br />Optional: \{\} <br /> |
 | `group` _string_ | Group is the API group of the issuer. Defaults to cert-manager.io. | cert-manager.io | Optional: \{\} <br /> |
+
+#### ComponentStatus
+
+ComponentStatus reports the resolved image and runtime health of a single Bindplane component.
+
+_Appears in:_
+- [BindplaneComponents](#bindplanecomponents)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `image` _string_ | Image is the fully-resolved container image in use by this component. |  | Optional: \{\} <br /> |
+| `readyReplicas` _integer_ | ReadyReplicas is the number of pods currently ready for this component. |  | Optional: \{\} <br /> |
 
 #### EventBusConfig
 
