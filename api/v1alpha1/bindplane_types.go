@@ -1581,7 +1581,6 @@ type BindplaneStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=bindplanes,singular=bindplane,scope=Namespaced
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Overall deployment phase"
-// +kubebuilder:printcolumn:name="Node Ready",type="integer",JSONPath=".status.components.bindplane.readyReplicas",description="Ready Node replicas"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:webhook:path=/validate-k8s-bindplane-com-v1alpha1-bindplane,mutating=false,failurePolicy=fail,sideEffects=None,groups=k8s.bindplane.com,resources=bindplanes,verbs=create;update,versions=v1alpha1,name=vbindplane.kb.io,admissionReviewVersions=v1
 
