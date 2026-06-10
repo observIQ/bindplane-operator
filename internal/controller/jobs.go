@@ -355,17 +355,17 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 		if err := r.Patch(ctx, bindplane, patch); err != nil {
 			return migrateInProgress, err
 		}
-		bindplane.Status.MigratedImage = ""
+		bindplane.Status.Components.JobsMigrate.Image = ""
 		if err := r.Status().Update(ctx, bindplane); err != nil {
 			return migrateInProgress, err
 		}
-		return migrateInProgress, nil // requeue; next reconcile will detect MigratedImage mismatch
+		return migrateInProgress, nil // requeue; next reconcile will detect JobsMigrate mismatch
 	}
 
 	desiredImage := getBindplaneJobsMigrateImage(bindplane)
 
 	// Already migrated for this image — skip.
-	if bindplane.Status.MigratedImage == desiredImage {
+	if bindplane.Status.Components.JobsMigrate.Image == desiredImage {
 		return migrateComplete, nil
 	}
 
@@ -407,7 +407,7 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 	}
 
 	if isJobSucceeded(existingJob) {
-		bindplane.Status.MigratedImage = desiredImage
+		bindplane.Status.Components.JobsMigrate.Image = desiredImage
 		if err := r.Status().Update(ctx, bindplane); err != nil {
 			return migrateInProgress, err
 		}

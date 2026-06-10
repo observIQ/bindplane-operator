@@ -27,9 +27,12 @@ import (
 
 // BindplaneSpec defines the desired state of Bindplane.
 type BindplaneSpec struct {
-	// Version specifies the Bindplane release version used for all component container images.
-	// Changing this value triggers a rolling update of all Bindplane workloads and a new
-	// database migration Job before downstream workloads are updated.
+	// Version specifies the default Bindplane release version used to derive container images
+	// for all components. Individual components can override their image via their own image
+	// field (e.g. spec.bindplane.image); those overrides take precedence over this value.
+	// Changing this value triggers a rolling update of every component that does not have an
+	// explicit image override, plus a new database migration Job before downstream workloads
+	// are updated.
 	// +optional
 	// +kubebuilder:default="1.99.1"
 	Version string `json:"version,omitempty"`
@@ -1506,17 +1509,58 @@ type PostgresConfig struct {
 	Schema string `json:"schema,omitempty"`
 }
 
+// ComponentStatus reports the resolved image and runtime health of a single Bindplane component.
+type ComponentStatus struct {
+	// Image is the fully-resolved container image in use by this component.
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// ReadyReplicas is the number of pods currently ready for this component.
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+}
+
+// BindplaneComponents groups the per-component status for all Bindplane components.
+type BindplaneComponents struct {
+	// Bindplane reports the image and ready replica count for the Bindplane Node deployment.
+	// +optional
+	Bindplane ComponentStatus `json:"bindplane,omitempty"`
+
+	// OpAMP reports the image and ready replica count for the OpAMP deployment.
+	// Empty when OpAMP is not enabled.
+	// +optional
+	OpAMP ComponentStatus `json:"opamp,omitempty"`
+
+	// Jobs reports the image and ready replica count for the Bindplane Jobs deployment.
+	// +optional
+	Jobs ComponentStatus `json:"jobs,omitempty"`
+
+	// JobsMigrate reports the image for which a successful database migration has completed.
+	// The controller uses this to determine whether migration must run before applying
+	// an image change to NATS, Jobs, and Node workloads. ReadyReplicas is not set because
+	// the migration Job is transient.
+	// +optional
+	JobsMigrate ComponentStatus `json:"jobsMigrate,omitempty"`
+
+	// Nats reports the image and ready replica count for the NATS StatefulSet.
+	// +optional
+	Nats ComponentStatus `json:"nats,omitempty"`
+
+	// TransformAgent reports the image and ready replica count for the Transform Agent deployment.
+	// +optional
+	TransformAgent ComponentStatus `json:"transformAgent,omitempty"`
+
+	// TSDB reports the image and ready replica count for the TSDB (Prometheus) StatefulSet.
+	// Empty when remote TSDB is enabled.
+	// +optional
+	TSDB ComponentStatus `json:"tsdb,omitempty"`
+}
+
 // BindplaneStatus defines the observed state of Bindplane.
 type BindplaneStatus struct {
 	// Conditions represent the latest available observations of the Bindplane's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// MigratedImage records the container image for which a successful migrate Job
-	// has completed. The controller uses this to determine whether migration must
-	// run before applying an image change to NATS, Jobs, and Node workloads.
-	// +optional
-	MigratedImage string `json:"migratedImage,omitempty"`
 
 	// Phase summarizes the overall deployment state.
 	// +optional
@@ -1530,33 +1574,16 @@ type BindplaneStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// NodeReadyReplicas is the number of Bindplane Node pods currently ready.
+	// Components holds the per-component image and readiness status for each deployed
+	// Bindplane component.
 	// +optional
-	NodeReadyReplicas int32 `json:"nodeReadyReplicas,omitempty"`
-
-	// NatsReadyReplicas is the number of NATS pods currently ready.
-	// +optional
-	NatsReadyReplicas int32 `json:"natsReadyReplicas,omitempty"`
-
-	// TransformAgentReadyReplicas is the number of Transform Agent pods currently ready.
-	// +optional
-	TransformAgentReadyReplicas int32 `json:"transformAgentReadyReplicas,omitempty"`
-
-	// TSDBReadyReplicas is the number of TSDB (Prometheus) pods currently ready.
-	// +optional
-	TSDBReadyReplicas int32 `json:"tsdbReadyReplicas,omitempty"`
-
-	// BindplaneJobsReadyReplicas is the number of Bindplane Jobs pods currently ready.
-	// +optional
-	BindplaneJobsReadyReplicas int32 `json:"bindplaneJobsReadyReplicas,omitempty"`
+	Components BindplaneComponents `json:"components,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=bindplanes,singular=bindplane,scope=Namespaced
-// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version",description="Bindplane version"
 // +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase",description="Overall deployment phase"
-// +kubebuilder:printcolumn:name="Node Ready",type="integer",JSONPath=".status.nodeReadyReplicas",description="Ready Node replicas"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:webhook:path=/validate-k8s-bindplane-com-v1alpha1-bindplane,mutating=false,failurePolicy=fail,sideEffects=None,groups=k8s.bindplane.com,resources=bindplanes,verbs=create;update,versions=v1alpha1,name=vbindplane.kb.io,admissionReviewVersions=v1
 

@@ -1124,7 +1124,7 @@ By default, all service container images are derived from `spec.version` using t
 | Transform Agent | `ghcr.io/observiq/bindplane-transform-agent:<version>-bindplane` |
 | TSDB (Prometheus) | `ghcr.io/observiq/bindplane-prometheus:<version>` |
 
-This is the recommended approach: change `spec.version` to roll all services together.
+This is the recommended approach for coordinated upgrades: changing `spec.version` rolls every component that does not have a per-component image override.
 
 ### Per-service image override
 
@@ -1168,9 +1168,7 @@ spec:
     image: "ghcr.io/observiq/bindplane-ee:1.99.1-hotfix"
 ```
 
-> **Warning:** `spec.bindplaneJobsMigrate.image` controls the image used by the database migration Job. The operator gates downstream rollouts on this Job completing successfully and records the migrate image in `status.migratedImage`. If you pin jobs-migrate to a different version than node, jobs, and nats, ensure the migration is compatible with the runtime image — the operator does not enforce this constraint.
-
-The `VERSION` column shown by `kubectl get bindplane` always reflects `spec.version`, regardless of per-service overrides.
+> **Warning:** `spec.bindplaneJobsMigrate.image` controls the image used by the database migration Job. The operator gates downstream rollouts on this Job completing successfully and records the migrate image in `status.components.jobsMigrate.image`. If you pin jobs-migrate to a different version than node, jobs, and nats, ensure the migration is compatible with the runtime image — the operator does not enforce this constraint.
 
 ## Service account annotations
 
@@ -1241,7 +1239,7 @@ kubectl patch bindplane <name> -n <namespace> \
   -p '{"metadata":{"annotations":{"k8s.bindplane.com/force-migrate":"true"}}}'
 ```
 
-On the next reconcile the controller **deletes the existing Jobs Migrate Job** (along with its pods), clears this annotation, and resets `status.migratedImage`. It then creates a fresh Jobs Migrate Job via the normal image-change flow. Deleting the existing Job is what allows a retry at an unchanged image — for example, re-running after a failure.
+On the next reconcile the controller **deletes the existing Jobs Migrate Job** (along with its pods), clears this annotation, and resets `status.components.jobsMigrate.image`. It then creates a fresh Jobs Migrate Job via the normal image-change flow. Deleting the existing Job is what allows a retry at an unchanged image — for example, re-running after a failure.
 
 The migrate Job runs with `RestartPolicy: Never` and `backoffLimit: 3`, so each failed attempt runs in its own pod and those pods are retained for log inspection (`kubectl logs <migrate-pod>`) until the Job's TTL (24h) elapses.
 
@@ -1307,13 +1305,29 @@ The operator reports overall state via `status.conditions` and the `status.phase
 
 The `status.observedGeneration` field is set to the `metadata.generation` of the CR after every successful reconcile, allowing GitOps tools and `kubectl wait` to detect when the operator has processed the latest spec version.
 
+### Component status
+
+After each reconcile the operator populates `status.components` with a per-component object for each deployed component. Each object carries the resolved container `image` and `readyReplicas` count. These values reflect per-component image overrides (`spec.<component>.image`) as well as the `spec.version` default. A component object is empty when its component is not deployed.
+
+| Field | Component | `image` populated when | `readyReplicas` populated when |
+|-------|-----------|------------------------|-------------------------------|
+| `status.components.bindplane` | Bindplane Node | Always | Always |
+| `status.components.nats` | NATS | Always | Always |
+| `status.components.jobs` | Bindplane Jobs | Always | Always |
+| `status.components.transformAgent` | Transform Agent | Always | Always |
+| `status.components.opamp` | OpAMP | `spec.opamp.enabled: true` only | `spec.opamp.enabled: true` only |
+| `status.components.tsdb` | TSDB (Prometheus) | Local TSDB only (not when `spec.config.tsdb.remote.enable: true`) | Local TSDB only |
+| `status.components.jobsMigrate` | Jobs Migrate | Set only after a successful database migration Job completes | Never (transient batch Job) |
+
+`status.components.jobsMigrate.image` has a special meaning: it is the image for which migration has **completed**, not the currently desired image. The controller compares this value against the desired Jobs Migrate image to decide whether to run migration. Clearing it (or using the `k8s.bindplane.com/force-migrate` annotation) forces migration to re-run on the next reconcile.
+
 ### Migration contract
 
 When `spec.version` changes (or the `k8s.bindplane.com/force-migrate` annotation is set), the operator:
 
 1. Creates a new `Jobs Migrate` (`batch/v1 Job`) before updating any long-running workloads (Jobs, NATS, Node).
 2. Blocks all downstream workload updates until the Jobs Migrate Job completes successfully (requeues every 10 seconds while the Job is still running).
-3. On success, records the migrated image in `status.migratedImage` and proceeds to roll out updated workloads.
+3. On success, records the migrated image in `status.components.jobsMigrate.image` and proceeds to roll out updated workloads.
 4. On failure (the Job reaches a terminal `Failed` state after exhausting `backoffLimit`), sets the `Reconciled` condition to `False` with `Reason: MigrationFailed`, sets `status.phase = Degraded`, and **halts the rollout without requeueing** — a terminal Job will not change state on its own, so the operator stops retrying to avoid log spam. The failure remains visible in status until you intervene: inspect the retained failed pods for logs, fix the underlying cause, then change `spec.version` or set the `k8s.bindplane.com/force-migrate` annotation (see [Force migration](#force-migration)) to retry. Either action triggers a fresh reconcile.
 
 This ordering guarantees that the database schema is always compatible with all running workloads before any new binary version is activated.
