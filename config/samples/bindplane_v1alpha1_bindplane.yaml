@@ -1,0 +1,77 @@
+apiVersion: k8s.bindplane.com/v1alpha1
+kind: Bindplane
+metadata:
+  labels:
+    app.kubernetes.io/name: bindplane-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: bindplane-sample
+spec:
+  # Component resource requests and limits can be set directly on each component spec.
+  # If both resources and podTemplate.spec.containers[].resources are set,
+  # the podTemplate value takes precedence.
+  #
+  # bindplane:
+  #   resources:
+  #     requests:
+  #       cpu: 2000m
+  #       memory: 2048Mi
+  #     limits:
+  #       memory: 2048Mi
+  # nats:
+  #   resources:
+  #     requests:
+  #       cpu: 250m
+  #       memory: 500Mi
+  #     limits:
+  #       cpu: 500m
+  #       memory: 500Mi
+  # tsdb:
+  #   resources:
+  #     requests:
+  #       cpu: 1000m
+  #       memory: 2048Mi
+  #     limits:
+  #       memory: 2048Mi
+  # transformAgent:
+  #   resources:
+  #     requests:
+  #       cpu: 250m
+  #       memory: 512Mi
+  #     limits:
+  #       memory: 512Mi
+  # bindplaneJobs:
+  #   resources:
+  #     requests:
+  #       cpu: 1000m
+  #       memory: 1024Mi
+  #     limits:
+  #       memory: 1024Mi
+  # bindplaneJobsMigrate:
+  #   resources:
+  #     requests:
+  #       cpu: 100m
+  #       memory: 2048Mi
+  #     limits:
+  #       memory: 2048Mi
+  config:
+    license: "your-license-key-here"
+    auth:
+      type: system
+      username: admin
+      password: password
+    network:
+      host: 0.0.0.0
+      port: "3001"
+      remoteURL: http://bindplane:3001
+    store:
+      type: postgres
+      postgres:
+        host: postgres.example.com
+        port: "5432"
+        database: bindplane
+        username: bindplane
+        password: bindplane
+    eventBus:
+      health:
+        requiredHosts: 3
+        interval: 5s

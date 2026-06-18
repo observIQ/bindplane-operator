@@ -1,0 +1,15 @@
+apiVersion: k8s.bindplane.com/v1alpha1
+kind: Bindplane
+metadata:
+  name: bindplane-argo-rollout
+  annotations:
+    k8s.bindplane.com/pause-reconciliation: "true"
+spec:
+  config:
+    license: "test-license"
+    store:
+      postgres:
+        host: postgres.postgres.svc
+  bindplane:
+    argoRollout:
+      enabled: true

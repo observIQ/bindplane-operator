@@ -1,0 +1,12 @@
+# Patch applied only for release manifests so users pull the image from the registry.
+# Local/minikube builds use config/default with imagePullPolicy: Never (from manager.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          imagePullPolicy: Always

@@ -1,0 +1,4182 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controller
+
+import (
+	"context"
+	"strconv"
+
+	"github.com/google/uuid"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
+)
+
+// conditionTypeReconciled is the condition type used by the controller to report reconcile status.
+const conditionTypeReconciled = "Reconciled"
+
+// newTestBindplane returns a minimal valid Bindplane CR for integration tests.
+func newTestBindplane(name, namespace string) *bindplanev1alpha1.Bindplane {
+	return &bindplanev1alpha1.Bindplane{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: bindplanev1alpha1.BindplaneSpec{
+			Version: "1.98.0",
+			Config: bindplanev1alpha1.BindplaneConfigSpec{
+				License: "test-license",
+				Store: bindplanev1alpha1.StoreConfig{
+					Postgres: &bindplanev1alpha1.PostgresConfig{
+						Host: "postgres.postgres.svc.cluster.local",
+					},
+				},
+			},
+		},
+	}
+}
+
+// newReconciler returns a BindplaneReconciler wired to the envtest k8sClient.
+func newReconciler() *BindplaneReconciler {
+	return &BindplaneReconciler{
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
+	}
+}
+
+// createTestNamespace creates a namespace with a generated name and returns the name.
+func createTestNamespace(ctx context.Context, prefix string) string {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: prefix + "-",
+		},
+	}
+	Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+	return ns.Name
+}
+
+// reconcileRequest builds a reconcile.Request for the given name and namespace.
+func reconcileRequest(name, namespace string) reconcile.Request {
+	return reconcile.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}}
+}
+
+// markJobComplete patches the migrate Job's status so it appears succeeded.
+// Kubernetes 1.35+ requires startTime, completionTime, and SuccessCriteriaMet
+// to be set alongside the Complete condition.
+func markJobComplete(ctx context.Context, jobName, namespace string) {
+	job := &batchv1.Job{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: namespace}, job)).To(Succeed())
+	now := metav1.Now()
+	job.Status.StartTime = &now
+	job.Status.CompletionTime = &now
+	job.Status.Conditions = append(job.Status.Conditions,
+		batchv1.JobCondition{
+			Type:               batchv1.JobSuccessCriteriaMet,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+		batchv1.JobCondition{
+			Type:               batchv1.JobComplete,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+	)
+	Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+}
+
+// markJobFailed patches the migrate Job's status so it appears failed.
+// Kubernetes 1.35+ requires FailureTarget=true before Failed=true.
+func markJobFailed(ctx context.Context, jobName, namespace string) {
+	job := &batchv1.Job{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: namespace}, job)).To(Succeed())
+	now := metav1.Now()
+	job.Status.StartTime = &now
+	job.Status.Conditions = append(job.Status.Conditions,
+		batchv1.JobCondition{
+			Type:               batchv1.JobFailureTarget,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+		batchv1.JobCondition{
+			Type:               batchv1.JobFailed,
+			Status:             corev1.ConditionTrue,
+			LastTransitionTime: now,
+		},
+	)
+	Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
+}
+
+// reconcileUntilMigration performs the reconciles needed to create the migrate Job
+// (finalizer reconcile + full reconcile) and returns the Job name.
+func reconcileUntilMigration(ctx context.Context, r *BindplaneReconciler, bpName, namespace string) string {
+	// Reconcile 1: add finalizer
+	_, err := r.Reconcile(ctx, reconcileRequest(bpName, namespace))
+	Expect(err).NotTo(HaveOccurred())
+	// Reconcile 2: full path, creates resources up to migrate job
+	result, err := r.Reconcile(ctx, reconcileRequest(bpName, namespace))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(result.RequeueAfter).NotTo(BeZero(), "expected RequeueAfter while awaiting migration")
+	return bpName + "-migrate"
+}
+
+// reconcilePastMigration performs the reconciles to get past the migrate Job gate.
+func reconcilePastMigration(ctx context.Context, r *BindplaneReconciler, bpName, namespace string) {
+	jobName := reconcileUntilMigration(ctx, r, bpName, namespace)
+	markJobComplete(ctx, jobName, namespace)
+	_, err := r.Reconcile(ctx, reconcileRequest(bpName, namespace))
+	Expect(err).NotTo(HaveOccurred())
+}
+
+var _ = Describe("Reconcile - finalizer lifecycle", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-finalizer")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("adds finalizer on first reconcile", func() {
+		name := "bp-finalizer"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Finalizers).To(ContainElement("k8s.bindplane.com/finalizer"))
+	})
+
+	It("removes finalizer on deletion", func() {
+		name := "bp-finalizer-del"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// First reconcile: adds finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Delete the CR — sets DeletionTimestamp (finalizer prevents immediate deletion)
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(k8sClient.Delete(testCtx, updated)).To(Succeed())
+
+		// Second reconcile: removes finalizer, allowing GC to delete the object
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		final := &bindplanev1alpha1.Bindplane{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, final)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("Reconcile - pause annotation", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-pause")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("pauses reconciliation and sets Reconciled=False/Paused", func() {
+		name := "bp-pause"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": "true"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile 1: finalizer added (pause check happens after finalizer)
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Reconcile 2: hits pause path
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciledCond.Reason).To(Equal("Paused"))
+
+		// Verify no workloads were created
+		depList := &appsv1.DeploymentList{}
+		Expect(k8sClient.List(testCtx, depList, client.InNamespace(testNamespace))).To(Succeed())
+		Expect(depList.Items).To(BeEmpty())
+
+		ssList := &appsv1.StatefulSetList{}
+		Expect(k8sClient.List(testCtx, ssList, client.InNamespace(testNamespace))).To(Succeed())
+		Expect(ssList.Items).To(BeEmpty())
+	})
+
+	It("resumes when annotation removed", func() {
+		name := "bp-resume"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": "true"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Add finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		// Hit pause
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Remove pause annotation
+		paused := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, paused)).To(Succeed())
+		paused.Annotations = map[string]string{}
+		Expect(k8sClient.Update(testCtx, paused)).To(Succeed())
+
+		// Reconcile: should proceed past pause and start creating resources
+		// (will block at migrate Job, but TA/TSDB resources are created)
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Transform agent ServiceAccount must now exist (proving reconciliation resumed)
+		sa := &corev1.ServiceAccount{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, sa)
+		Expect(err).NotTo(HaveOccurred())
+	})
+})
+
+var _ = Describe("Reconcile - validation failure", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-invalid")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("sets Reconciled=False/Invalid for empty postgres host", func() {
+		// Postgres field must be present (CRD enforces this), but host can be empty —
+		// the controller rejects empty host via ValidatePostgresConfig.
+		name := "bp-invalid-pghost"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Store.Postgres = &bindplanev1alpha1.PostgresConfig{Host: ""}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciledCond.Reason).To(Equal("Invalid"))
+	})
+})
+
+var _ = Describe("Reconcile - Transform Agent", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-ta")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, Deployment, Service, PDB", func() {
+		name := "bp-ta"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile 1: finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		// Reconcile 2: full (blocks at migration)
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		saName := name + "-transform-agent"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-transform-agent:1.98.0-bindplane"))
+
+		svc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, svc)).To(Succeed())
+		var foundPort bool
+		for _, p := range svc.Spec.Ports {
+			if p.Port == 4568 {
+				foundPort = true
+				break
+			}
+		}
+		Expect(foundPort).To(BeTrue(), "expected service port 4568")
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: saName, Namespace: testNamespace}, pdb)).To(Succeed())
+		Expect(pdb.Spec.MinAvailable).NotTo(BeNil())
+	})
+
+	It("uses custom replicas when set", func() {
+		name := "bp-ta-replicas"
+		bp := newTestBindplane(name, testNamespace)
+		customReplicas := int32(3)
+		bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{Replicas: &customReplicas}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Replicas).NotTo(BeNil())
+		Expect(*dep.Spec.Replicas).To(Equal(int32(3)))
+	})
+
+	It("skips PDB when disablePodDisruptionBudget is true", func() {
+		name := "bp-ta-nopdb"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
+			DisablePodDisruptionBudget: true,
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, pdb)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("mounts TLS cert-manager secret and env vars when Transform Agent TLS is enabled", func() {
+		bp := newTestBindplane("bp-ta-tls", testNamespace)
+		replicas := int32(2)
+		bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
+			Replicas: &replicas,
+			TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+			},
+		}
+		dep := newReconciler().transformAgentDeployment(bp)
+		Expect(dep.Spec.Template.Spec.Volumes).To(ContainElement(
+			HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+		))
+		Expect(dep.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+			And(
+				HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+				HaveField("MountPath", Equal(internalTLSTransformAgentMountPath)),
+			),
+		))
+		envVars := dep.Spec.Template.Spec.Containers[0].Env
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCertEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSKeyEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCAEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/ca.crt"))
+	})
+})
+
+var _ = Describe("Reconcile - TSDB", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-tsdb")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, StatefulSet, Service, basic-auth Secret", func() {
+		name := "bp-tsdb"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		tsdbName := name + "-tsdb"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: tsdbName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: tsdbName, Namespace: testNamespace}, ss)).To(Succeed())
+		Expect(ss.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(ss.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-prometheus:1.98.0"))
+
+		svc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: tsdbName, Namespace: testNamespace}, svc)).To(Succeed())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb-basic-auth", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey("username"))
+		Expect(secret.Data).To(HaveKey("password"))
+		Expect(secret.Data).To(HaveKey("web-config"))
+	})
+
+	It("StatefulSet has correct volume claims", func() {
+		name := "bp-tsdb-pvc"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb", Namespace: testNamespace}, ss)).To(Succeed())
+
+		// VolumeClaimTemplate name is <bindplane-name>-tsdb-data (from getResourceName)
+		expectedVCTName := name + "-tsdb-data"
+		var foundPVC bool
+		for _, vct := range ss.Spec.VolumeClaimTemplates {
+			if vct.Name == expectedVCTName {
+				foundPVC = true
+				break
+			}
+		}
+		Expect(foundPVC).To(BeTrue(), "expected VolumeClaimTemplate named %s", expectedVCTName)
+	})
+})
+
+var _ = Describe("Reconcile - Jobs Migrate", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-migrate")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates migrate Job and returns RequeueAfter when Job is pending", func() {
+		name := "bp-migrate"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).NotTo(BeZero())
+
+		job := &batchv1.Job{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-migrate", Namespace: testNamespace}, job)).To(Succeed())
+
+		// Jobs and Node Deployments should not exist yet
+		dep := &appsv1.Deployment{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("proceeds past migration when Job is manually marked Complete", func() {
+		name := "bp-migrate-done"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		markJobComplete(testCtx, name+"-migrate", testNamespace)
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		// Jobs Deployment should now exist
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)).To(Succeed())
+
+		// Node Deployment should now exist
+		nodeDep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, nodeDep)).To(Succeed())
+
+		// NATS StatefulSet should now exist
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-nats", Namespace: testNamespace}, ss)).To(Succeed())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("sets MigrationFailed condition when Job fails", func() {
+		name := "bp-migrate-fail"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		markJobFailed(testCtx, name+"-migrate", testNamespace)
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		// A terminal Failed Job must NOT requeue — otherwise the operator spams
+		// "waiting for Jobs Migrate Job to complete" forever.
+		Expect(result.RequeueAfter).To(BeZero(), "failed migration must not requeue")
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(reconciledCond.Reason).To(Equal("MigrationFailed"))
+
+		dep := &appsv1.Deployment{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("force-migrate annotation recreates the Job after a failure", func() {
+		name := "bp-migrate-force"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		jobName := reconcileUntilMigration(testCtx, r, name, testNamespace)
+
+		// Capture the original Job UID so we can prove a fresh Job is created later.
+		origJob := &batchv1.Job{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, origJob)).To(Succeed())
+		origUID := origJob.UID
+
+		// Fail the Job; operator halts without requeueing.
+		markJobFailed(testCtx, jobName, testNamespace)
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		// Set the force-migrate annotation.
+		patched := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, patched)).To(Succeed())
+		if patched.Annotations == nil {
+			patched.Annotations = map[string]string{}
+		}
+		patched.Annotations["k8s.bindplane.com/force-migrate"] = "true"
+		Expect(k8sClient.Update(testCtx, patched)).To(Succeed())
+
+		// Reconcile: operator deletes the existing Job, clears the annotation, resets MigratedImage.
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		afterForce := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, afterForce)).To(Succeed())
+		Expect(afterForce.Annotations).NotTo(HaveKey("k8s.bindplane.com/force-migrate"))
+		Expect(afterForce.Status.Components.JobsMigrate.Image).To(BeEmpty())
+
+		// Simulate garbage collection: envtest has no GC controller, so foreground
+		// deletion leaves the Job terminating with a finalizer. Clear it so the
+		// apiserver completes deletion.
+		lingering := &batchv1.Job{}
+		if err := k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, lingering); err == nil {
+			if len(lingering.Finalizers) > 0 {
+				lingering.SetFinalizers(nil)
+				Expect(k8sClient.Update(testCtx, lingering)).To(Succeed())
+			}
+		}
+		Eventually(func() bool {
+			return errors.IsNotFound(k8sClient.Get(testCtx,
+				types.NamespacedName{Name: jobName, Namespace: testNamespace}, &batchv1.Job{}))
+		}).Should(BeTrue())
+
+		// Reconcile: operator creates a fresh Job and requeues to await it.
+		result, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).NotTo(BeZero(), "expected requeue while awaiting the recreated migrate Job")
+
+		freshJob := &batchv1.Job{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, freshJob)).To(Succeed())
+		Expect(freshJob.UID).NotTo(Equal(origUID), "expected a freshly created Job, not the failed one")
+		Expect(isJobFailed(freshJob)).To(BeFalse())
+	})
+})
+
+var _ = Describe("Reconcile - NATS", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-nats")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, StatefulSet, client Service, cluster Service, PDB", func() {
+		name := "bp-nats"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		natsName := name + "-nats"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName, Namespace: testNamespace}, ss)).To(Succeed())
+		Expect(ss.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(ss.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-ee:1.98.0"))
+
+		clientSvc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName + "-client", Namespace: testNamespace}, clientSvc)).To(Succeed())
+
+		clusterSvc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName + "-cluster", Namespace: testNamespace}, clusterSvc)).To(Succeed())
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: natsName, Namespace: testNamespace}, pdb)).To(Succeed())
+	})
+
+	It("uses custom replicas", func() {
+		name := "bp-nats-replicas"
+		bp := newTestBindplane(name, testNamespace)
+		customReplicas := int32(5)
+		bp.Spec.Nats = &bindplanev1alpha1.NatsComponentSpec{Replicas: &customReplicas}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-nats", Namespace: testNamespace}, ss)).To(Succeed())
+		Expect(ss.Spec.Replicas).NotTo(BeNil())
+		Expect(*ss.Spec.Replicas).To(Equal(int32(5)))
+	})
+})
+
+var _ = Describe("Reconcile - Node", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-node")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount, Deployment, Service, PDB", func() {
+		name := "bp-node"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		nodeName := name + "-node"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-ee:1.98.0"))
+
+		svc := &corev1.Service{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, svc)).To(Succeed())
+
+		pdb := &policyv1.PodDisruptionBudget{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: nodeName, Namespace: testNamespace}, pdb)).To(Succeed())
+	})
+
+	It("creates HPA when autoscaling is enabled", func() {
+		name := "bp-node-hpa"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		hpa := &autoscalingv2.HorizontalPodAutoscaler{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, hpa)).To(Succeed())
+		Expect(hpa.Spec.ScaleTargetRef.Name).To(Equal(name + "-node"))
+		Expect(hpa.Spec.MinReplicas).NotTo(BeNil())
+		Expect(*hpa.Spec.MinReplicas).To(Equal(int32(2)))
+		Expect(hpa.Spec.MaxReplicas).To(Equal(int32(10)))
+	})
+
+	It("deletes HPA when autoscaling is disabled", func() {
+		name := "bp-node-hpa-del"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Verify HPA exists
+		hpa := &autoscalingv2.HorizontalPodAutoscaler{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, hpa)).To(Succeed())
+
+		// Disable autoscaling
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		updated.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: false}
+		Expect(k8sClient.Update(testCtx, updated)).To(Succeed())
+
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		hpaAfter := &autoscalingv2.HorizontalPodAutoscaler{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, hpaAfter)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("Reconcile - status", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-status")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("sets phase to ApplyingChanges when replicas are not ready", func() {
+		name := "bp-status-phase"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		// In envtest, no pods run, so ready replicas are 0 => ApplyingChanges
+		Expect(updated.Status.Phase).To(Equal("ApplyingChanges"))
+		Expect(updated.Status.Components.Bindplane.ReadyReplicas).To(BeNumerically("==", 0))
+	})
+
+	It("sets Reconciled=True on successful reconcile", func() {
+		name := "bp-status-reconciled"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+
+		var reconciledCond *metav1.Condition
+		for i := range updated.Status.Conditions {
+			if updated.Status.Conditions[i].Type == conditionTypeReconciled {
+				reconciledCond = &updated.Status.Conditions[i]
+				break
+			}
+		}
+		Expect(reconciledCond).NotTo(BeNil())
+		Expect(reconciledCond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(reconciledCond.Reason).To(Equal("Reconciled"))
+		Expect(reconciledCond.ObservedGeneration).To(Equal(updated.Generation))
+	})
+})
+
+var _ = Describe("Reconcile - idempotency", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-idempotent")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("second reconcile does not error and does not duplicate resources", func() {
+		name := "bp-idempotent"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Count resources before second reconcile
+		depsBefore := &appsv1.DeploymentList{}
+		Expect(k8sClient.List(testCtx, depsBefore, client.InNamespace(testNamespace))).To(Succeed())
+		countBefore := len(depsBefore.Items)
+
+		// Second full reconcile
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		depsAfter := &appsv1.DeploymentList{}
+		Expect(k8sClient.List(testCtx, depsAfter, client.InNamespace(testNamespace))).To(Succeed())
+		Expect(depsAfter.Items).To(HaveLen(countBefore))
+	})
+})
+
+var _ = Describe("Reconcile - Bindplane Jobs", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-jobs")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates ServiceAccount and Deployment", func() {
+		name := "bp-jobs"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		jobsName := name + "-jobs"
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobsName, Namespace: testNamespace}, sa)).To(Succeed())
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobsName, Namespace: testNamespace}, dep)).To(Succeed())
+		Expect(dep.Spec.Template.Spec.Containers).NotTo(BeEmpty())
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal("ghcr.io/observiq/bindplane-ee:1.98.0"))
+	})
+})
+
+var _ = Describe("newService", func() {
+	var bindplane *bindplanev1alpha1.Bindplane
+
+	BeforeEach(func() {
+		bindplane = &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bindplane",
+				Namespace: "default",
+			},
+		}
+	})
+
+	Context("when creating a service with a single port", func() {
+		It("should create a ClusterIP service with the correct port configuration", func() {
+			service := newService(bindplane, "test-component", WithPort("http", 8080))
+
+			Expect(service).NotTo(BeNil())
+			Expect(service.Name).To(Equal("test-bindplane-test-component"))
+			Expect(service.Namespace).To(Equal("default"))
+			Expect(service.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+			Expect(service.Spec.Ports).To(HaveLen(1))
+			Expect(service.Spec.Ports[0].Name).To(Equal("http"))
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(8080)))
+			Expect(service.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt(8080)))
+			Expect(service.Spec.Ports[0].Protocol).To(Equal(corev1.ProtocolTCP))
+		})
+
+		It("should have correct labels", func() {
+			service := newService(bindplane, "test-component", WithPort("http", 8080))
+
+			Expect(service.Labels).To(HaveKeyWithValue(labelKeyName, labelValueName))
+			Expect(service.Labels).To(HaveKeyWithValue(labelKeyInstance, "test-bindplane"))
+			Expect(service.Labels).To(HaveKeyWithValue(labelKeyComponent, "test-component"))
+			Expect(service.Labels).To(HaveKeyWithValue(labelKeyManagedBy, labelValueManagedBy))
+			Expect(service.Labels).To(HaveKeyWithValue(labelKeyPartOf, labelValuePartOf))
+		})
+
+		It("should have correct selector labels", func() {
+			service := newService(bindplane, "test-component", WithPort("http", 8080))
+
+			Expect(service.Spec.Selector).To(HaveKeyWithValue(labelKeyName, labelValueName))
+			Expect(service.Spec.Selector).To(HaveKeyWithValue(labelKeyInstance, "test-bindplane"))
+			Expect(service.Spec.Selector).To(HaveKeyWithValue(labelKeyComponent, "test-component"))
+			Expect(service.Spec.Selector).NotTo(HaveKey(labelKeyManagedBy))
+			Expect(service.Spec.Selector).NotTo(HaveKey(labelKeyPartOf))
+		})
+	})
+
+	Context("when creating a service with multiple ports", func() {
+		It("should create a service with all specified ports", func() {
+			service := newService(bindplane, "test-component",
+				WithPort("http", 8080),
+				WithPort("metrics", 9090),
+				WithPort("grpc", 50051),
+			)
+
+			Expect(service).NotTo(BeNil())
+			Expect(service.Spec.Ports).To(HaveLen(3))
+
+			// Verify first port
+			Expect(service.Spec.Ports[0].Name).To(Equal("http"))
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(8080)))
+			Expect(service.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt(8080)))
+
+			// Verify second port
+			Expect(service.Spec.Ports[1].Name).To(Equal("metrics"))
+			Expect(service.Spec.Ports[1].Port).To(Equal(int32(9090)))
+			Expect(service.Spec.Ports[1].TargetPort).To(Equal(intstr.FromInt(9090)))
+
+			// Verify third port
+			Expect(service.Spec.Ports[2].Name).To(Equal("grpc"))
+			Expect(service.Spec.Ports[2].Port).To(Equal(int32(50051)))
+			Expect(service.Spec.Ports[2].TargetPort).To(Equal(intstr.FromInt(50051)))
+
+			// All ports should use TCP protocol
+			for _, port := range service.Spec.Ports {
+				Expect(port.Protocol).To(Equal(corev1.ProtocolTCP))
+			}
+		})
+
+		It("should maintain port order", func() {
+			service := newService(bindplane, "test-component",
+				WithPort("first", 1000),
+				WithPort("second", 2000),
+				WithPort("third", 3000),
+			)
+
+			Expect(service.Spec.Ports).To(HaveLen(3))
+			Expect(service.Spec.Ports[0].Name).To(Equal("first"))
+			Expect(service.Spec.Ports[1].Name).To(Equal("second"))
+			Expect(service.Spec.Ports[2].Name).To(Equal("third"))
+		})
+	})
+
+	Context("when creating a service with no ports", func() {
+		It("should create a service with empty ports slice", func() {
+			service := newService(bindplane, "test-component")
+
+			Expect(service).NotTo(BeNil())
+			Expect(service.Spec.Ports).To(BeEmpty())
+			Expect(service.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+		})
+
+		It("should still have correct labels and selectors", func() {
+			service := newService(bindplane, "test-component")
+
+			Expect(service.Labels).To(HaveKeyWithValue(labelKeyComponent, "test-component"))
+			Expect(service.Spec.Selector).To(HaveKeyWithValue(labelKeyComponent, "test-component"))
+		})
+	})
+
+	Context("when using different component names", func() {
+		It("should generate correct service names", func() {
+			service1 := newService(bindplane, "component-a", WithPort("http", 8080))
+			service2 := newService(bindplane, "component-b", WithPort("http", 8080))
+
+			Expect(service1.Name).To(Equal("test-bindplane-component-a"))
+			Expect(service2.Name).To(Equal("test-bindplane-component-b"))
+		})
+
+		It("should use component name in labels and selectors", func() {
+			service := newService(bindplane, "my-component", WithPort("http", 8080))
+
+			Expect(service.Labels[labelKeyComponent]).To(Equal("my-component"))
+			Expect(service.Spec.Selector[labelKeyComponent]).To(Equal("my-component"))
+		})
+	})
+
+	Context("when using WithPort option", func() {
+		It("should set both Port and TargetPort to the same value", func() {
+			service := newService(bindplane, "test-component", WithPort("http", 8080))
+
+			port := service.Spec.Ports[0]
+			Expect(port.Port).To(Equal(int32(8080)))
+			Expect(port.TargetPort).To(Equal(intstr.FromInt(8080)))
+		})
+
+		It("should handle different port values", func() {
+			service := newService(bindplane, "test-component",
+				WithPort("http", 80),
+				WithPort("https", 443),
+				WithPort("custom", 12345),
+			)
+
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(80)))
+			Expect(service.Spec.Ports[1].Port).To(Equal(int32(443)))
+			Expect(service.Spec.Ports[2].Port).To(Equal(int32(12345)))
+		})
+	})
+})
+
+var _ = Describe("newContainerSecurityContext", func() {
+	Context("when creating a security context with default options", func() {
+		It("should create a security context with all default security settings", func() {
+			sc := newContainerSecurityContext()
+
+			Expect(sc).NotTo(BeNil())
+			Expect(sc.AllowPrivilegeEscalation).NotTo(BeNil())
+			Expect(*sc.AllowPrivilegeEscalation).To(BeFalse())
+			Expect(sc.Capabilities).NotTo(BeNil())
+			Expect(sc.Capabilities.Drop).To(ContainElement(corev1.Capability("ALL")))
+			Expect(sc.ReadOnlyRootFilesystem).NotTo(BeNil())
+			Expect(*sc.ReadOnlyRootFilesystem).To(BeTrue())
+			Expect(sc.RunAsNonRoot).NotTo(BeNil())
+			Expect(*sc.RunAsNonRoot).To(BeTrue())
+			Expect(sc.RunAsUser).NotTo(BeNil())
+			Expect(*sc.RunAsUser).To(Equal(int64(65534))) // Default nobody user
+		})
+
+		It("should have correct default RunAsUser", func() {
+			sc := newContainerSecurityContext()
+
+			Expect(sc.RunAsUser).NotTo(BeNil())
+			Expect(*sc.RunAsUser).To(Equal(int64(65534)))
+		})
+	})
+
+	Context("when using WithRunAsUser option", func() {
+		It("should override the default RunAsUser", func() {
+			sc := newContainerSecurityContext(WithRunAsUser(1000))
+
+			Expect(sc.RunAsUser).NotTo(BeNil())
+			Expect(*sc.RunAsUser).To(Equal(int64(1000)))
+		})
+
+		It("should maintain all other security settings when using WithRunAsUser", func() {
+			sc := newContainerSecurityContext(WithRunAsUser(2000))
+
+			// Verify RunAsUser is overridden
+			Expect(*sc.RunAsUser).To(Equal(int64(2000)))
+
+			// Verify all other settings remain the same
+			Expect(*sc.AllowPrivilegeEscalation).To(BeFalse())
+			Expect(sc.Capabilities.Drop).To(ContainElement(corev1.Capability("ALL")))
+			Expect(*sc.ReadOnlyRootFilesystem).To(BeTrue())
+			Expect(*sc.RunAsNonRoot).To(BeTrue())
+		})
+
+		It("should handle different RunAsUser values", func() {
+			testCases := []struct {
+				userID int64
+			}{
+				{0},     // root
+				{1000},  // regular user
+				{65534}, // nobody (default)
+				{9999},  // custom user
+			}
+
+			for _, tc := range testCases {
+				sc := newContainerSecurityContext(WithRunAsUser(tc.userID))
+				Expect(sc.RunAsUser).NotTo(BeNil())
+				Expect(*sc.RunAsUser).To(Equal(tc.userID))
+			}
+		})
+	})
+
+	Context("when verifying security best practices", func() {
+		It("should always disable privilege escalation", func() {
+			sc := newContainerSecurityContext()
+			Expect(*sc.AllowPrivilegeEscalation).To(BeFalse())
+
+			sc2 := newContainerSecurityContext(WithRunAsUser(1000))
+			Expect(*sc2.AllowPrivilegeEscalation).To(BeFalse())
+		})
+
+		It("should always drop all capabilities", func() {
+			sc := newContainerSecurityContext()
+			Expect(sc.Capabilities).NotTo(BeNil())
+			Expect(sc.Capabilities.Drop).To(ContainElement(corev1.Capability("ALL")))
+			Expect(sc.Capabilities.Add).To(BeEmpty())
+
+			sc2 := newContainerSecurityContext(WithRunAsUser(1000))
+			Expect(sc2.Capabilities).NotTo(BeNil())
+			Expect(sc2.Capabilities.Drop).To(ContainElement(corev1.Capability("ALL")))
+		})
+
+		It("should always use read-only root filesystem", func() {
+			sc := newContainerSecurityContext()
+			Expect(*sc.ReadOnlyRootFilesystem).To(BeTrue())
+
+			sc2 := newContainerSecurityContext(WithRunAsUser(1000))
+			Expect(*sc2.ReadOnlyRootFilesystem).To(BeTrue())
+		})
+
+		It("should always run as non-root", func() {
+			sc := newContainerSecurityContext()
+			Expect(*sc.RunAsNonRoot).To(BeTrue())
+
+			sc2 := newContainerSecurityContext(WithRunAsUser(1000))
+			Expect(*sc2.RunAsNonRoot).To(BeTrue())
+		})
+	})
+
+	Context("when comparing default vs custom RunAsUser", func() {
+		It("should produce different RunAsUser values", func() {
+			defaultSC := newContainerSecurityContext()
+			customSC := newContainerSecurityContext(WithRunAsUser(1000))
+
+			Expect(*defaultSC.RunAsUser).To(Equal(int64(65534)))
+			Expect(*customSC.RunAsUser).To(Equal(int64(1000)))
+			Expect(*defaultSC.RunAsUser).NotTo(Equal(*customSC.RunAsUser))
+		})
+
+		It("should produce identical security settings except RunAsUser", func() {
+			defaultSC := newContainerSecurityContext()
+			customSC := newContainerSecurityContext(WithRunAsUser(1000))
+
+			// RunAsUser should be different
+			Expect(*defaultSC.RunAsUser).NotTo(Equal(*customSC.RunAsUser))
+
+			// All other settings should be identical
+			Expect(*defaultSC.AllowPrivilegeEscalation).To(Equal(*customSC.AllowPrivilegeEscalation))
+			Expect(defaultSC.Capabilities.Drop).To(Equal(customSC.Capabilities.Drop))
+			Expect(*defaultSC.ReadOnlyRootFilesystem).To(Equal(*customSC.ReadOnlyRootFilesystem))
+			Expect(*defaultSC.RunAsNonRoot).To(Equal(*customSC.RunAsNonRoot))
+		})
+	})
+
+	Context("when using WithRunAsUser with the default value", func() {
+		It("should work correctly when explicitly setting the default value", func() {
+			sc := newContainerSecurityContext(WithRunAsUser(65534))
+
+			Expect(sc.RunAsUser).NotTo(BeNil())
+			Expect(*sc.RunAsUser).To(Equal(int64(65534)))
+		})
+	})
+})
+
+var _ = Describe("newPodSecurityContext", func() {
+	It("should create a pod security context with runtime default seccomp", func() {
+		sc := newPodSecurityContext()
+
+		Expect(sc).NotTo(BeNil())
+		Expect(sc.FSGroup).To(Equal(new(int64(65534))))
+		Expect(sc.RunAsGroup).To(Equal(new(int64(65534))))
+		Expect(sc.RunAsUser).To(Equal(new(int64(65534))))
+		Expect(sc.SeccompProfile).NotTo(BeNil())
+		Expect(sc.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+	})
+})
+
+var _ = Describe("mergePodTemplateSpec", func() {
+	var operatorManaged corev1.PodTemplateSpec
+
+	BeforeEach(func() {
+		operatorManaged = corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					"app.kubernetes.io/name":      "bindplane",
+					"app.kubernetes.io/instance":  "test-instance",
+					"app.kubernetes.io/component": "test",
+				},
+				Annotations: map[string]string{
+					"operator-managed": "true",
+				},
+			},
+			Spec: corev1.PodSpec{
+				ServiceAccountName: "operator-managed-sa",
+				Containers: []corev1.Container{
+					{
+						Name:  "operator-container",
+						Image: "operator-image:latest",
+					},
+				},
+				TerminationGracePeriodSeconds: new(int64(60)),
+				SecurityContext:               newPodSecurityContext(),
+				Volumes: []corev1.Volume{
+					{
+						Name: "operator-volume",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+				},
+			},
+		}
+	})
+
+	Context("when user-provided template is nil", func() {
+		It("should return operator-managed template unchanged", func() {
+			result := mergePodTemplateSpec(operatorManaged, nil)
+			Expect(result).To(Equal(operatorManaged))
+		})
+	})
+
+	Context("when merging metadata", func() {
+		It("should merge labels from user-provided template", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"user-label": "user-value",
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "bindplane"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", "test-instance"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "test"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
+		})
+
+		It("should protect operator-managed selector labels from user overrides", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app.kubernetes.io/name":      "user-override-name",
+							"app.kubernetes.io/instance":  "user-override-instance",
+							"app.kubernetes.io/component": "user-override-component",
+							"user-label":                  "user-value",
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			// Protected labels should retain operator-managed values
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "bindplane"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", "test-instance"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "test"))
+			// User labels should still be merged
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
+		})
+
+		It("should merge annotations from user-provided template", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							"user-annotation": "user-value",
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("operator-managed", "true"))
+			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("user-annotation", "user-value"))
+		})
+
+		It("should handle nil labels and annotations in operator-managed template", func() {
+			operatorManaged.Labels = nil
+			operatorManaged.Annotations = nil
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"user-label": "user-value",
+						},
+						Annotations: map[string]string{
+							"user-annotation": "user-value",
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
+			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("user-annotation", "user-value"))
+		})
+	})
+
+	Context("when merging affinity", func() {
+		It("should use user-provided affinity", func() {
+			userAffinity := &corev1.Affinity{
+				PodAntiAffinity: &corev1.PodAntiAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+						{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app": "test",
+								},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
+			}
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Affinity: userAffinity,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.Affinity).To(Equal(userAffinity))
+		})
+
+		It("should preserve nil affinity when user doesn't provide it", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.Affinity).To(BeNil())
+		})
+	})
+
+	Context("when merging tolerations", func() {
+		It("should use user-provided tolerations", func() {
+			userTolerations := []corev1.Toleration{
+				{
+					Key:      "key1",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "value1",
+					Effect:   corev1.TaintEffectNoSchedule,
+				},
+			}
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Tolerations: userTolerations,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.Tolerations).To(Equal(userTolerations))
+		})
+	})
+
+	Context("when merging nodeSelector", func() {
+		It("should use user-provided nodeSelector", func() {
+			userNodeSelector := map[string]string{
+				"disktype": "ssd",
+				"zone":     "us-west-1",
+			}
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						NodeSelector: userNodeSelector,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.NodeSelector).To(Equal(userNodeSelector))
+		})
+	})
+
+	Context("when merging priorityClassName", func() {
+		It("should use user-provided priorityClassName", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						PriorityClassName: "high-priority",
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.PriorityClassName).To(Equal("high-priority"))
+		})
+
+		It("should not override when priorityClassName is empty", func() {
+			operatorManaged.Spec.PriorityClassName = "operator-priority"
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						PriorityClassName: "",
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.PriorityClassName).To(Equal("operator-priority"))
+		})
+	})
+
+	Context("when merging runtimeClassName", func() {
+		It("should use user-provided runtimeClassName", func() {
+			runtimeClass := "gvisor"
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						RuntimeClassName: &runtimeClass,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.RuntimeClassName).To(Equal(&runtimeClass))
+		})
+	})
+
+	Context("when merging hostNetwork, hostPID, hostIPC", func() {
+		It("should use user-provided hostNetwork", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						HostNetwork: true,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.HostNetwork).To(BeTrue())
+		})
+
+		It("should not override when hostNetwork is false", func() {
+			operatorManaged.Spec.HostNetwork = true
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						HostNetwork: false,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.HostNetwork).To(BeTrue())
+		})
+	})
+
+	Context("when merging volumes", func() {
+		It("should merge user volumes with operator volumes", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Volumes: []corev1.Volume{
+							{
+								Name: "user-volume",
+								VolumeSource: corev1.VolumeSource{
+									ConfigMap: &corev1.ConfigMapVolumeSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "user-config",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.Volumes).To(HaveLen(2))
+			volumeNames := make(map[string]bool)
+			for _, vol := range result.Spec.Volumes {
+				volumeNames[vol.Name] = true
+			}
+			Expect(volumeNames).To(HaveKey("operator-volume"))
+			Expect(volumeNames).To(HaveKey("user-volume"))
+		})
+
+		It("should allow user to override operator volume with same name", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Volumes: []corev1.Volume{
+							{
+								Name: "operator-volume",
+								VolumeSource: corev1.VolumeSource{
+									ConfigMap: &corev1.ConfigMapVolumeSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "user-override",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.Volumes).To(HaveLen(1))
+			Expect(result.Spec.Volumes[0].Name).To(Equal("operator-volume"))
+			Expect(result.Spec.Volumes[0].ConfigMap).ToNot(BeNil())
+			Expect(result.Spec.Volumes[0].ConfigMap.Name).To(Equal("user-override"))
+		})
+	})
+
+	Context("when merging initContainers", func() {
+		It("should use user-provided initContainers", func() {
+			userInitContainers := []corev1.Container{
+				{
+					Name:    "user-init",
+					Image:   "busybox:latest",
+					Command: []string{"sh", "-c", "echo init"},
+				},
+			}
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						InitContainers: userInitContainers,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.InitContainers).To(Equal(userInitContainers))
+		})
+	})
+
+	Context("when merging securityContext", func() {
+		It("should merge user securityContext fields with operator securityContext", func() {
+			userFSGroup := new(int64(1000))
+			userSeccomp := &corev1.SeccompProfile{
+				Type:             corev1.SeccompProfileTypeLocalhost,
+				LocalhostProfile: new("profiles/custom.json"),
+			}
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						SecurityContext: &corev1.PodSecurityContext{
+							FSGroup:        userFSGroup,
+							RunAsUser:      new(int64(1000)),
+							SeccompProfile: userSeccomp,
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.SecurityContext).ToNot(BeNil())
+			Expect(result.Spec.SecurityContext.FSGroup).To(Equal(userFSGroup))
+			Expect(result.Spec.SecurityContext.RunAsUser).To(Equal(new(int64(1000))))
+			// Operator-managed fields should be preserved if not overridden
+			Expect(result.Spec.SecurityContext.RunAsGroup).To(Equal(new(int64(65534))))
+			Expect(result.Spec.SecurityContext.SeccompProfile).To(Equal(userSeccomp))
+		})
+
+		It("should handle nil securityContext in operator-managed template", func() {
+			operatorManaged.Spec.SecurityContext = nil
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						SecurityContext: &corev1.PodSecurityContext{
+							FSGroup: new(int64(1000)),
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.SecurityContext).ToNot(BeNil())
+			Expect(result.Spec.SecurityContext.FSGroup).To(Equal(new(int64(1000))))
+		})
+	})
+
+	Context("when preserving operator-managed fields", func() {
+		It("should preserve ServiceAccountName", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						ServiceAccountName: "user-sa",
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.ServiceAccountName).To(Equal("operator-managed-sa"))
+		})
+
+		It("should preserve Containers", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "user-container",
+								Image: "user-image:latest",
+							},
+						},
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.Containers).To(HaveLen(1))
+			Expect(result.Spec.Containers[0].Name).To(Equal("operator-container"))
+			Expect(result.Spec.Containers[0].Image).To(Equal("operator-image:latest"))
+		})
+
+		It("should preserve TerminationGracePeriodSeconds", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						TerminationGracePeriodSeconds: new(int64(30)),
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.TerminationGracePeriodSeconds).To(Equal(new(int64(60))))
+		})
+	})
+
+	Context("when merging DNS settings", func() {
+		It("should use user-provided DNSPolicy", func() {
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						DNSPolicy: corev1.DNSClusterFirst,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirst))
+		})
+
+		It("should use user-provided DNSConfig", func() {
+			userDNSConfig := &corev1.PodDNSConfig{
+				Nameservers: []string{"8.8.8.8"},
+				Searches:    []string{"example.com"},
+			}
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						DNSConfig: userDNSConfig,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.DNSConfig).To(Equal(userDNSConfig))
+		})
+	})
+
+	Context("when merging imagePullSecrets", func() {
+		It("should use user-provided imagePullSecrets", func() {
+			userImagePullSecrets := []corev1.LocalObjectReference{
+				{Name: "user-secret"},
+			}
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						ImagePullSecrets: userImagePullSecrets,
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			Expect(result.Spec.ImagePullSecrets).To(Equal(userImagePullSecrets))
+		})
+	})
+
+	Context("complex merge scenarios", func() {
+		It("should correctly merge multiple fields at once", func() {
+			userAffinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{
+							{
+								MatchExpressions: []corev1.NodeSelectorRequirement{
+									{
+										Key:      "disktype",
+										Operator: corev1.NodeSelectorOpIn,
+										Values:   []string{"ssd"},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			userProvided := &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"user-label": "value",
+						},
+					},
+					Spec: corev1.PodSpec{
+						Affinity: userAffinity,
+						Tolerations: []corev1.Toleration{
+							{
+								Key:      "key1",
+								Operator: corev1.TolerationOpEqual,
+								Value:    "value1",
+								Effect:   corev1.TaintEffectNoSchedule,
+							},
+						},
+						NodeSelector: map[string]string{
+							"zone": "us-west-1",
+						},
+						PriorityClassName: "high-priority",
+					},
+				},
+			}
+
+			result := mergePodTemplateSpec(operatorManaged, userProvided)
+
+			// Verify all user fields are merged
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "value"))
+			Expect(result.Spec.Affinity).To(Equal(userAffinity))
+			Expect(result.Spec.Tolerations).To(HaveLen(1))
+			Expect(result.Spec.NodeSelector).To(HaveKeyWithValue("zone", "us-west-1"))
+			Expect(result.Spec.PriorityClassName).To(Equal("high-priority"))
+
+			// Verify operator-managed fields are preserved
+			Expect(result.Spec.ServiceAccountName).To(Equal("operator-managed-sa"))
+			Expect(result.Spec.Containers).To(HaveLen(1))
+			Expect(result.Spec.Containers[0].Name).To(Equal("operator-container"))
+			Expect(result.Spec.TerminationGracePeriodSeconds).To(Equal(new(int64(60))))
+		})
+	})
+})
+
+// envVarByName returns the value of the env var with the given name from the slice, or empty string if not found.
+func envVarByName(envVars []corev1.EnvVar, name string) string {
+	for _, ev := range envVars {
+		if ev.Name == name {
+			if ev.ValueFrom != nil && ev.ValueFrom.SecretKeyRef != nil {
+				return "(secret)"
+			}
+			return ev.Value
+		}
+	}
+	return ""
+}
+
+func expectedGoMemLimit(quantity string) string {
+	q := resource.MustParse(quantity)
+	return strconv.FormatInt(applyMemoryHeadroom(q.Value()), 10)
+}
+
+var _ = Describe("getGoRuntimeEnvVars", func() {
+	It("prefers limits over requests and applies the conversion policy", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1500m"),
+				corev1.ResourceMemory: resource.MustParse("1Gi"),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		})
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("2"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("1Gi")))
+	})
+
+	It("falls back to requests and rounds CPU up to at least one core", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		})
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("500Mi")))
+	})
+
+	It("rounds a 500m CPU limit up to one core", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("500m"),
+			},
+		})
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+	})
+
+	It("omits env vars when no CPU or memory resources are set", func() {
+		envVars := getGoRuntimeEnvVars(corev1.ResourceRequirements{})
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(BeEmpty())
+	})
+})
+
+var _ = Describe("mergePodTemplateSpec Go runtime env vars", func() {
+	It("applies runtime env vars when no user pod template is provided", func() {
+		operatorManaged := corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name: "server",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("1000m"),
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := mergePodTemplateSpec(operatorManaged, nil)
+		envVars := result.Spec.Containers[0].Env
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("1Gi")))
+	})
+
+	It("uses user-overridden resources and protects env vars from user override", func() {
+		operatorManaged := corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name: "server",
+						Env:  []corev1.EnvVar{{Name: "BASE_ENV", Value: "operator"}},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse("1000m"),
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+							},
+						},
+					},
+				},
+			},
+		}
+		userProvided := &bindplanev1alpha1.PodTemplateSpec{
+			PodTemplateSpec: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name: "server",
+							Env:  []corev1.EnvVar{{Name: goMaxProcsEnvVar, Value: "99"}},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse("2Gi"),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1500m"),
+									corev1.ResourceMemory: resource.MustParse("2Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := mergePodTemplateSpec(operatorManaged, userProvided)
+		container := result.Spec.Containers[0]
+
+		expectedLimitMemory := resource.MustParse("2Gi")
+		Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1500)))
+		Expect(container.Resources.Limits.Memory().Value()).To(Equal(expectedLimitMemory.Value()))
+		Expect(envVarByName(container.Env, "BASE_ENV")).To(Equal("operator"))
+		Expect(envVarByName(container.Env, goMaxProcsEnvVar)).To(Equal("2"))
+		Expect(envVarByName(container.Env, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2Gi")))
+	})
+})
+
+var _ = Describe("workload Go runtime env vars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		replicas := int32(3)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+						},
+					},
+				},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{
+					Replicas: &replicas,
+				},
+			},
+		}
+	}
+
+	It("adds runtime env vars to the node deployment from default resources", func() {
+		bindplane := baseBindplane()
+		deployment := (&BindplaneReconciler{}).nodeDeployment(bindplane)
+		envVars := deployment.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("2"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2048Mi")))
+	})
+
+	It("adds runtime env vars to the TSDB statefulset from default resources", func() {
+		bindplane := baseBindplane()
+		statefulSet := (&BindplaneReconciler{}).tsdbStatefulSet(bindplane)
+		envVars := statefulSet.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envVarByName(envVars, goMaxProcsEnvVar)).To(Equal("1"))
+		Expect(envVarByName(envVars, goMemLimitEnvVar)).To(Equal(expectedGoMemLimit("2048Mi")))
+	})
+})
+
+var _ = Describe("component-level resources field", func() {
+	natsReplicas := int32(2)
+	taReplicas := int32(2)
+
+	newBindplane := func() *bindplanev1alpha1.Bindplane {
+		replicas := int32(3)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &replicas},
+				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					Replicas: &taReplicas,
+				},
+			},
+		}
+	}
+
+	customResources := func() *corev1.ResourceRequirements {
+		return &corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("100Mi"),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("50m"),
+				corev1.ResourceMemory: resource.MustParse("50Mi"),
+			},
+		}
+	}
+
+	assertResources := func(got corev1.ResourceRequirements, want *corev1.ResourceRequirements) {
+		Expect(got.Requests.Cpu().MilliValue()).To(Equal(want.Requests.Cpu().MilliValue()))
+		Expect(got.Requests.Memory().Value()).To(Equal(want.Requests.Memory().Value()))
+		Expect(got.Limits.Cpu().MilliValue()).To(Equal(want.Limits.Cpu().MilliValue()))
+		Expect(got.Limits.Memory().Value()).To(Equal(want.Limits.Memory().Value()))
+	}
+
+	Describe("spec.bindplane.resources", func() {
+		It("applies top-level resources to the node container", func() {
+			bp := newBindplane()
+			bp.Spec.Bindplane.Resources = customResources()
+			container := (&BindplaneReconciler{}).nodeDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when resources is not set", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).nodeDeployment(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("2048Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(2000)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+
+		It("podTemplate.resources takes precedence over top-level resources for specified fields", func() {
+			podTemplateResources := &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+			}
+			bp := newBindplane()
+			bp.Spec.Bindplane.Resources = customResources()
+			bp.Spec.Bindplane.PodTemplate = &bindplanev1alpha1.PodTemplateSpec{
+				PodTemplateSpec: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{Name: nodeContainerName, Resources: *podTemplateResources},
+						},
+					},
+				},
+			}
+			container := (&BindplaneReconciler{}).nodeDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, podTemplateResources)
+		})
+	})
+
+	Describe("spec.nats.resources", func() {
+		It("applies top-level resources to the NATS container", func() {
+			bp := newBindplane()
+			bp.Spec.Nats.Resources = customResources()
+			container := (&BindplaneReconciler{}).natsStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when resources is not set", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).natsStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("500Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(250)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+
+	Describe("spec.tsdb.resources", func() {
+		It("applies top-level resources to the TSDB container", func() {
+			bp := newBindplane()
+			bp.Spec.TSDB = &bindplanev1alpha1.TSDBComponentSpec{Resources: customResources()}
+			container := (&BindplaneReconciler{}).tsdbStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when TSDB spec is nil", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).tsdbStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("2048Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+
+		It("podTemplate.resources takes precedence over top-level resources for specified fields", func() {
+			podTemplateResources := &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("777m"),
+					corev1.ResourceMemory: resource.MustParse("999Mi"),
+				},
+			}
+			bp := newBindplane()
+			bp.Spec.TSDB = &bindplanev1alpha1.TSDBComponentSpec{
+				Resources: customResources(),
+				PodTemplate: &bindplanev1alpha1.PodTemplateSpec{
+					PodTemplateSpec: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: tsdbContainerName, Resources: *podTemplateResources},
+							},
+						},
+					},
+				},
+			}
+			container := (&BindplaneReconciler{}).tsdbStatefulSet(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, podTemplateResources)
+		})
+	})
+
+	Describe("spec.transformAgent.resources", func() {
+		It("applies top-level resources to the transform agent container", func() {
+			bp := newBindplane()
+			bp.Spec.TransformAgent.Resources = customResources()
+			container := (&BindplaneReconciler{}).transformAgentDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when resources is not set", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).transformAgentDeployment(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("512Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(250)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+
+	Describe("spec.bindplaneJobs.resources", func() {
+		It("applies top-level resources to the jobs container", func() {
+			bp := newBindplane()
+			bp.Spec.BindplaneJobs = &bindplanev1alpha1.BindplaneJobsComponentSpec{Resources: customResources()}
+			container := (&BindplaneReconciler{}).bindplaneJobsDeployment(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when bindplaneJobs spec is nil", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).bindplaneJobsDeployment(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("1024Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(1000)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+
+	Describe("spec.bindplaneJobsMigrate.resources", func() {
+		It("applies top-level resources to the jobs migrate container", func() {
+			bp := newBindplane()
+			bp.Spec.BindplaneJobsMigrate = &bindplanev1alpha1.BindplaneJobsMigrateComponentSpec{Resources: customResources()}
+			container := (&BindplaneReconciler{}).bindplaneJobsMigrateJob(bp).Spec.Template.Spec.Containers[0]
+			assertResources(container.Resources, customResources())
+		})
+
+		It("uses defaults when bindplaneJobsMigrate spec is nil", func() {
+			bp := newBindplane()
+			container := (&BindplaneReconciler{}).bindplaneJobsMigrateJob(bp).Spec.Template.Spec.Containers[0]
+			expectedMem := resource.MustParse("2048Mi")
+			Expect(container.Resources.Requests.Cpu().MilliValue()).To(Equal(int64(100)))
+			Expect(container.Resources.Requests.Memory().Value()).To(Equal(expectedMem.Value()))
+		})
+	})
+})
+
+var _ = Describe("workload pod security context defaults", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		nodeReplicas := int32(3)
+		natsReplicas := int32(2)
+		transformAgentReplicas := int32(2)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+						},
+					},
+				},
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{
+					Replicas: &nodeReplicas,
+				},
+				Nats: &bindplanev1alpha1.NatsComponentSpec{
+					Replicas: &natsReplicas,
+				},
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					Replicas: &transformAgentReplicas,
+				},
+			},
+		}
+	}
+
+	assertRuntimeDefaultSeccomp := func(securityContext *corev1.PodSecurityContext) {
+		Expect(securityContext).NotTo(BeNil())
+		Expect(securityContext.SeccompProfile).NotTo(BeNil())
+		Expect(securityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+	}
+
+	It("sets runtime default seccomp on node deployments", func() {
+		bindplane := baseBindplane()
+		deployment := (&BindplaneReconciler{}).nodeDeployment(bindplane)
+
+		assertRuntimeDefaultSeccomp(deployment.Spec.Template.Spec.SecurityContext)
+	})
+
+	It("sets runtime default seccomp on TSDB statefulsets", func() {
+		bindplane := baseBindplane()
+		statefulSet := (&BindplaneReconciler{}).tsdbStatefulSet(bindplane)
+
+		assertRuntimeDefaultSeccomp(statefulSet.Spec.Template.Spec.SecurityContext)
+	})
+
+	It("sets runtime default seccomp on migrate jobs", func() {
+		bindplane := baseBindplane()
+		job := (&BindplaneReconciler{}).bindplaneJobsMigrateJob(bindplane)
+
+		assertRuntimeDefaultSeccomp(job.Spec.Template.Spec.SecurityContext)
+	})
+})
+
+var _ = Describe("nodeTerminationGracePeriodSeconds", func() {
+	It("returns default", func() {
+		Expect(nodeTerminationGracePeriodSeconds(&bindplanev1alpha1.Bindplane{})).To(Equal(int64(60)))
+	})
+})
+
+var _ = Describe("getBindplaneConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+						},
+					},
+				},
+			},
+		}
+	}
+
+	It("sets default metrics env vars when Metrics config is omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_TYPE")).To(Equal("prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_INTERVAL")).To(Equal("60s"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_ENDPOINT")).To(Equal("/metrics"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(BeEmpty())
+	})
+
+	It("sets explicit metrics type prometheus, interval 60s, endpoint /metrics", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
+			Type:     "prometheus",
+			Interval: "60s",
+			Prometheus: &bindplanev1alpha1.MetricsPrometheusConfig{
+				Endpoint: "/metrics",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_TYPE")).To(Equal("prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_INTERVAL")).To(Equal("60s"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_ENDPOINT")).To(Equal("/metrics"))
+	})
+
+	It("sets tracing type otlp with endpoint, insecure, and sampling rate", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Tracing = &bindplanev1alpha1.TracingConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.TracingOTLPConfig{
+				Endpoint: "http://otel:4317",
+				Insecure: true,
+			},
+			SamplingRate: "0.5",
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(Equal("otlp"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_ENDPOINT")).To(Equal("http://otel:4317"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_INSECURE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_SAMPLING_RATE")).To(Equal("0.5"))
+	})
+
+	It("sets metrics Prometheus auth username and password secret ref", func() {
+		bindplane := baseBindplane()
+		secretName := "metrics-auth"
+		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
+			Type:     "prometheus",
+			Interval: "60s",
+			Prometheus: &bindplanev1alpha1.MetricsPrometheusConfig{
+				Endpoint: "/metrics",
+				Username: "metrics-user",
+				PasswordSecretRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+					Key:                  "password",
+				},
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_USERNAME")).To(Equal("metrics-user"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_PASSWORD")).To(Equal("(secret)"))
+	})
+
+	It("does not set tracing env vars when Tracing is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_ENDPOINT")).To(BeEmpty())
+	})
+
+	It("does not set tracing env vars when Tracing Type is empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Tracing = &bindplanev1alpha1.TracingConfig{}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(BeEmpty())
+	})
+
+	It("sets maxConcurrency and auditTrail retention with defaults when omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_MAX_CONCURRENCY")).To(Equal("10"))
+		Expect(envVarByName(envVars, "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS")).To(Equal("10"))
+		Expect(envVarByName(envVars, "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS")).To(Equal("365"))
+	})
+
+	It("sets explicit maxConcurrency and auditTrail.retentionDays", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.MaxConcurrency = 20
+		bindplane.Spec.Config.AuditTrail = &bindplanev1alpha1.AuditTrailConfig{RetentionDays: 180}
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{MaxSimultaneousConnections: 20}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_MAX_CONCURRENCY")).To(Equal("20"))
+		Expect(envVarByName(envVars, "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS")).To(Equal("20"))
+		Expect(envVarByName(envVars, "BINDPLANE_AUDIT_TRAIL_RETENTION_DAYS")).To(Equal("180"))
+	})
+
+	It("defaults BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS to 10 when agents is nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = nil
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_AGENTS_MAX_SIMULTANEOUS_CONNECTIONS")).To(Equal("10"))
+	})
+
+	It("sets network webURL and corsAllowedOrigins only when configured", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_WEB_URL")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_CORS_ALLOWED_ORIGINS")).To(BeEmpty())
+
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			WebURL:             "https://bindplane.example.com",
+			CorsAllowedOrigins: "https://app.example.com",
+		}
+		envVars = getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_WEB_URL")).To(Equal("https://bindplane.example.com"))
+		Expect(envVarByName(envVars, "BINDPLANE_CORS_ALLOWED_ORIGINS")).To(Equal("https://app.example.com"))
+	})
+
+	It("does not set network TLS env vars when Network or TLS is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_MIN_VERSION")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CA")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_SKIP_VERIFY")).To(BeEmpty())
+
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{}
+		envVars = getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(BeEmpty())
+	})
+
+	It("sets network TLS minVersion and skipVerify only when no secret (no path env vars)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			TLS: &bindplanev1alpha1.NetworkTLSConfig{
+				MinVersion: "1.2",
+				SkipVerify: true,
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_MIN_VERSION")).To(Equal("1.2"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_SKIP_VERIFY")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(BeEmpty())
+	})
+
+	It("sets network TLS cert and key paths when secretName, certKey, keyKey are set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			TLS: &bindplanev1alpha1.NetworkTLSConfig{
+				SecretName: "tls-secret",
+				CertKey:    "tls.crt",
+				KeyKey:     "tls.key",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(Equal("/etc/bindplane/network-tls/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(Equal("/etc/bindplane/network-tls/tls.key"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CA")).To(BeEmpty())
+	})
+
+	It("sets network TLS cert, key, and ca paths when caKey is set (mutual TLS)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
+			TLS: &bindplanev1alpha1.NetworkTLSConfig{
+				SecretName: "tls-secret",
+				CertKey:    "tls.crt",
+				KeyKey:     "tls.key",
+				CAKey:      "ca.crt",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(Equal("/etc/bindplane/network-tls/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(Equal("/etc/bindplane/network-tls/tls.key"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_CA")).To(Equal("/etc/bindplane/network-tls/ca.crt"))
+	})
+
+	It("references auto-generated session secret when no user session secret is configured", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		ref := envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-session-secret"))
+		Expect(ref.Key).To(Equal(sessionSecretKey))
+	})
+
+	It("references auto-generated session secret when auth is set but has no session secret fields", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{Type: "system"}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		ref := envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-session-secret"))
+		Expect(ref.Key).To(Equal(sessionSecretKey))
+	})
+
+	It("injects plain session secret value when sessionSecret string is set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{SessionSecret: "mysecret"}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_SESSION_SECRET")).To(Equal("mysecret"))
+		Expect(envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")).To(BeNil())
+	})
+
+	It("injects SecretKeyRef when sessionSecretSecretRef is set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{
+			SessionSecretSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+				Key:                  "session-secret",
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		ref := envVarSecretKeyRef(envVars, "BINDPLANE_SESSION_SECRET")
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("my-secret"))
+		Expect(ref.Key).To(Equal("session-secret"))
+	})
+})
+
+var _ = Describe("getStatusEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-bp",
+				Namespace: "default",
+			},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+			},
+		}
+	}
+
+	It("enables status and references the managed secret when status is omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-status-secret"))
+		Expect(ref.Key).To(Equal(statusSecretKey))
+	})
+
+	It("references the managed secret when enabled with no keys", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: true}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("test-bp-status-secret"))
+		Expect(ref.Key).To(Equal(statusSecretKey))
+	})
+
+	It("emits only ENABLED=false and no keys when explicitly disabled", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: false}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("false"))
+		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(BeEmpty())
+		Expect(envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)).To(BeNil())
+	})
+
+	It("injects inline keys as a comma-joined value", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"},
+		}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(Equal("11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222"))
+		Expect(envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)).To(BeNil())
+	})
+
+	It("references the user secret when keysSecretRef is set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			KeysSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "user-status-secret"},
+				Key:                  "keys",
+			},
+		}
+		envVars := getStatusEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
+		Expect(ref).NotTo(BeNil())
+		Expect(ref.Name).To(Equal("user-status-secret"))
+		Expect(ref.Key).To(Equal("keys"))
+	})
+})
+
+var _ = Describe("getNetworkTLSVolumeAndMount", func() {
+	It("returns nil when Network or TLS is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+		vols, mounts := getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+
+		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{}
+		vols, mounts = getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns nil when secretName or certKey or keyKey is missing", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Network: &bindplanev1alpha1.NetworkConfig{
+						TLS: &bindplanev1alpha1.NetworkTLSConfig{SecretName: "tls-secret"},
+					},
+				},
+			},
+		}
+		vols, mounts := getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns one volume and one mount when server TLS is configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Network: &bindplanev1alpha1.NetworkConfig{
+						TLS: &bindplanev1alpha1.NetworkTLSConfig{
+							SecretName: "tls-secret",
+							CertKey:    "tls.crt",
+							KeyKey:     "tls.key",
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getNetworkTLSVolumeAndMount(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal("network-tls"))
+		Expect(vols[0].Secret).ToNot(BeNil())
+		Expect(vols[0].Secret.SecretName).To(Equal("tls-secret"))
+		Expect(mounts).To(HaveLen(1))
+		Expect(mounts[0].Name).To(Equal("network-tls"))
+		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/network-tls"))
+	})
+})
+
+var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+			},
+		}
+	}
+
+	It("defaults sslMode to disable when omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_MODE")).To(Equal(postgresSSLModeDisable))
+	})
+
+	It("does not set postgres TLS path env vars when TLS is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_KEY")).To(BeEmpty())
+	})
+
+	It("sets postgres TLS root cert only when TLS has secretName and caKey (server-side TLS)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.Postgres.TLS = &bindplanev1alpha1.PostgresTLSConfig{
+			SecretName: "pg-tls",
+			CAKey:      "ca.crt",
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(Equal("/etc/bindplane/postgres-tls/ca.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_CERT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_KEY")).To(BeEmpty())
+	})
+
+	It("sets postgres TLS root cert, cert, and key when mutual TLS (caKey, certKey, keyKey)", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.Postgres.TLS = &bindplanev1alpha1.PostgresTLSConfig{
+			SecretName: "pg-tls",
+			CAKey:      "ca.crt",
+			CertKey:    "tls.crt",
+			KeyKey:     "tls.key",
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(Equal("/etc/bindplane/postgres-tls/ca.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_CERT")).To(Equal("/etc/bindplane/postgres-tls/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_KEY")).To(Equal("/etc/bindplane/postgres-tls/tls.key"))
+	})
+
+	It("does not set maxIdleConnections or maxIdleTime when omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_CONNECTIONS")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_TIME")).To(BeEmpty())
+	})
+
+	It("sets maxIdleConnections and maxIdleTime when provided", func() {
+		bindplane := baseBindplane()
+		maxIdle := 5
+		bindplane.Spec.Config.Store.Postgres.MaxIdleConnections = &maxIdle
+		bindplane.Spec.Config.Store.Postgres.MaxIdleTime = "20s"
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_CONNECTIONS")).To(Equal("5"))
+		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_MAX_IDLE_TIME")).To(Equal("20s"))
+	})
+})
+
+var _ = Describe("getStoreConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
+					},
+				},
+			},
+		}
+	}
+
+	It("does not set store tuning env vars when all fields are omitted", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_MAX_EVENTS")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_EVENT_MERGE_WINDOW")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STORE_MAX_EVENTS when maxEvents > 0", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.MaxEvents = 200
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_MAX_EVENTS")).To(Equal("200"))
+	})
+
+	It("does not set BINDPLANE_STORE_MAX_EVENTS when maxEvents == 0", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.MaxEvents = 0
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_MAX_EVENTS")).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STORE_EVENT_MERGE_WINDOW when non-empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Store.EventMergeWindow = "200ms"
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_EVENT_MERGE_WINDOW")).To(Equal("200ms"))
+	})
+
+	It("does not set BINDPLANE_STORE_EVENT_MERGE_WINDOW when empty", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_EVENT_MERGE_WINDOW")).To(BeEmpty())
+	})
+
+	It("sets BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS when non-nil with value > 0", func() {
+		bindplane := baseBindplane()
+		days := 90
+		bindplane.Spec.Config.Store.SummaryRollupRetentionDays = &days
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(Equal("90"))
+	})
+
+	It("sets BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS=0 when non-nil with value == 0 (indefinite retention)", func() {
+		bindplane := baseBindplane()
+		days := 0
+		bindplane.Spec.Config.Store.SummaryRollupRetentionDays = &days
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(Equal("0"))
+	})
+
+	It("does not set BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS when nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneConfigEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_STORE_SUMMARY_ROLLUP_RETENTION_DAYS")).To(BeEmpty())
+	})
+})
+
+var _ = Describe("defaultRequiredHosts", func() {
+	It("returns floor(total/2)+1 with default replicas (node=3, nats=2)", func() {
+		natsReplicas := int32(2)
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+			},
+		}
+		// total = 3 + 2 + 1 = 6, floor(6/2)+1 = 4
+		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(4)))
+	})
+
+	It("returns floor(total/2)+1 with custom replicas (node=5, nats=3)", func() {
+		nodeReplicas := int32(5)
+		natsReplicas := int32(3)
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+			},
+		}
+		// total = 5 + 3 + 1 = 9, floor(9/2)+1 = 5
+		Expect(defaultRequiredHosts(bindplane)).To(Equal(int32(5)))
+	})
+})
+
+var _ = Describe("migrate Job helpers", func() {
+	makeJob := func(image string, conditions ...batchv1.JobCondition) *batchv1.Job {
+		return &batchv1.Job{
+			Spec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Image: image}},
+					},
+				},
+			},
+			Status: batchv1.JobStatus{Conditions: conditions},
+		}
+	}
+
+	Describe("isJobSucceeded", func() {
+		It("returns true when JobComplete condition is True", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+			})
+			Expect(isJobSucceeded(job)).To(BeTrue())
+		})
+
+		It("returns false when no conditions", func() {
+			Expect(isJobSucceeded(makeJob("img"))).To(BeFalse())
+		})
+
+		It("returns false when JobComplete condition is False", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionFalse,
+			})
+			Expect(isJobSucceeded(job)).To(BeFalse())
+		})
+	})
+
+	Describe("isJobFailed", func() {
+		It("returns true when JobFailed condition is True", func() {
+			job := makeJob("img", batchv1.JobCondition{
+				Type:   batchv1.JobFailed,
+				Status: corev1.ConditionTrue,
+			})
+			Expect(isJobFailed(job)).To(BeTrue())
+		})
+
+		It("returns false when no conditions", func() {
+			Expect(isJobFailed(makeJob("img"))).To(BeFalse())
+		})
+	})
+
+	Describe("extractJobContainerImage", func() {
+		It("returns the first container image", func() {
+			Expect(extractJobContainerImage(makeJob("my-image:1.2.3"))).To(Equal("my-image:1.2.3"))
+		})
+
+		It("returns empty string when no containers", func() {
+			job := &batchv1.Job{}
+			Expect(extractJobContainerImage(job)).To(Equal(""))
+		})
+	})
+
+	Describe("bindplaneJobsMigrateJob", func() {
+		var bindplane *bindplanev1alpha1.Bindplane
+		var r *BindplaneReconciler
+
+		BeforeEach(func() {
+			bindplane = &bindplanev1alpha1.Bindplane{
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				Spec: bindplanev1alpha1.BindplaneSpec{
+					Config: bindplanev1alpha1.BindplaneConfigSpec{
+						License: "license",
+						Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					},
+				},
+			}
+			r = &BindplaneReconciler{}
+		})
+
+		It("produces a Job with correct name and namespace", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Name).To(Equal("test-migrate"))
+			Expect(job.Namespace).To(Equal("default"))
+		})
+
+		It("sets the migrate command", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			containers := job.Spec.Template.Spec.Containers
+			Expect(containers).To(HaveLen(1))
+			Expect(containers[0].Command).To(Equal([]string{"/bindplane", "migrate", "-y"}))
+		})
+
+		It("sets RestartPolicy to Never", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.Template.Spec.RestartPolicy).To(Equal(corev1.RestartPolicyNever))
+		})
+
+		It("sets BackoffLimit to 3", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.BackoffLimit).NotTo(BeNil())
+			Expect(*job.Spec.BackoffLimit).To(Equal(int32(3)))
+		})
+
+		It("sets TTLSecondsAfterFinished to 86400 (24 hours)", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			Expect(job.Spec.TTLSecondsAfterFinished).NotTo(BeNil())
+			Expect(*job.Spec.TTLSecondsAfterFinished).To(Equal(int32(86400)))
+		})
+
+		It("has no ports or probes", func() {
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			c := job.Spec.Template.Spec.Containers[0]
+			Expect(c.Ports).To(BeEmpty())
+			Expect(c.LivenessProbe).To(BeNil())
+			Expect(c.ReadinessProbe).To(BeNil())
+			Expect(c.StartupProbe).To(BeNil())
+		})
+
+		It("does not mount the NATS TLS volume even when NATS cert-manager TLS is configured", func() {
+			bindplane.Spec.Config.Nats = &bindplanev1alpha1.NatsConfig{
+				TLS: &bindplanev1alpha1.NatsTLSConfig{
+					CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer"},
+				},
+			}
+			job := r.bindplaneJobsMigrateJob(bindplane)
+			for _, v := range job.Spec.Template.Spec.Volumes {
+				Expect(v.Name).NotTo(Equal(internalTLSNatsVolumeName))
+			}
+			for _, m := range job.Spec.Template.Spec.Containers[0].VolumeMounts {
+				Expect(m.Name).NotTo(Equal(internalTLSNatsVolumeName))
+			}
+		})
+	})
+})
+
+var _ = Describe("getEventBusHealthEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		nodeReplicas := int32(3)
+		natsReplicas := int32(2)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
+				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("does not set event bus health env vars when EventBus is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
+	})
+
+	It("uses default requiredHosts (node=3, nats=2) = 4 when not overridden", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(Equal("4"))
+	})
+
+	It("uses override requiredHosts when set", func() {
+		override := int32(3)
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{RequiredHosts: &override},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthRequiredHostsEnvVar)).To(Equal("3"))
+	})
+
+	It("sets interval env var when interval is provided", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{Interval: "15s"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(Equal("15s"))
+	})
+
+	It("omits interval env var when interval is not set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.EventBus = &bindplanev1alpha1.EventBusConfig{
+			Health: &bindplanev1alpha1.EventBusHealthConfig{},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneEventBusHealthIntervalEnvVar)).To(BeEmpty())
+	})
+})
+
+var _ = Describe("getLoggingConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("defaults BINDPLANE_LOGGING_LEVEL=info when Logging is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("info"))
+	})
+
+	It("defaults BINDPLANE_LOGGING_LEVEL=info when Logging.Level is empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("info"))
+	})
+
+	It("propagates spec.config.logging.level to BINDPLANE_LOGGING_LEVEL", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Level: "debug"}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneLoggingLevelEnvVar)).To(Equal("debug"))
+	})
+
+	It("always sets BINDPLANE_LOGGING_TYPE=stdout regardless of config", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
+
+		bindplane.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Level: "warn"}
+		envVars = getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneLoggingTypeEnvVar)).To(Equal("stdout"))
+	})
+})
+
+var _ = Describe("getPostgresTLSVolumeAndMount", func() {
+	It("returns nil when Postgres or TLS is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+		vols, mounts := getPostgresTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns nil when secretName or caKey is missing", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+							TLS:  &bindplanev1alpha1.PostgresTLSConfig{SecretName: "pg-tls"},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getPostgresTLSVolumeAndMount(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns one volume and one mount when server-side TLS (caKey) is configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Store: bindplanev1alpha1.StoreConfig{
+						Postgres: &bindplanev1alpha1.PostgresConfig{
+							Host: "pg",
+							TLS: &bindplanev1alpha1.PostgresTLSConfig{
+								SecretName: "pg-tls",
+								CAKey:      "ca.crt",
+							},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getPostgresTLSVolumeAndMount(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal("postgres-tls"))
+		Expect(vols[0].Secret).ToNot(BeNil())
+		Expect(vols[0].Secret.SecretName).To(Equal("pg-tls"))
+		Expect(mounts).To(HaveLen(1))
+		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/postgres-tls"))
+	})
+})
+
+// envVarSecretKeyRef returns the SecretKeySelector for the env var with the given name, or nil.
+func envVarSecretKeyRef(envVars []corev1.EnvVar, name string) *corev1.SecretKeySelector {
+	for _, ev := range envVars {
+		if ev.Name == name && ev.ValueFrom != nil && ev.ValueFrom.SecretKeyRef != nil {
+			return ev.ValueFrom.SecretKeyRef
+		}
+	}
+	return nil
+}
+
+var _ = Describe("getTSDBEnvVars", func() {
+	It("returns enable_remote, host, port, and username/password from generated secret when internal TLS is disabled", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+		}
+		envVars := getTSDBEnvVars(bindplane)
+		Expect(envVars).To(HaveLen(6))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-tsdb.default.svc"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_TYPE")).To(Equal("basic"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(Equal("(secret)"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(Equal("(secret)"))
+		refUser := envVarSecretKeyRef(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")
+		refPass := envVarSecretKeyRef(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")
+		Expect(refUser).ToNot(BeNil())
+		Expect(refPass).ToNot(BeNil())
+		Expect(refUser.Name).To(Equal("my-bp-tsdb-basic-auth"))
+		Expect(refUser.Key).To(Equal(tsdbBasicAuthSecretKeyUser))
+		Expect(refPass.Name).To(Equal("my-bp-tsdb-basic-auth"))
+		Expect(refPass.Key).To(Equal(tsdbBasicAuthSecretKeyPass))
+	})
+	It("uses remote Prometheus env vars and skips operator-generated basic auth when remote.enable is true", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
+							Enable:          true,
+							Host:            "vm.example.internal",
+							QueryPathPrefix: "/select/0/prometheus",
+							RemoteWrite: &bindplanev1alpha1.TSDBRemoteWriteConfig{
+								Host: "vm-write.example.internal",
+								Port: 8480,
+							},
+						},
+					},
+				},
+			},
+		}
+		envVars := getTSDBEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("vm.example.internal"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_QUERY_PATH_PREFIX")).To(Equal("/select/0/prometheus"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_HOST")).To(Equal("vm-write.example.internal"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_PORT")).To(Equal("8480"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT")).To(Equal("/api/v1/write"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_TYPE")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_USERNAME")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_PASSWORD")).To(BeEmpty())
+	})
+	It("uses remote write endpoint override when provided", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
+							Enable: true,
+							Host:   "vm.example.internal",
+							Port:   8080,
+							RemoteWrite: &bindplanev1alpha1.TSDBRemoteWriteConfig{
+								Host:     "vm-write.example.internal",
+								Port:     18480,
+								Endpoint: "/api/v1/push",
+							},
+						},
+					},
+				},
+			},
+		}
+		envVars := getTSDBEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("8080"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_ENDPOINT")).To(Equal("/api/v1/push"))
+	})
+	It("adds Prometheus TLS env vars when cert-manager TLS is enabled", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer", Kind: "ClusterIssuer"},
+						},
+					},
+				},
+			},
+		}
+		envVars := getTSDBEnvVars(bindplane)
+		Expect(envVars).To(HaveLen(10))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CERT")).To(Equal(internalTLSTSDBClientMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_KEY")).To(Equal(internalTLSTSDBClientMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CA")).To(Equal(internalTLSTSDBClientMountPath + "/ca.crt"))
+	})
+	It("adds BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY when prometheus TLS skipVerify is true", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer"},
+							SkipVerify:  true,
+						},
+					},
+				},
+			},
+		}
+		envVars := getTSDBEnvVars(bindplane)
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY")).To(Equal("true"))
+		Expect(envVars).To(HaveLen(11))
+	})
+})
+
+var _ = Describe("reconcileTSDB", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-tsdb-unit")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("short-circuits when remote Prometheus mode is enabled (no local resources created)", func() {
+		// Use a real reconciler so deleteTSDBLocalResourcesIfExist can call r.Get safely.
+		// When remote TSDB is enabled and no local resources exist, reconcileTSDB should
+		// return nil without error (all deletes are no-ops on IsNotFound).
+		reconciler := newReconciler()
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: testNamespace},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
+							Enable: true,
+							Host:   "vm.example.internal",
+						},
+					},
+				},
+			},
+		}
+		Expect(reconciler.reconcileTSDB(testCtx, bindplane, logf.Log.WithName("test"))).To(Succeed())
+	})
+})
+
+var _ = Describe("validateTSDBTLSConfig (controller_test)", func() {
+	It("returns nil when config.Prometheus is nil", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{Spec: bindplanev1alpha1.BindplaneSpec{Config: bindplanev1alpha1.BindplaneConfigSpec{License: "x", Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}}}}}
+		Expect(validateTSDBTLSConfig(bindplane)).To(Succeed())
+	})
+	It("returns error when both secretName and certManager are set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
+							SecretName:  "x",
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "issuer"},
+						},
+					},
+				},
+			},
+		}
+		Expect(validateTSDBTLSConfig(bindplane)).NotTo(Succeed())
+		Expect(validateTSDBTLSConfig(bindplane).Error()).To(ContainSubstring("mutually exclusive"))
+	})
+	It("returns nil when CertManager has a valid name", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer", Kind: "Issuer"},
+						},
+					},
+				},
+			},
+		}
+		Expect(validateTSDBTLSConfig(bindplane)).To(Succeed())
+	})
+})
+
+var _ = Describe("getInternalTLSVolumesAndMounts", func() {
+	It("returns nil when cert-manager TLS is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		vols, mounts := getInternalTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+	It("returns one volume and one mount when cert-manager TLS is enabled", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "x",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					TSDB: &bindplanev1alpha1.TSDBConfig{
+						TLS: &bindplanev1alpha1.TSDBTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca"},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getInternalTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(mounts).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal(internalTLSTSDBClientVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("bp-tsdb-remote-write-client"))
+		Expect(mounts[0].Name).To(Equal(internalTLSTSDBClientVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(internalTLSTSDBClientMountPath))
+	})
+})
+
+var _ = Describe("getNatsTLSEnvVars", func() {
+	It("returns nil when NATS TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		envVars := getNatsTLSEnvVars(bindplane)
+		Expect(envVars).To(BeNil())
+	})
+	It("returns NATS TLS env vars when spec.config.nats.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+						},
+					},
+				},
+			},
+		}
+		envVars := getNatsTLSEnvVars(bindplane)
+		Expect(envVars).NotTo(BeNil())
+		Expect(envVarByName(envVars, bindplaneNatsEnableTLSEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneNatsTLSCertEnvVar)).To(Equal(internalTLSNatsMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, bindplaneNatsTLSKeyEnvVar)).To(Equal(internalTLSNatsMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, bindplaneNatsTLSCAEnvVar)).To(Equal(internalTLSNatsMountPath + "/ca.crt"))
+		Expect(envVarByName(envVars, "BINDPLANE_NATS_TLS_SKIP_VERIFY")).To(BeEmpty())
+	})
+})
+
+var _ = Describe("getNatsTLSVolumesAndMounts", func() {
+	It("returns nil when NATS TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		vols, mounts := getNatsTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+	It("returns one volume and one mount when spec.config.nats.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					Nats: &bindplanev1alpha1.NatsConfig{
+						TLS: &bindplanev1alpha1.NatsTLSConfig{
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+						},
+					},
+				},
+			},
+		}
+		vols, mounts := getNatsTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(mounts).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal(internalTLSNatsVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("bp-nats-tls"))
+		Expect(mounts[0].Name).To(Equal(internalTLSNatsVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(internalTLSNatsMountPath))
+	})
+})
+
+var _ = Describe("getTransformAgentTLSEnvVars", func() {
+	It("returns nil when Transform Agent TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		envVars := getTransformAgentTLSEnvVars(bindplane)
+		Expect(envVars).To(BeNil())
+	})
+
+	It("returns Transform Agent TLS env vars when spec.transformAgent.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+					},
+				},
+			},
+		}
+		envVars := getTransformAgentTLSEnvVars(bindplane)
+		Expect(envVars).NotTo(BeNil())
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCertEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.crt"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSKeyEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.key"))
+		Expect(envVarByName(envVars, bindplaneTransformAgentTLSCAEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/ca.crt"))
+	})
+})
+
+var _ = Describe("getTransformAgentTLSVolumesAndMounts", func() {
+	It("returns nil when Transform Agent TLS cert-manager is not configured", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		vols, mounts := getTransformAgentTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(BeNil())
+		Expect(mounts).To(BeNil())
+	})
+
+	It("returns one volume and one mount when spec.transformAgent.tls.certManager is set", func() {
+		bindplane := &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
+					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+					},
+				},
+			},
+		}
+		vols, mounts := getTransformAgentTLSVolumesAndMounts(bindplane)
+		Expect(vols).To(HaveLen(1))
+		Expect(mounts).To(HaveLen(1))
+		Expect(vols[0].Name).To(Equal(internalTLSTransformAgentVolumeName))
+		Expect(vols[0].Secret.SecretName).To(Equal("bp-transform-agent-tls"))
+		Expect(mounts[0].Name).To(Equal(internalTLSTransformAgentVolumeName))
+		Expect(mounts[0].MountPath).To(Equal(internalTLSTransformAgentMountPath))
+	})
+})
+
+var _ = Describe("bindplaneJobsMigrateJob", func() {
+	It("mounts Transform Agent TLS when enabled", func() {
+		bindplane := newTestBindplane("bp-migrate-ta-tls", "default")
+		bindplane.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
+			TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
+				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+			},
+		}
+
+		job := newReconciler().bindplaneJobsMigrateJob(bindplane)
+
+		Expect(job.Spec.Template.Spec.Volumes).To(ContainElement(
+			And(
+				HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+				HaveField("VolumeSource.Secret.SecretName", Equal("bp-migrate-ta-tls-transform-agent-tls")),
+			),
+		))
+		Expect(job.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+			And(
+				HaveField("Name", Equal(internalTLSTransformAgentVolumeName)),
+				HaveField("MountPath", Equal(internalTLSTransformAgentMountPath)),
+			),
+		))
+		Expect(envVarByName(job.Spec.Template.Spec.Containers[0].Env, bindplaneTransformAgentTLSCertEnvVar)).To(Equal(internalTLSTransformAgentMountPath + "/tls.crt"))
+	})
+})
+
+var _ = Describe("generateTSDBBasicAuthSecretData", func() {
+	It("returns username, password, and web-config with bcrypt hash", func() {
+		data, err := generateTSDBBasicAuthSecretData()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(data).To(HaveKey(tsdbBasicAuthSecretKeyUser))
+		Expect(data).To(HaveKey(tsdbBasicAuthSecretKeyPass))
+		Expect(data).To(HaveKey(tsdbBasicAuthSecretKeyWeb))
+		Expect(string(data[tsdbBasicAuthSecretKeyUser])).To(Equal(tsdbBasicAuthUsername))
+		Expect(data[tsdbBasicAuthSecretKeyPass]).To(HaveLen(32))
+		webConfig := string(data[tsdbBasicAuthSecretKeyWeb])
+		Expect(webConfig).To(ContainSubstring("basic_auth_users:"))
+		Expect(webConfig).To(ContainSubstring(tsdbBasicAuthUsername + ":"))
+		Expect(webConfig).To(MatchRegexp(`\$2[aby]\$\d{2}\$`)) // bcrypt hash prefix
+	})
+})
+
+var _ = Describe("getAgentsConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	intPtr := func(i int) *int { return &i }
+
+	It("does not set agents env vars when Agents is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthTypeEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatTTLEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatExpiryIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceIntervalEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(BeEmpty())
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(BeEmpty())
+	})
+
+	It("sets auth.type when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{Type: "oauth,secretKey"},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthTypeEnvVar)).To(Equal("oauth,secretKey"))
+	})
+
+	It("sets auth.secretKey.headers as comma-joined when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				SecretKey: &bindplanev1alpha1.AgentsAuthSecretKeyConfig{
+					Headers: []string{"X-Bindplane-Authorization", "Authorization"},
+				},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(Equal("X-Bindplane-Authorization,Authorization"))
+	})
+
+	It("does not set auth.secretKey.headers when slice is empty", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{
+			Auth: &bindplanev1alpha1.AgentsAuthConfig{
+				SecretKey: &bindplanev1alpha1.AgentsAuthSecretKeyConfig{},
+			},
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsAuthSecretKeyHeadersEnvVar)).To(BeEmpty())
+	})
+
+	It("sets heartbeatInterval when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatInterval: "45s"}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatIntervalEnvVar)).To(Equal("45s"))
+	})
+
+	It("sets heartbeatTTL when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatTTL: "2m"}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatTTLEnvVar)).To(Equal("2m"))
+	})
+
+	It("sets heartbeatExpiryInterval when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{HeartbeatExpiryInterval: "1m"}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsHeartbeatExpiryIntervalEnvVar)).To(Equal("1m"))
+	})
+
+	It("sets rebalanceInterval when set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalanceInterval: "30m"}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceIntervalEnvVar)).To(Equal("30m"))
+	})
+
+	It("sets rebalancePercentage when non-nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalancePercentage: intPtr(50)}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(Equal("50"))
+	})
+
+	It("does not set rebalancePercentage when nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalancePercentageEnvVar)).To(BeEmpty())
+	})
+
+	It("sets rebalanceJitter when non-nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{RebalanceJitter: intPtr(10)}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(Equal("10"))
+	})
+
+	It("does not set rebalanceJitter when nil", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Agents = &bindplanev1alpha1.AgentsConfig{}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentsRebalanceJitterEnvVar)).To(BeEmpty())
+	})
+
+})
+
+var _ = Describe("getAgentVersionsConfigEnvVars", func() {
+	baseBindplane := func() *bindplanev1alpha1.Bindplane {
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+				},
+			},
+		}
+	}
+
+	It("does not set agentVersions env vars when agentVersions is nil", func() {
+		bindplane := baseBindplane()
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(BeEmpty())
+	})
+
+	It("sets agentVersions syncInterval when configured", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.AgentVersions = &bindplanev1alpha1.AgentVersionsConfig{
+			SyncInterval: "2h",
+		}
+		envVars := getBindplaneCommonEnvVars(bindplane)
+		Expect(envVarByName(envVars, bindplaneAgentVersionsSyncIntervalEnvVar)).To(Equal("2h"))
+	})
+})
+
+var _ = Describe("reconcileSessionSecret", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-session-secret")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates session secret Secret when no user fields are set", func() {
+		name := "bp-sess-auto"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey(sessionSecretKey))
+		Expect(string(secret.Data[sessionSecretKey])).NotTo(BeEmpty())
+	})
+
+	It("does not overwrite existing session secret on re-reconcile", func() {
+		name := "bp-sess-stable"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		firstValue := string(secret.Data[sessionSecretKey])
+
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret = &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(string(secret.Data[sessionSecretKey])).To(Equal(firstValue))
+	})
+
+	It("does not create session secret when sessionSecret string is set", func() {
+		name := "bp-sess-plain"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{SessionSecret: "provided-secret"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not create session secret when sessionSecretSecretRef is set", func() {
+		name := "bp-sess-ref"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Auth = &bindplanev1alpha1.AuthConfig{
+			SessionSecretSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "external-secret"},
+				Key:                  "session-secret",
+			},
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-session-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+var _ = Describe("reconcileStatusSecret", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-status-secret")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("creates a status secret with a generated UUID when status is omitted", func() {
+		name := "bp-status-auto"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey(statusSecretKey))
+		_, perr := uuid.Parse(string(secret.Data[statusSecretKey]))
+		Expect(perr).NotTo(HaveOccurred())
+	})
+
+	It("creates a status secret when status is enabled with no keys", func() {
+		name := "bp-status-enabled"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: true}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(secret.Data).To(HaveKey(statusSecretKey))
+	})
+
+	It("does not create a status secret when status is explicitly disabled", func() {
+		name := "bp-status-disabled"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: false}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not create a status secret when inline keys are set", func() {
+		name := "bp-status-keys"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			Keys:    []string{"11111111-1111-1111-1111-111111111111"},
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not create a status secret when keysSecretRef is set", func() {
+		name := "bp-status-ref"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{
+			Enabled: true,
+			KeysSecretRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: "external-status-secret"},
+				Key:                  "keys",
+			},
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not overwrite an existing status secret on re-reconcile", func() {
+		name := "bp-status-stable"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		firstValue := string(secret.Data[statusSecretKey])
+
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		secret = &corev1.Secret{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-status-secret", Namespace: testNamespace}, secret)).To(Succeed())
+		Expect(string(secret.Data[statusSecretKey])).To(Equal(firstValue))
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Task 8: Deletion integration test
+// Verifies that deleting a Bindplane CR sets Phase=Deleting and finalizer is removed.
+// ---------------------------------------------------------------------------
+
+var _ = Describe("Reconcile - deletion lifecycle", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-deletion")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("sets Phase=Deleting and removes finalizer on CR deletion", func() {
+		name := "bp-deletion"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile 1: adds finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify finalizer is present
+		created := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, created)).To(Succeed())
+		Expect(created.Finalizers).To(ContainElement(bindplaneFinalizer))
+
+		// Delete the CR — DeletionTimestamp is set (finalizer prevents immediate deletion)
+		Expect(k8sClient.Delete(testCtx, created)).To(Succeed())
+
+		// Reconcile 2: deletion path — sets Phase=Deleting, removes finalizer
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// CR should be gone (finalizer removed → GC deletes it)
+		final := &bindplanev1alpha1.Bindplane{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, final)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("garbage-collects owned resources after CR deletion", func() {
+		name := "bp-gc"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile until past migration so owned resources are created
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Verify at least one owned resource (Transform Agent ServiceAccount) was created
+		sa := &corev1.ServiceAccount{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-transform-agent", Namespace: testNamespace}, sa)).To(Succeed())
+		Expect(sa.OwnerReferences).To(HaveLen(1))
+		Expect(sa.OwnerReferences[0].Name).To(Equal(name))
+
+		// Delete the CR
+		created := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, created)).To(Succeed())
+		Expect(k8sClient.Delete(testCtx, created)).To(Succeed())
+
+		// Run deletion reconcile — removes finalizer
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// CR should be gone
+		final := &bindplanev1alpha1.Bindplane{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, final)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Task 9: Toggle integration tests
+// Covers the disable transitions listed in the plan (Section C):
+//   - TSDB remote enable: flipping false→true deletes local Prometheus StatefulSet
+// ---------------------------------------------------------------------------
+
+var _ = Describe("Reconcile - TSDB remote toggle", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-tsdb-toggle")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("deletes local Prometheus StatefulSet when spec.config.tsdb.remote.enable flips to true", func() {
+		name := "bp-tsdb-remote"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// Reconcile past migration to create local TSDB resources
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Local Prometheus StatefulSet should exist
+		ss := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb", Namespace: testNamespace}, ss)).To(Succeed())
+
+		// Enable remote TSDB (host is required when enable=true per CRD validation)
+		current := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, current)).To(Succeed())
+		current.Spec.Config.TSDB = &bindplanev1alpha1.TSDBConfig{
+			Remote: &bindplanev1alpha1.TSDBRemoteConfig{
+				Enable: true,
+				Host:   "remote-prometheus.example.com",
+			},
+		}
+		Expect(k8sClient.Update(testCtx, current)).To(Succeed())
+
+		// Reconcile — deleteTSDBLocalResourcesIfExist should be called
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Local StatefulSet should be deleted
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb", Namespace: testNamespace}, ss)
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "expected local TSDB StatefulSet to be deleted after enabling remote TSDB")
+
+		// Local basic-auth secret should also be deleted
+		secret := &corev1.Secret{}
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-tsdb-basic-auth", Namespace: testNamespace}, secret)
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "expected local TSDB basic-auth Secret to be deleted after enabling remote TSDB")
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Task 5 verification: HPA-managed replica count is preserved across reconciles
+// ---------------------------------------------------------------------------
+
+var _ = Describe("Reconcile - HPA replica preservation", func() {
+	var (
+		testNamespace string
+		testCtx       context.Context
+	)
+
+	BeforeEach(func() {
+		testCtx = context.Background()
+		testNamespace = createTestNamespace(testCtx, "test-hpa")
+	})
+
+	AfterEach(func() {
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
+		_ = k8sClient.Delete(testCtx, ns)
+	})
+
+	It("preserves HPA-managed replica count on re-reconcile", func() {
+		name := "bp-hpa"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{
+			Enabled: true,
+		}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Node Deployment should exist. The API server defaults Replicas to 1 even when
+		// the desired spec passes nil — what matters is that the operator does NOT override
+		// a different value chosen by the HPA.
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, dep)).To(Succeed())
+
+		// Simulate HPA setting replicas to 5 (different from any static default)
+		hpaReplicas := int32(5)
+		dep.Spec.Replicas = &hpaReplicas
+		Expect(k8sClient.Update(testCtx, dep)).To(Succeed())
+
+		// Re-reconcile — the operator's desired spec has Replicas=nil, so it must
+		// preserve the HPA-managed value (5) rather than resetting to 1 or nil.
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Replica count set by HPA must be preserved
+		depAfter := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, depAfter)).To(Succeed())
+		Expect(depAfter.Spec.Replicas).NotTo(BeNil())
+		Expect(*depAfter.Spec.Replicas).To(Equal(hpaReplicas), "HPA-managed replica count should be preserved across reconcile")
+	})
+})

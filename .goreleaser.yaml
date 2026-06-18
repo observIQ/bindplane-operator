@@ -1,0 +1,86 @@
+version: 2
+
+before:
+  hooks:
+    - make manifests generate
+    - make build-installer-release IMG=ghcr.io/observiq/bindplane-operator:{{ .Version }}
+    - make build-installer-no-webhook IMG=ghcr.io/observiq/bindplane-operator:{{ .Version }}
+
+builds:
+  - main: ./cmd/main.go
+    binary: manager
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -a
+
+dockers:
+  - image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-amd64"
+      - "ghcr.io/observiq/bindplane-operator:latest-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    goarch: amd64
+    extra_files: []
+  - image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-arm64"
+      - "ghcr.io/observiq/bindplane-operator:latest-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    goarch: arm64
+    extra_files: []
+
+docker_manifests:
+  - name_template: "ghcr.io/observiq/bindplane-operator:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-amd64"
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/observiq/bindplane-operator:latest"
+    image_templates:
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-amd64"
+      - "ghcr.io/observiq/bindplane-operator:{{ .Version }}-arm64"
+
+sboms:
+  - artifacts: binary
+    documents:
+      - "{{ .Binary }}_{{ .Os }}_{{ .Arch }}.sbom.json"
+
+archives:
+  - format: binary
+
+release:
+  github:
+    owner: observiq
+    name: bindplane-operator
+  extra_files:
+    - glob: tmp/install.yaml
+    - glob: tmp/install-no-webhook.yaml
+  header: |
+    ## Container Image
+
+    ```
+    ghcr.io/observiq/bindplane-operator:{{ .Version }}
+    ```
+
+    ## Installation
+
+    **Default install (includes validating admission webhook — requires [cert-manager](https://cert-manager.io/docs/installation/)):**
+
+    ```bash
+    kubectl apply --server-side -f https://github.com/observiq/bindplane-operator/releases/download/{{ .Tag }}/install.yaml
+    ```
+
+    **Without the validating webhook (no cert-manager required):**
+
+    ```bash
+    kubectl apply --server-side -f https://github.com/observiq/bindplane-operator/releases/download/{{ .Tag }}/install-no-webhook.yaml
+    ```
