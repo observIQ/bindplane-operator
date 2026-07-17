@@ -169,11 +169,17 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
+								// getBindplaneCommonEnvVarsForNATS (not getBindplaneCommonEnvVars) omits the
+								// external-IdP federation env (BINDPLANE_OIDC_* / BINDPLANE_LDAP_*) while keeping
+								// system creds, session secret, and license. NATS has no console auth surface;
+								// injecting the OIDC client-secret ref made NATS fail CreateContainerConfigError
+								// when that Secret was unseeded, taking down the message bus. See
+								// getBindplaneCommonEnvVarsForNATS.
 								Env: prependExtraEnv(
 									getNatsExtraEnv(bindplane),
 									getKubernetesEnvVars(natsContainerName),
 									getNatsEnvVars(bindplane, headlessServiceName, replicas),
-									getBindplaneCommonEnvVars(bindplane),
+									getBindplaneCommonEnvVarsForNATS(bindplane),
 								),
 								Resources: natsResources,
 								// TODO(jsirianni): When NATS TLS is enabled the HTTP port serves TLS; Kubernetes HTTPGet does not support TLS. Use TCPSocket for now; add Bindplane CLI healthchecks that support exec probes for proper TLS healthcheck when available.

@@ -3099,6 +3099,73 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 	})
 })
 
+var _ = Describe("NATS StatefulSet federation env exclusion", func() {
+	// NATS has no console auth surface, so it must not receive external-IdP federation env
+	// (BINDPLANE_OIDC_* / BINDPLANE_LDAP_*): an unseeded OIDC client-secret Secret makes the
+	// NATS pods fail CreateContainerConfigError and takes down the message bus. It DOES keep
+	// system creds, session secret, and license, mirroring the canonical NATS StatefulSet.
+	newBindplaneWithAuth := func() *bindplanev1alpha1.Bindplane {
+		nodeReplicas := int32(3)
+		natsReplicas := int32(3)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
+				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "test-license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Auth: &bindplanev1alpha1.AuthConfig{
+						Type:     "multi",
+						Username: "admin",
+						Password: "secret",
+						APIKey:   "api-key",
+						LDAP: &bindplanev1alpha1.LDAPConfig{
+							Server: "ldap.example.com",
+						},
+						OIDC: &bindplanev1alpha1.OIDCConfig{
+							Issuer: "https://issuer.example.com",
+							ClientSecretSecretRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "bindplane-oidc-client-secret"},
+								Key:                  "client-secret",
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	natsContainerEnv := func(bp *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+		return (&BindplaneReconciler{}).natsStatefulSet(bp).Spec.Template.Spec.Containers[0].Env
+	}
+
+	It("excludes external-IdP federation (OIDC/LDAP) env from the NATS container", func() {
+		env := natsContainerEnv(newBindplaneWithAuth())
+		Expect(findEnvVar(env, bindplaneOIDCClientSecretEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneOIDCIssuerEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneLDAPServerEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneLDAPProtocolEnvVar)).To(BeNil())
+	})
+
+	It("keeps system creds, session secret, license, and NATS server env on the NATS container", func() {
+		env := natsContainerEnv(newBindplaneWithAuth())
+		Expect(findEnvVar(env, bindplaneUsernameEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplanePasswordEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneSessionSecretEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneLicenseEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneNatsServerEnableEnvVar)).NotTo(BeNil())
+	})
+
+	It("still injects OIDC/LDAP federation env on the node deployment", func() {
+		env := (&BindplaneReconciler{}).nodeDeployment(newBindplaneWithAuth()).Spec.Template.Spec.Containers[0].Env
+		Expect(findEnvVar(env, bindplaneOIDCClientSecretEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneOIDCIssuerEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneLDAPServerEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneSessionSecretEnvVar)).NotTo(BeNil())
+	})
+})
+
 var _ = Describe("getLoggingConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{

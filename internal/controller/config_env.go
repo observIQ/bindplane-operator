@@ -113,7 +113,14 @@ func getOIDCEnvVars(oidc *bindplanev1alpha1.OIDCConfig) []corev1.EnvVar {
 }
 
 // getAuthConfigEnvVars returns env vars for spec.config.auth.
-func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig) []corev1.EnvVar {
+//
+// The auth base — BINDPLANE_AUTH_TYPE, sessionsStrictMode, and the system credentials
+// (BINDPLANE_USERNAME / BINDPLANE_PASSWORD / BINDPLANE_SECRET_KEY) — is always emitted.
+// External-IdP federation (BINDPLANE_LDAP_* and BINDPLANE_OIDC_*) is only emitted when
+// includeFederation is true. NATS passes false: it has no console auth surface, and the
+// OIDC/LDAP env carry secretRefs to user-supplied secrets that, when unseeded, would
+// CreateContainerConfigError the NATS pods and take down the message bus.
+func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig, includeFederation bool) []corev1.EnvVar {
 	if auth == nil {
 		return nil
 	}
@@ -133,8 +140,10 @@ func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig) []corev1.EnvVar {
 	if ev := secretOrValue(bindplaneSecretKeyEnvVar, auth.APIKey, auth.APIKeySecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
-	envVars = append(envVars, getLDAPEnvVars(auth.LDAP)...)
-	envVars = append(envVars, getOIDCEnvVars(auth.OIDC)...)
+	if includeFederation {
+		envVars = append(envVars, getLDAPEnvVars(auth.LDAP)...)
+		envVars = append(envVars, getOIDCEnvVars(auth.OIDC)...)
+	}
 	return envVars
 }
 
@@ -352,39 +361,52 @@ func getMiscConfigEnvVars(config *bindplanev1alpha1.BindplaneConfigSpec) []corev
 	return envVars
 }
 
+// getSessionSecretEnvVar returns the BINDPLANE_SESSION_SECRET env var. A user-provided
+// plain value or SecretRef takes precedence; otherwise it references the operator-generated
+// session secret.
+func getSessionSecretEnvVar(bindplane *bindplanev1alpha1.Bindplane) corev1.EnvVar {
+	config := &bindplane.Spec.Config
+	if config.Auth != nil {
+		if ev := secretOrValue(bindplaneSessionSecretEnvVar, config.Auth.SessionSecret, config.Auth.SessionSecretSecretRef); ev != nil {
+			return *ev
+		}
+	}
+	return corev1.EnvVar{
+		Name: bindplaneSessionSecretEnvVar,
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: getResourceName(bindplane, sessionSecretSuffix),
+				},
+				Key: sessionSecretKey,
+			},
+		},
+	}
+}
+
 // getBindplaneConfigEnvVars converts BindplaneConfigSpec to environment variables
 // following the naming convention from override_test.go (BINDPLANE_*)
 func getBindplaneConfigEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	return getBindplaneConfigEnvVarsWithFederation(bindplane, true)
+}
+
+// getBindplaneConfigEnvVarsWithFederation is getBindplaneConfigEnvVars with control over whether
+// external-IdP federation env is included. When includeFederation is false, only BINDPLANE_OIDC_*
+// and BINDPLANE_LDAP_* are omitted (see getAuthConfigEnvVars); the auth base (BINDPLANE_AUTH_TYPE,
+// sessionsStrictMode, system credentials) and BINDPLANE_SESSION_SECRET remain. NATS uses this via
+// getBindplaneCommonEnvVarsForNATS so it does not depend on the user-supplied OIDC/LDAP secrets.
+func getBindplaneConfigEnvVarsWithFederation(bindplane *bindplanev1alpha1.Bindplane, includeFederation bool) []corev1.EnvVar {
 	config := &bindplane.Spec.Config
 
 	var envVars []corev1.EnvVar
 	if ev := secretOrValue(bindplaneLicenseEnvVar, config.License, config.LicenseSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
 	}
-	envVars = append(envVars, getAuthConfigEnvVars(config.Auth)...)
-
-	// Session secret: always injected. User-provided plain value or SecretRef takes precedence;
-	// otherwise reference the operator-generated secret.
-	var sessionSecretEV corev1.EnvVar
-	if config.Auth != nil {
-		if ev := secretOrValue(bindplaneSessionSecretEnvVar, config.Auth.SessionSecret, config.Auth.SessionSecretSecretRef); ev != nil {
-			sessionSecretEV = *ev
-		}
-	}
-	if sessionSecretEV.Name == "" {
-		sessionSecretEV = corev1.EnvVar{
-			Name: bindplaneSessionSecretEnvVar,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: getResourceName(bindplane, sessionSecretSuffix),
-					},
-					Key: sessionSecretKey,
-				},
-			},
-		}
-	}
-	envVars = append(envVars, sessionSecretEV)
+	envVars = append(envVars, getAuthConfigEnvVars(config.Auth, includeFederation)...)
+	// Session secret: always injected (independent of federation). User-provided plain value or
+	// SecretRef takes precedence; otherwise reference the operator-generated secret, which is always
+	// present, so this is safe for NATS too.
+	envVars = append(envVars, getSessionSecretEnvVar(bindplane))
 
 	envVars = append(envVars, getNetworkConfigEnvVars(config.Network, bindplane)...)
 	envVars = append(envVars, corev1.EnvVar{Name: bindplaneStoreTypeEnvVar, Value: "postgres"})
@@ -717,11 +739,33 @@ func getStatusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	return envVars
 }
 
-// getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
+// getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, and Jobs Migrate.
 func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	return getBindplaneCommonEnvVarsWithFederation(bindplane, true)
+}
+
+// getBindplaneCommonEnvVarsForNATS returns the common env vars for the NATS StatefulSet.
+// It is identical to getBindplaneCommonEnvVars EXCEPT it omits external-IdP federation env
+// (BINDPLANE_OIDC_* and BINDPLANE_LDAP_*). The auth base — BINDPLANE_AUTH_TYPE, system
+// credentials (BINDPLANE_USERNAME / BINDPLANE_PASSWORD / BINDPLANE_SECRET_KEY) — and
+// BINDPLANE_SESSION_SECRET are retained.
+//
+// NATS has no console auth surface, so it needs no external-IdP federation. Worse, the OIDC/LDAP
+// env carry secretRefs to user-supplied secrets: when the OIDC client secret was missing or
+// unseeded, the NATS pods failed with CreateContainerConfigError
+// (`secret "bindplane-oidc-client-secret" not found`) and took down the message bus for no reason.
+// This mirrors the canonical hand-written NATS StatefulSet, which carries system creds, license,
+// and session secret but no OIDC/LDAP env.
+func getBindplaneCommonEnvVarsForNATS(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	return getBindplaneCommonEnvVarsWithFederation(bindplane, false)
+}
+
+// getBindplaneCommonEnvVarsWithFederation builds the shared env var bundle, optionally omitting
+// external-IdP federation env (see getBindplaneConfigEnvVarsWithFederation).
+func getBindplaneCommonEnvVarsWithFederation(bindplane *bindplanev1alpha1.Bindplane, includeFederation bool) []corev1.EnvVar {
 	config := &bindplane.Spec.Config
 	return combineEnvVars(
-		getBindplaneConfigEnvVars(bindplane),
+		getBindplaneConfigEnvVarsWithFederation(bindplane, includeFederation),
 		getTSDBEnvVars(bindplane),
 		getTransformAgentEnvVars(bindplane),
 		getTransformAgentTLSEnvVars(bindplane),
