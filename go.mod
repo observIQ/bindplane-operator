@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/argoproj/argo-rollouts v1.9.0
-	github.com/cert-manager/cert-manager v1.20.2
+	github.com/cert-manager/cert-manager v1.20.3
 	github.com/go-logr/logr v1.4.3
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.29.0
