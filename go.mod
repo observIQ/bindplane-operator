@@ -7,7 +7,7 @@ require (
 	github.com/cert-manager/cert-manager v1.20.3
 	github.com/go-logr/logr v1.4.3
 	github.com/google/uuid v1.6.0
-	github.com/onsi/ginkgo/v2 v2.29.0
+	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.53.0
