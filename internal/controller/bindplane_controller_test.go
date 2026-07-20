@@ -3099,6 +3099,104 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 	})
 })
 
+var _ = Describe("NATS StatefulSet env is minimal", func() {
+	// The NATS event bus gets its BINDPLANE_NATS_* env plus only pod-level operational settings
+	// (stdout logging + status disabled). It has no console/API auth surface and must not reach
+	// the store, so the StatefulSet gets no auth env (which caused the CreateContainerConfigError
+	// outage via an unseeded OIDC client-secret SecretKeyRef, and an admin/admin auth gap), no
+	// license, and no postgres/store env.
+	// See https://docs.bindplane.com/configuration/bindplane/nats-as-event-bus.
+	newBindplaneWithAuth := func() *bindplanev1alpha1.Bindplane {
+		nodeReplicas := int32(3)
+		natsReplicas := int32(3)
+		return &bindplanev1alpha1.Bindplane{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			Spec: bindplanev1alpha1.BindplaneSpec{
+				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
+				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
+				Config: bindplanev1alpha1.BindplaneConfigSpec{
+					License: "test-license",
+					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
+					Auth: &bindplanev1alpha1.AuthConfig{
+						Type:     "multi",
+						Username: "admin",
+						Password: "secret",
+						APIKey:   "api-key",
+						LDAP:     &bindplanev1alpha1.LDAPConfig{Server: "ldap.example.com"},
+						OIDC: &bindplanev1alpha1.OIDCConfig{
+							Issuer: "https://issuer.example.com",
+							ClientSecretSecretRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "bindplane-oidc-client-secret"},
+								Key:                  "client-secret",
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	natsContainerEnv := func(bp *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+		return (&BindplaneReconciler{}).natsStatefulSet(bp).Spec.Template.Spec.Containers[0].Env
+	}
+
+	It("keeps the NATS server env on the NATS container", func() {
+		env := natsContainerEnv(newBindplaneWithAuth())
+		Expect(findEnvVar(env, bindplaneNatsServerEnableEnvVar)).NotTo(BeNil())
+	})
+
+	It("keeps stdout logging on the NATS container so kubectl logs works", func() {
+		env := natsContainerEnv(newBindplaneWithAuth())
+		logType := findEnvVar(env, bindplaneLoggingTypeEnvVar)
+		Expect(logType).NotTo(BeNil())
+		Expect(logType.Value).To(Equal("stdout"))
+		Expect(findEnvVar(env, bindplaneLoggingLevelEnvVar)).NotTo(BeNil())
+	})
+
+	It("propagates spec.config.logging.level to the NATS container", func() {
+		bp := newBindplaneWithAuth()
+		bp.Spec.Config.Logging = &bindplanev1alpha1.LoggingConfig{Level: "debug"}
+		logLevel := findEnvVar(natsContainerEnv(bp), bindplaneLoggingLevelEnvVar)
+		Expect(logLevel).NotTo(BeNil())
+		Expect(logLevel.Value).To(Equal("debug"))
+	})
+
+	It("explicitly disables status on the NATS container (no API/status surface)", func() {
+		env := natsContainerEnv(newBindplaneWithAuth())
+		status := findEnvVar(env, bindplaneStatusEnabledEnvVar)
+		Expect(status).NotTo(BeNil())
+		Expect(status.Value).To(Equal("false"))
+		// Status keys secret ref must never be injected into NATS.
+		Expect(findEnvVar(env, bindplaneStatusKeysEnvVar)).To(BeNil())
+	})
+
+	It("excludes all auth env (OIDC/LDAP/basic/session) from the NATS container", func() {
+		env := natsContainerEnv(newBindplaneWithAuth())
+		Expect(findEnvVar(env, bindplaneAuthTypeEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneUsernameEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplanePasswordEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneOIDCClientSecretEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneOIDCIssuerEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneLDAPServerEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneSessionSecretEnvVar)).To(BeNil())
+	})
+
+	It("excludes the license and store/postgres env from the NATS container", func() {
+		env := natsContainerEnv(newBindplaneWithAuth())
+		Expect(findEnvVar(env, bindplaneLicenseEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplaneStoreTypeEnvVar)).To(BeNil())
+		Expect(findEnvVar(env, bindplanePostgresHostEnvVar)).To(BeNil())
+	})
+
+	It("still injects full auth and store env on the node deployment", func() {
+		env := (&BindplaneReconciler{}).nodeDeployment(newBindplaneWithAuth()).Spec.Template.Spec.Containers[0].Env
+		Expect(findEnvVar(env, bindplaneOIDCClientSecretEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneLDAPServerEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneSessionSecretEnvVar)).NotTo(BeNil())
+		Expect(findEnvVar(env, bindplaneStoreTypeEnvVar)).NotTo(BeNil())
+	})
+})
+
 var _ = Describe("getLoggingConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{

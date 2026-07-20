@@ -169,11 +169,20 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										Protocol:      corev1.ProtocolTCP,
 									},
 								},
+								// NATS receives its NATS server/client/cluster/TLS env plus only the
+								// pod-level operational settings from getNatsBindplaneEnvVars (stdout
+								// logging + status disabled) — NOT the full common bundle that Node/Jobs
+								// get. It has no console/API auth surface and must not reach the store, so
+								// it gets no auth (OIDC/LDAP/basic/session), license, postgres, network,
+								// tracing, metrics, tsdb, transform-agent, or event-bus-health env. This
+								// avoids both an auth gap and the CreateContainerConfigError outage caused
+								// by an unseeded OIDC client-secret SecretKeyRef. See getNatsBindplaneEnvVars
+								// and https://docs.bindplane.com/configuration/bindplane/nats-as-event-bus.
 								Env: prependExtraEnv(
 									getNatsExtraEnv(bindplane),
 									getKubernetesEnvVars(natsContainerName),
 									getNatsEnvVars(bindplane, headlessServiceName, replicas),
-									getBindplaneCommonEnvVars(bindplane),
+									getNatsBindplaneEnvVars(bindplane),
 								),
 								Resources: natsResources,
 								// TODO(jsirianni): When NATS TLS is enabled the HTTP port serves TLS; Kubernetes HTTPGet does not support TLS. Use TCPSocket for now; add Bindplane CLI healthchecks that support exec probes for proper TLS healthcheck when available.

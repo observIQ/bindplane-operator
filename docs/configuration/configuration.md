@@ -2,7 +2,7 @@
 
 This document describes **Bindplane configuration**—the `spec.config` field and related Bindplane server settings (license, auth, network, store, tracing, metrics). For the full list of custom resource options (all CRD fields, including component specs and pod templates), see the [API Reference](api.md). The API reference is generated from the CRD; run `make generate-api-docs` to regenerate it. For an overview of TLS and Secret usage (including operator-generated secrets), see [Security: TLS and Secrets](security.md).
 
-Configuration is provided via the `spec.config` field of the `Bindplane` custom resource. The operator translates these fields into environment variables on the Node, NATS, Jobs, and Jobs Migrate workloads.
+Configuration is provided via the `spec.config` field of the `Bindplane` custom resource. The operator translates these fields into environment variables on the Node, Jobs, and Jobs Migrate workloads. The NATS StatefulSet is the exception: it runs only the embedded NATS event bus, so it receives its event-bus env (from `spec.config.nats`, `spec.config.eventBus`, and `spec.nats`) plus the pod-level operational settings every Bindplane pod needs (stdout logging and `spec.config.logging.level`), but not the auth, license, store, or other Bindplane-application config. Status checks are explicitly disabled on NATS.
 
 ## Table of contents
 
@@ -686,7 +686,7 @@ spec:
 
 ## Status checks
 
-The `spec.config.status` section configures Bindplane's authenticated status check endpoints. Status checks are **enabled by default**, including when the `status` block is omitted entirely — no configuration is required to use them.
+The `spec.config.status` section configures Bindplane's authenticated status check endpoints. Status checks are **enabled by default**, including when the `status` block is omitted entirely — no configuration is required to use them. This applies to the Node, Jobs, and Jobs Migrate workloads; the NATS StatefulSet serves no status endpoint, so the operator always sets `BINDPLANE_STATUS_ENABLED=false` on it regardless of this setting.
 
 Requests to the status endpoints are authenticated with one or more UUID keys. There are three ways the keys are supplied, in priority order:
 
