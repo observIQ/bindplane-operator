@@ -717,7 +717,34 @@ func getStatusEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	return envVars
 }
 
-// getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, Jobs Migrate, and NATS.
+// getNatsBindplaneEnvVars returns the non-NATS Bindplane env for the NATS StatefulSet.
+//
+// NATS runs the bindplane-ee binary but serves no console/API surface and must not reach the
+// store, so it deliberately does NOT get the full common bundle (auth OIDC/LDAP/basic/session,
+// license, store/postgres, network, tracing, metrics, tsdb, transform-agent, event-bus-health).
+// It keeps only the pod-level operational settings that every Bindplane pod needs:
+//
+//   - Logging: the operator forces BINDPLANE_LOGGING_TYPE=stdout on every Bindplane pod (the
+//     binary does not default to stdout) so `kubectl logs bindplane-nats-N` works, and it
+//     propagates spec.config.logging.level.
+//   - Status: explicitly disabled (BINDPLANE_STATUS_ENABLED=false). Status checks are an
+//     authenticated API endpoint feature; NATS exposes no such endpoint, so it needs neither
+//     the endpoint enabled nor its keys. Disabling explicitly (rather than relying on the
+//     binary default, which is enabled) keeps NATS free of the status keys secret dependency.
+//
+// See https://docs.bindplane.com/configuration/bindplane/nats-as-event-bus.
+func getNatsBindplaneEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
+	config := &bindplane.Spec.Config
+	envVars := getLoggingConfigEnvVars(config)
+	envVars = append(envVars, corev1.EnvVar{Name: bindplaneStatusEnabledEnvVar, Value: "false"})
+	return envVars
+}
+
+// getBindplaneCommonEnvVars returns env vars shared by Node, Jobs, and Jobs Migrate.
+//
+// It is deliberately NOT used by the NATS StatefulSet, which uses getNatsBindplaneEnvVars: the
+// NATS event bus serves no console/API surface and must not receive the auth env
+// (OIDC/LDAP/basic/session), the license, or store/postgres access. See nats.go.
 func getBindplaneCommonEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	config := &bindplane.Spec.Config
 	return combineEnvVars(
