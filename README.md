@@ -14,9 +14,6 @@
 
 A Kubernetes operator for managing [Bindplane](https://bindplane.com/) server deployments in Kubernetes clusters.
 
-> ⚠️ **Beta:** The Bindplane Operator is currently in beta and is **not recommended for production use**. If you are
-> interested in using the operator, please reach out to your Bindplane contact or [Bindplane support](https://bindplane.com/contact).
-
 ## About
 
 Bindplane is a telemetry pipeline built on [OpenTelemetry](https://opentelemetry.io/) that enables teams to collect,
