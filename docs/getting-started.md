@@ -1,8 +1,5 @@
 # Getting Started
 
-> ⚠️ **Beta:** The Bindplane Operator is currently in beta and is **not recommended for production use**. If you are
-> interested in using the operator, please reach out to your Bindplane contact or [Bindplane support](https://bindplane.com/contact).
-
 ## Prerequisites
 
 Before following this guide, ensure you have the following:
