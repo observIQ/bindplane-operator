@@ -14834,6 +14834,31 @@ spec:
                             - key
                             type: object
                             x-kubernetes-map-type: atomic
+                          customClaims:
+                            properties:
+                              adminGroupName:
+                                type: string
+                              defaultRole:
+                                type: string
+                              groupIds:
+                                type: string
+                              groups:
+                                type: string
+                              orgAdminGroupName:
+                                type: string
+                              organizationAdmin:
+                                type: string
+                              projects:
+                                type: string
+                              projectsGroupPrefix:
+                                type: string
+                              roles:
+                                type: string
+                              userGroupName:
+                                type: string
+                              viewerGroupName:
+                                type: string
+                            type: object
                           disableInvitations:
                             type: boolean
                           issuer:

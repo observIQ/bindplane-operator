@@ -1382,6 +1382,75 @@ type OIDCConfig struct {
 	// When true, users cannot be invited via email and must log in via OIDC directly.
 	// +optional
 	DisableInvitations bool `json:"disableInvitations,omitempty"`
+
+	// CustomClaims customizes the ID token claim names Bindplane reads and the
+	// group / role strings it matches within those claims. Omit a field to keep
+	// the Bindplane default.
+	// +optional
+	CustomClaims *OIDCCustomClaimsConfig `json:"customClaims,omitempty"`
+}
+
+// OIDCCustomClaimsConfig customizes OIDC claim names and the group / role strings
+// Bindplane matches, so an existing identity provider does not have to be reshaped
+// to Bindplane's default claim names.
+//
+// The first group of fields renames the claims Bindplane reads on the ID token.
+// The second group changes the strings Bindplane matches inside the groups and
+// roles claims (after claim names are resolved).
+type OIDCCustomClaimsConfig struct {
+	// Groups is the claim name for user groups. Defaults to "groups".
+	// +optional
+	Groups string `json:"groups,omitempty"`
+
+	// GroupIDs is the claim name for group IDs, used as a fallback when the groups
+	// claim is missing, empty, or parses to an empty list. Defaults to "group_ids".
+	// +optional
+	GroupIDs string `json:"groupIds,omitempty"`
+
+	// Roles is the claim name for user roles. Defaults to "roles".
+	// +optional
+	Roles string `json:"roles,omitempty"`
+
+	// OrganizationAdmin is the claim name indicating organization admin status.
+	// Defaults to "bindplane_org_admin".
+	// +optional
+	OrganizationAdmin string `json:"organizationAdmin,omitempty"`
+
+	// Projects is the claim name for Bindplane project assignments.
+	// Defaults to "bindplane_projects".
+	// +optional
+	Projects string `json:"projects,omitempty"`
+
+	// DefaultRole is the claim name for default role assignment.
+	// Defaults to "bindplane_default_role".
+	// +optional
+	DefaultRole string `json:"defaultRole,omitempty"`
+
+	// OrgAdminGroupName is the group / role string that indicates organization admin
+	// status. Defaults to "bindplane-org-admin".
+	// +optional
+	OrgAdminGroupName string `json:"orgAdminGroupName,omitempty"`
+
+	// ProjectsGroupPrefix is the group / role prefix that encodes project assignments,
+	// e.g. "bindplane-projects-<projectID>" or "bindplane-projects-<role>:<projectID>".
+	// Defaults to "bindplane-projects-".
+	// +optional
+	ProjectsGroupPrefix string `json:"projectsGroupPrefix,omitempty"`
+
+	// AdminGroupName is the group / role string that indicates the admin role.
+	// Defaults to "bindplane-admin".
+	// +optional
+	AdminGroupName string `json:"adminGroupName,omitempty"`
+
+	// UserGroupName is the group / role string that indicates the user role.
+	// Defaults to "bindplane-user".
+	// +optional
+	UserGroupName string `json:"userGroupName,omitempty"`
+
+	// ViewerGroupName is the group / role string that indicates the viewer role.
+	// Defaults to "bindplane-viewer".
+	// +optional
+	ViewerGroupName string `json:"viewerGroupName,omitempty"`
 }
 
 // NetworkConfig defines network configuration
