@@ -269,6 +269,21 @@ const (
 	// OIDC additional configuration
 	bindplaneOIDCDisableInvitationsEnvVar = "BINDPLANE_OIDC_DISABLE_INVITATIONS"
 
+	// OIDC custom claims: claim name overrides
+	bindplaneOIDCCustomClaimsGroupsEnvVar            = "BINDPLANE_OIDC_CUSTOM_CLAIMS_GROUPS"
+	bindplaneOIDCCustomClaimsGroupIDsEnvVar          = "BINDPLANE_OIDC_CUSTOM_CLAIMS_GROUP_IDS"
+	bindplaneOIDCCustomClaimsRolesEnvVar             = "BINDPLANE_OIDC_CUSTOM_CLAIMS_ROLES"
+	bindplaneOIDCCustomClaimsOrganizationAdminEnvVar = "BINDPLANE_OIDC_CUSTOM_CLAIMS_ORGANIZATION_ADMIN"
+	bindplaneOIDCCustomClaimsProjectsEnvVar          = "BINDPLANE_OIDC_CUSTOM_CLAIMS_PROJECTS"
+	bindplaneOIDCCustomClaimsDefaultRoleEnvVar       = "BINDPLANE_OIDC_CUSTOM_CLAIMS_DEFAULT_ROLE"
+
+	// OIDC custom claims: group / role pattern overrides
+	bindplaneOIDCCustomClaimsOrgAdminGroupNameEnvVar   = "BINDPLANE_OIDC_CUSTOM_CLAIMS_ORG_ADMIN_GROUP_NAME"
+	bindplaneOIDCCustomClaimsProjectsGroupPrefixEnvVar = "BINDPLANE_OIDC_CUSTOM_CLAIMS_PROJECTS_GROUP_PREFIX"
+	bindplaneOIDCCustomClaimsAdminGroupNameEnvVar      = "BINDPLANE_OIDC_CUSTOM_CLAIMS_ADMIN_GROUP_NAME"
+	bindplaneOIDCCustomClaimsUserGroupNameEnvVar       = "BINDPLANE_OIDC_CUSTOM_CLAIMS_USER_GROUP_NAME"
+	bindplaneOIDCCustomClaimsViewerGroupNameEnvVar     = "BINDPLANE_OIDC_CUSTOM_CLAIMS_VIEWER_GROUP_NAME"
+
 	// NATS TLS additional configuration
 	bindplaneNatsTLSSkipVerifyEnvVar = "BINDPLANE_NATS_TLS_SKIP_VERIFY"
 )

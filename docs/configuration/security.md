@@ -14,7 +14,7 @@ The following are configured via the Bindplane custom resource and documented in
 | Area | What you configure | How the operator uses it |
 |------|--------------------|---------------------------|
 | **License** | `spec.config.license` or `licenseSecretRef` | Injects `BINDPLANE_LICENSE` from value or Secret into Node, Jobs, NATS, and the Jobs Migrate Job. |
-| **Authentication** | System auth (`username`/`password` or Secret refs), session secret (`sessionSecret` or `sessionSecretSecretRef`), API key (`apiKey` or `apiKeySecretRef`), LDAP bind user/password and [LDAP TLS](configuration.md#ldap-and-active-directory), OIDC client ID/secret or Secret refs, agent auth (`spec.config.agents.auth`) | Sets auth-related env vars; mounts LDAP TLS Secret when `spec.config.auth.ldap.tls` is set. |
+| **Authentication** | System auth (`username`/`password` or Secret refs), session secret (`sessionSecret` or `sessionSecretSecretRef`), API key (`apiKey` or `apiKeySecretRef`), LDAP bind user/password and [LDAP TLS](configuration.md#ldap-and-active-directory), OIDC client ID/secret or Secret refs, [OIDC custom claims](configuration.md#custom-claims), agent auth (`spec.config.agents.auth`) | Sets auth-related env vars; mounts LDAP TLS Secret when `spec.config.auth.ldap.tls` is set. |
 | **Network TLS** | [Network TLS](configuration.md#network): `spec.config.network.tls` (secretName, certKey, keyKey, caKey, minVersion, skipVerify) | Mounts the Secret at a fixed path and sets `BINDPLANE_TLS_*` env vars to the mounted file paths. Used when you want server-side or mutual TLS on the Bindplane server (often omitted when using [Ingress or Gateway API](configuration.md#network) to terminate TLS). |
 | **PostgreSQL** | Postgres username/password (or Secret refs) and [PostgreSQL TLS](configuration.md#postgresql) (`spec.config.store.postgres.tls`, sslmode) | Injects credentials; mounts Postgres TLS Secret when TLS is configured and sets `BINDPLANE_POSTGRES_SSL_*` env vars. |
 | **Metrics (Prometheus)** | Optional basic auth for the HTTP endpoint where Bindplane **exposes** its own metrics via `spec.config.metrics.prometheus.username` and `password` or `passwordSecretRef` | Sets `BINDPLANE_METRICS_PROMETHEUS_USERNAME` / `BINDPLANE_METRICS_PROMETHEUS_PASSWORD` when configured. Distinct from Bindplane TSDB remote write auth (below). |
@@ -225,6 +225,8 @@ This rule is enforced at admission time by the Kubernetes API server (and additi
 | `spec.config.errors.backendDSN` | `backendDSNSecretRef` |
 | `spec.config.errors.frontendDSN` | `frontendDSNSecretRef` |
 | `spec.config.status.keys` | `keysSecretRef` |
+
+[OIDC custom claims](configuration.md#custom-claims) (`spec.config.auth.oidc.customClaims`) deliberately have no SecretRef variant: they are claim and group *names* that identify where Bindplane looks in the ID token, not credentials, and are set as plain env var values.
 
 ## Summary
 

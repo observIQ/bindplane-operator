@@ -109,6 +109,39 @@ func getOIDCEnvVars(oidc *bindplanev1alpha1.OIDCConfig) []corev1.EnvVar {
 	if oidc.DisableInvitations {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCDisableInvitationsEnvVar, Value: "true"})
 	}
+	envVars = append(envVars, getOIDCCustomClaimsEnvVars(oidc.CustomClaims)...)
+	return envVars
+}
+
+// getOIDCCustomClaimsEnvVars returns OIDC custom claims environment variables.
+// Each field is omitted when empty so the Bindplane server default applies.
+// Returns nil when customClaims is nil.
+func getOIDCCustomClaimsEnvVars(customClaims *bindplanev1alpha1.OIDCCustomClaimsConfig) []corev1.EnvVar {
+	if customClaims == nil {
+		return nil
+	}
+	pairs := []struct {
+		name  string
+		value string
+	}{
+		{bindplaneOIDCCustomClaimsGroupsEnvVar, customClaims.Groups},
+		{bindplaneOIDCCustomClaimsGroupIDsEnvVar, customClaims.GroupIDs},
+		{bindplaneOIDCCustomClaimsRolesEnvVar, customClaims.Roles},
+		{bindplaneOIDCCustomClaimsOrganizationAdminEnvVar, customClaims.OrganizationAdmin},
+		{bindplaneOIDCCustomClaimsProjectsEnvVar, customClaims.Projects},
+		{bindplaneOIDCCustomClaimsDefaultRoleEnvVar, customClaims.DefaultRole},
+		{bindplaneOIDCCustomClaimsOrgAdminGroupNameEnvVar, customClaims.OrgAdminGroupName},
+		{bindplaneOIDCCustomClaimsProjectsGroupPrefixEnvVar, customClaims.ProjectsGroupPrefix},
+		{bindplaneOIDCCustomClaimsAdminGroupNameEnvVar, customClaims.AdminGroupName},
+		{bindplaneOIDCCustomClaimsUserGroupNameEnvVar, customClaims.UserGroupName},
+		{bindplaneOIDCCustomClaimsViewerGroupNameEnvVar, customClaims.ViewerGroupName},
+	}
+	var envVars []corev1.EnvVar
+	for _, p := range pairs {
+		if p.value != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: p.name, Value: p.value})
+		}
+	}
 	return envVars
 }
 

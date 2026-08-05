@@ -11,6 +11,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [System auth](#system-auth)
   - [LDAP and Active Directory](#ldap-and-active-directory)
   - [OIDC](#oidc)
+    - [Custom claims](#custom-claims)
 - [Network](#network)
 - [Store](#store)
   - [PostgreSQL](#postgresql)
@@ -276,6 +277,89 @@ spec:
         clientSecretSecretRef:
           name: oidc-secrets
           key: client-secret
+```
+
+#### Custom claims
+
+`spec.config.auth.oidc.customClaims` adapts Bindplane to an identity provider that already emits its own claim names or group naming scheme, so the IdP does not have to be reshaped to Bindplane's defaults.
+
+There are two groups of settings:
+
+- **Claim name overrides** (`groups`, `groupIds`, `roles`, `organizationAdmin`, `projects`, `defaultRole`) rename the claims Bindplane reads on the ID token.
+- **Group / role string overrides** (`orgAdminGroupName`, `projectsGroupPrefix`, `adminGroupName`, `userGroupName`, `viewerGroupName`) change the strings Bindplane matches *inside* the groups and roles claims, after the claim names above are resolved.
+
+Every field is optional. Omit a field to keep the Bindplane default; the operator only sets an environment variable for fields you populate.
+
+`groupIds` is a fallback: Bindplane uses it when the groups claim is missing, empty, or parses to an empty list.
+
+`projectsGroupPrefix` matches group entries that encode project access, either `<prefix><projectID>` or `<prefix><role>:<projectID>` (for example `bindplane-projects-admin:01PROJECTID`).
+
+| CRD Field | Environment Variable | Default | Required |
+|---|---|---|---|
+| `spec.config.auth.oidc.customClaims.groups` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_GROUPS` | `groups` | No |
+| `spec.config.auth.oidc.customClaims.groupIds` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_GROUP_IDS` | `group_ids` | No |
+| `spec.config.auth.oidc.customClaims.roles` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_ROLES` | `roles` | No |
+| `spec.config.auth.oidc.customClaims.organizationAdmin` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_ORGANIZATION_ADMIN` | `bindplane_org_admin` | No |
+| `spec.config.auth.oidc.customClaims.projects` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_PROJECTS` | `bindplane_projects` | No |
+| `spec.config.auth.oidc.customClaims.defaultRole` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_DEFAULT_ROLE` | `bindplane_default_role` | No |
+| `spec.config.auth.oidc.customClaims.orgAdminGroupName` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_ORG_ADMIN_GROUP_NAME` | `bindplane-org-admin` | No |
+| `spec.config.auth.oidc.customClaims.projectsGroupPrefix` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_PROJECTS_GROUP_PREFIX` | `bindplane-projects-` | No |
+| `spec.config.auth.oidc.customClaims.adminGroupName` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_ADMIN_GROUP_NAME` | `bindplane-admin` | No |
+| `spec.config.auth.oidc.customClaims.userGroupName` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_USER_GROUP_NAME` | `bindplane-user` | No |
+| `spec.config.auth.oidc.customClaims.viewerGroupName` | `BINDPLANE_OIDC_CUSTOM_CLAIMS_VIEWER_GROUP_NAME` | `bindplane-viewer` | No |
+
+Custom claims require Bindplane server v1.100.2 or later. On earlier versions the environment variables are ignored and the defaults apply.
+
+Example (renaming claim names only):
+
+```yaml
+spec:
+  config:
+    auth:
+      type: oidc
+      oidc:
+        issuer: https://accounts.example.com
+        scopes:
+          - openid
+          - profile
+          - email
+        clientIDSecretRef:
+          name: oidc-secrets
+          key: client-id
+        clientSecretSecretRef:
+          name: oidc-secrets
+          key: client-secret
+        customClaims:
+          groups: "user_groups"
+          roles: "user_roles"
+          organizationAdmin: "acme_org_admin"
+```
+
+Example (renaming the group and role strings Bindplane matches):
+
+```yaml
+spec:
+  config:
+    auth:
+      type: oidc
+      oidc:
+        issuer: https://accounts.example.com
+        scopes:
+          - openid
+          - profile
+          - email
+        clientIDSecretRef:
+          name: oidc-secrets
+          key: client-id
+        clientSecretSecretRef:
+          name: oidc-secrets
+          key: client-secret
+        customClaims:
+          orgAdminGroupName: "acme-org-admin"
+          projectsGroupPrefix: "acme-projects-"
+          adminGroupName: "acme-admin"
+          userGroupName: "acme-user"
+          viewerGroupName: "acme-viewer"
 ```
 
 ## Network

@@ -497,6 +497,34 @@ _Appears in:_
 | `issuer` _string_ | Issuer is the URL of the OIDC provider |  | Optional: \{\} <br /> |
 | `scopes` _string array_ | Scopes is the list of OAuth2 scopes to request |  | Optional: \{\} <br /> |
 | `disableInvitations` _boolean_ | DisableInvitations disables the invitation flow for OIDC-authenticated users.<br />When true, users cannot be invited via email and must log in via OIDC directly. |  | Optional: \{\} <br /> |
+| `customClaims` _[OIDCCustomClaimsConfig](#oidccustomclaimsconfig)_ | CustomClaims customizes the ID token claim names Bindplane reads and the<br />group / role strings it matches within those claims. Omit a field to keep<br />the Bindplane default. |  | Optional: \{\} <br /> |
+
+#### OIDCCustomClaimsConfig
+
+OIDCCustomClaimsConfig customizes OIDC claim names and the group / role strings
+Bindplane matches, so an existing identity provider does not have to be reshaped
+to Bindplane's default claim names.
+
+The first group of fields renames the claims Bindplane reads on the ID token.
+The second group changes the strings Bindplane matches inside the groups and
+roles claims (after claim names are resolved).
+
+_Appears in:_
+- [OIDCConfig](#oidcconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `groups` _string_ | Groups is the claim name for user groups. Defaults to "groups". |  | Optional: \{\} <br /> |
+| `groupIds` _string_ | GroupIDs is the claim name for group IDs, used as a fallback when the groups<br />claim is missing, empty, or parses to an empty list. Defaults to "group_ids". |  | Optional: \{\} <br /> |
+| `roles` _string_ | Roles is the claim name for user roles. Defaults to "roles". |  | Optional: \{\} <br /> |
+| `organizationAdmin` _string_ | OrganizationAdmin is the claim name indicating organization admin status.<br />Defaults to "bindplane_org_admin". |  | Optional: \{\} <br /> |
+| `projects` _string_ | Projects is the claim name for Bindplane project assignments.<br />Defaults to "bindplane_projects". |  | Optional: \{\} <br /> |
+| `defaultRole` _string_ | DefaultRole is the claim name for default role assignment.<br />Defaults to "bindplane_default_role". |  | Optional: \{\} <br /> |
+| `orgAdminGroupName` _string_ | OrgAdminGroupName is the group / role string that indicates organization admin<br />status. Defaults to "bindplane-org-admin". |  | Optional: \{\} <br /> |
+| `projectsGroupPrefix` _string_ | ProjectsGroupPrefix is the group / role prefix that encodes project assignments,<br />e.g. "bindplane-projects-<projectID>" or "bindplane-projects-<role>:<projectID>".<br />Defaults to "bindplane-projects-". |  | Optional: \{\} <br /> |
+| `adminGroupName` _string_ | AdminGroupName is the group / role string that indicates the admin role.<br />Defaults to "bindplane-admin". |  | Optional: \{\} <br /> |
+| `userGroupName` _string_ | UserGroupName is the group / role string that indicates the user role.<br />Defaults to "bindplane-user". |  | Optional: \{\} <br /> |
+| `viewerGroupName` _string_ | ViewerGroupName is the group / role string that indicates the viewer role.<br />Defaults to "bindplane-viewer". |  | Optional: \{\} <br /> |
 
 #### OpAMPComponentSpec
 
