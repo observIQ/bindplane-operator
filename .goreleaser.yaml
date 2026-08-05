@@ -61,6 +61,10 @@ release:
   github:
     owner: observiq
     name: bindplane-operator
+  # Tags with a semver prerelease suffix (e.g. 0.2.0-rc.1, 0.1.0-beta.0) are
+  # published as GitHub prereleases, and only stable tags become "Latest".
+  prerelease: auto
+  make_latest: "{{ not .Prerelease }}"
   extra_files:
     - glob: tmp/install.yaml
     - glob: tmp/install-no-webhook.yaml
