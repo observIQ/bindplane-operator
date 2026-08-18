@@ -14,9 +14,17 @@ Every release container image is signed using
 signature is produced in GitHub Actions using an OIDC identity token issued
 by GitHub, so there are no long-lived signing keys to manage or rotate.
 
-A valid signature proves that the image was built by the
-`observiq/bindplane-operator` GitHub Actions release workflow and has not
-been tampered with.
+A valid signature proves that the image was built and signed by an
+`observiq/bindplane-operator` GitHub Actions workflow and has not been
+tampered with.
+
+Signing runs in its own workflow (`.github/workflows/sign.yml`), which the
+release workflow invokes once the images are published. Because signing is a
+separate workflow, it can also be re-run on its own — see
+[Signing a release after the fact](#signing-a-release-after-the-fact).
+
+The image is signed by digest, so a single signature covers both the version
+tag and `latest` while they point at the same manifest list.
 
 ### Verifying the signature
 
@@ -30,6 +38,31 @@ cosign verify \
 A successful verification prints the signing certificate details and
 Rekor transparency log entry. A failed verification exits non-zero with
 an error message.
+
+The identity is matched with `--certificate-identity-regexp` against the
+repository prefix rather than a single workflow ref, so the same command
+verifies releases regardless of which repository workflow produced the
+signature.
+
+### Signing a release after the fact
+
+If a release is published but its signature or SBOM attestation is missing —
+for example because the registry rejected the upload during the release run —
+the Sign workflow can be dispatched on its own against the already-published
+images:
+
+```bash
+gh workflow run sign.yml --repo observiq/bindplane-operator -f tag=0.2.0
+```
+
+Dispatch from the default branch (the workflow signs whatever tag is passed in
+`tag`, and always uses the current signing script). The run is safe to repeat:
+signing and attestation are each skipped when the artifact is already present,
+so a re-run only fills in what is missing, and only the requested tag's
+manifest list is ever signed.
+
+To confirm the missing artifacts afterwards, use
+[`cosign tree`](#checking-supply-chain-artifacts).
 
 ## Software Bill of Materials (SBOM)
 

@@ -8,7 +8,6 @@ on:
 permissions:
   contents: write
   packages: write
-  id-token: write  # Required for cosign keyless signing via Sigstore
 
 jobs:
   release:
@@ -38,9 +37,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
+      # Required by the sboms stanza in .goreleaser.yaml (binary SBOMs).
       - name: Install syft
         uses: anchore/sbom-action/download-syft@v0
 
@@ -59,5 +56,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sign multi-arch manifests and attach SBOM attestations (by digest)
-        run: .github/workflows/scripts/sign-and-attest.sh
+  # Signing lives in its own workflow so that it can also be dispatched on its
+  # own to sign a release published earlier. See .github/workflows/sign.yml.
+  sign:
+    name: Sign
+    needs: release
+    permissions:
+      contents: read
+      packages: write  # push cosign signatures and attestations to GHCR
+      id-token: write  # required for cosign keyless signing via Sigstore
+    uses: ./.github/workflows/sign.yml
+    with:
+      tag: ${{ github.ref_name }}
