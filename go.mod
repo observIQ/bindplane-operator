@@ -3,7 +3,7 @@ module github.com/observiq/bindplane-operator
 go 1.26.6
 
 require (
-	github.com/argoproj/argo-rollouts v1.9.1
+	github.com/argoproj/argo-rollouts v1.10.0
 	github.com/cert-manager/cert-manager v1.21.1
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
@@ -64,7 +64,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
-	github.com/prometheus/procfs v0.19.2 // indirect
+	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
