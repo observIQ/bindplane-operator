@@ -17,7 +17,6 @@ limitations under the License.
 package e2e
 
 import (
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -58,13 +57,17 @@ var _ = Describe("Bindplane with Argo Rollouts", Ordered, Label(ginkgoLabelRequi
 		waitForBindplaneFinalizer(argoRolloutsBindplaneName, bindplaneNamespace, defaultEventuallyShortTimeout)
 
 		By("verifying the fixture bypasses the migration gate (no postgres in this test)")
-		out, err := runCmd(kubectl(bindplaneNamespace, "get", "bindplane", argoRolloutsBindplaneName,
-			"-o", "jsonpath={.metadata.annotations['"+skipMigrateCheckAnnotation+"']}"))
+		bindplane, err := getBindplane(argoRolloutsBindplaneName, bindplaneNamespace)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(strings.TrimSpace(out)).To(Equal("true"))
+		Expect(bindplane.Annotations).To(HaveKeyWithValue(skipMigrateCheckAnnotation, "true"))
 
 		By("waiting for the node Rollout to be created")
 		waitForRolloutExists(argoRolloutsBindplaneName+"-node", bindplaneNamespace, defaultEventuallyShortTimeout)
+
+		By("verifying the Reconciled condition reports the bypassed migration check")
+		// The migrate Job can never succeed without postgres, so the bypass reason persists.
+		waitForBindplaneCondition(argoRolloutsBindplaneName, bindplaneNamespace, "Reconciled",
+			metav1.ConditionTrue, "MigrationCheckSkipped", defaultEventuallyShortTimeout)
 
 		By("verifying no Deployment exists for the node component")
 		_, err = getDeployment(argoRolloutsBindplaneName+"-node", bindplaneNamespace)
