@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -56,8 +57,11 @@ var _ = Describe("Bindplane with Argo Rollouts", Ordered, Label(ginkgoLabelRequi
 		By("waiting for the finalizer to be set")
 		waitForBindplaneFinalizer(argoRolloutsBindplaneName, bindplaneNamespace, defaultEventuallyShortTimeout)
 
-		By("bypassing the migration gate (no postgres in this test)")
-		skipMigrateJob(argoRolloutsBindplaneName, bindplaneNamespace, defaultEventuallyShortTimeout)
+		By("verifying the fixture bypasses the migration gate (no postgres in this test)")
+		out, err := runCmd(kubectl(bindplaneNamespace, "get", "bindplane", argoRolloutsBindplaneName,
+			"-o", "jsonpath={.metadata.annotations['"+skipMigrateCheckAnnotation+"']}"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(out)).To(Equal("true"))
 
 		By("waiting for the node Rollout to be created")
 		waitForRolloutExists(argoRolloutsBindplaneName+"-node", bindplaneNamespace, defaultEventuallyShortTimeout)

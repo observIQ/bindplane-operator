@@ -36,6 +36,7 @@ const (
 
 	bindplaneFinalizer            = "k8s.bindplane.com/finalizer"
 	pauseReconciliationAnnotation = "k8s.bindplane.com/pause-reconciliation"
+	skipMigrateCheckAnnotation    = "k8s.bindplane.com/skip-migrate-check"
 	bindplaneLicenseEnvVar        = "BINDPLANE_LICENSE"
 	ginkgoLabelRequiresLicense    = "requires-license"
 

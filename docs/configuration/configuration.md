@@ -40,6 +40,8 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Container images](#container-images)
 - [Service account annotations](#service-account-annotations)
 - [Scope](#scope)
+- [Force migration](#force-migration)
+- [Skip migration check](#skip-migration-check)
 - [Lifecycle](#lifecycle)
   - [Pause annotation](#pause-annotation)
   - [Finalizer and garbage collection](#finalizer-and-garbage-collection)
@@ -1327,9 +1329,38 @@ On the next reconcile the controller **deletes the existing Jobs Migrate Job** (
 
 The migrate Job runs with `RestartPolicy: Never` and `backoffLimit: 3`, so each failed attempt runs in its own pod and those pods are retained for log inspection (`kubectl logs <migrate-pod>`) until the Job's TTL (24h) elapses.
 
+## Skip migration check
+
+By default the operator blocks every downstream workload (Jobs, NATS, Node, OpAMP) until the Jobs Migrate Job completes successfully (see [Migration contract](#migration-contract)). When the Job is failing and you need pod updates to proceed anyway, set the `k8s.bindplane.com/skip-migrate-check` annotation to `"true"` on the `Bindplane` resource:
+
+```bash
+# Stop gating workload updates on the migrate Job
+kubectl annotate bindplane <name> -n <namespace> \
+  k8s.bindplane.com/skip-migrate-check=true
+
+# Restore the default gating behavior
+kubectl annotate bindplane <name> -n <namespace> \
+  k8s.bindplane.com/skip-migrate-check-
+```
+
+While the annotation is set:
+
+- The Jobs Migrate Job is **still created and managed exactly as before**: it runs on install and on every image change, stale Jobs are replaced, and the `k8s.bindplane.com/force-migrate` annotation still works. Only the gate is bypassed.
+- Downstream workloads are reconciled on every pass, regardless of whether the Job is running or has failed.
+- The `Reconciled` condition is `True` with `Reason: MigrationCheckSkipped` while the Job is failed or not yet complete. The message names the Job and its state. Once the Job succeeds the condition returns to `Reason: Reconciled`.
+- `status.phase` reflects workload readiness as normal (`ApplyingChanges` or `Ready`); it is not set to `Degraded`.
+- `status.components.jobsMigrate.image` is **not** written by the bypass. It is only recorded when a Job actually succeeds, so it always reflects a confirmed migration.
+- While a Job is still running the operator keeps requeueing every 10 seconds so the success is recorded; a terminal `Failed` Job is not requeued.
+
+The annotation is sticky: the operator never clears it. Removing it (or setting it to any value other than `"true"`) re-engages the gate on the next reconcile. If the Job is still failed at that point, the `MigrationFailed` condition and `Degraded` phase return. Workloads that were rolled out during the bypass are left in place; the gate only blocks further updates.
+
+The `k8s.bindplane.com/pause-reconciliation` annotation takes precedence: a paused resource is not reconciled at all, whether or not the skip annotation is present.
+
+> **Warning:** This bypass lets Node, NATS, and Jobs run against a database schema that has not been confirmed as migrated. It is intended as a break-glass tool for a failing Job at an unchanged version. **Do not leave it set across a `spec.version` change**: the operator will roll Node, NATS, and Jobs to the new image in the same reconcile that replaces the migrate Job, before the new migration has run. Schema and binary compatibility are your responsibility while the annotation is set.
+
 ## Lifecycle
 
-This section describes the operator's lifecycle contract for the `Bindplane` custom resource: how reconciliation is paused, how owned resources are cleaned up, how status phases are progressed, and how database migrations gate workload rollouts.
+This section describes the operator's lifecycle contract for the `Bindplane` custom resource: how reconciliation is paused, how owned resources are cleaned up, how status phases are progressed, how database migrations gate workload rollouts, and how that gate can be bypassed.
 
 ### Pause annotation
 
@@ -1375,6 +1406,7 @@ The operator reports overall state via `status.conditions` and the `status.phase
 | `Reconciled` | `False` | `Paused` | Reconciliation suspended by annotation |
 | `Reconciled` | `False` | `Invalid` | CR failed validation; no resources were mutated |
 | `Reconciled` | `False` | `MigrationFailed` | The Jobs Migrate Job failed; downstream workloads are blocked |
+| `Reconciled` | `True` | `MigrationCheckSkipped` | The `k8s.bindplane.com/skip-migrate-check` annotation is set and the Jobs Migrate Job is failed or not yet complete; downstream workloads were reconciled without a confirmed migration |
 
 **Phases**
 
@@ -1403,16 +1435,16 @@ After each reconcile the operator populates `status.components` with a per-compo
 | `status.components.tsdb` | TSDB (Prometheus) | Local TSDB only (not when `spec.config.tsdb.remote.enable: true`) | Local TSDB only |
 | `status.components.jobsMigrate` | Jobs Migrate | Set only after a successful database migration Job completes | Never (transient batch Job) |
 
-`status.components.jobsMigrate.image` has a special meaning: it is the image for which migration has **completed**, not the currently desired image. The controller compares this value against the desired Jobs Migrate image to decide whether to run migration. Clearing it (or using the `k8s.bindplane.com/force-migrate` annotation) forces migration to re-run on the next reconcile.
+`status.components.jobsMigrate.image` has a special meaning: it is the image for which migration has **completed**, not the currently desired image. The controller compares this value against the desired Jobs Migrate image to decide whether to run migration. Clearing it (or using the `k8s.bindplane.com/force-migrate` annotation) forces migration to re-run on the next reconcile. It is never written by the [skip migration check](#skip-migration-check) bypass; it is only set after a Job actually succeeds.
 
 ### Migration contract
 
 When `spec.version` changes (or the `k8s.bindplane.com/force-migrate` annotation is set), the operator:
 
 1. Creates a new `Jobs Migrate` (`batch/v1 Job`) before updating any long-running workloads (Jobs, NATS, Node).
-2. Blocks all downstream workload updates until the Jobs Migrate Job completes successfully (requeues every 10 seconds while the Job is still running).
+2. Blocks all downstream workload updates until the Jobs Migrate Job completes successfully (requeues every 10 seconds while the Job is still running), unless the `k8s.bindplane.com/skip-migrate-check` annotation is set (see [Skip migration check](#skip-migration-check)).
 3. On success, records the migrated image in `status.components.jobsMigrate.image` and proceeds to roll out updated workloads.
-4. On failure (the Job reaches a terminal `Failed` state after exhausting `backoffLimit`), sets the `Reconciled` condition to `False` with `Reason: MigrationFailed`, sets `status.phase = Degraded`, and **halts the rollout without requeueing** — a terminal Job will not change state on its own, so the operator stops retrying to avoid log spam. The failure remains visible in status until you intervene: inspect the retained failed pods for logs, fix the underlying cause, then change `spec.version` or set the `k8s.bindplane.com/force-migrate` annotation (see [Force migration](#force-migration)) to retry. Either action triggers a fresh reconcile.
+4. On failure (the Job reaches a terminal `Failed` state after exhausting `backoffLimit`), sets the `Reconciled` condition to `False` with `Reason: MigrationFailed`, sets `status.phase = Degraded`, and **halts the rollout without requeueing** — a terminal Job will not change state on its own, so the operator stops retrying to avoid log spam. The failure remains visible in status until you intervene: inspect the retained failed pods for logs, fix the underlying cause, then change `spec.version` or set the `k8s.bindplane.com/force-migrate` annotation (see [Force migration](#force-migration)) to retry. Either action triggers a fresh reconcile. To proceed with workload updates despite the failure, set the `k8s.bindplane.com/skip-migrate-check` annotation (see [Skip migration check](#skip-migration-check)).
 
 This ordering guarantees that the database schema is always compatible with all running workloads before any new binary version is activated.
 

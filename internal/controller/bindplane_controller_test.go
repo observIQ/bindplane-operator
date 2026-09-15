@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -153,6 +154,39 @@ func reconcilePastMigration(ctx context.Context, r *BindplaneReconciler, bpName,
 	markJobComplete(ctx, jobName, namespace)
 	_, err := r.Reconcile(ctx, reconcileRequest(bpName, namespace))
 	Expect(err).NotTo(HaveOccurred())
+}
+
+// setBindplaneAnnotationTrue sets a metadata annotation on the Bindplane CR to "true".
+func setBindplaneAnnotationTrue(ctx context.Context, name, namespace, key string) {
+	bp := &bindplanev1alpha1.Bindplane{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, bp)).To(Succeed())
+	if bp.Annotations == nil {
+		bp.Annotations = map[string]string{}
+	}
+	bp.Annotations[key] = annotationValueTrue
+	Expect(k8sClient.Update(ctx, bp)).To(Succeed())
+}
+
+// removeBindplaneAnnotation deletes a metadata annotation from the Bindplane CR.
+func removeBindplaneAnnotation(ctx context.Context, name, namespace, key string) {
+	bp := &bindplanev1alpha1.Bindplane{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, bp)).To(Succeed())
+	delete(bp.Annotations, key)
+	Expect(k8sClient.Update(ctx, bp)).To(Succeed())
+}
+
+// getReconciledCondition fetches the Bindplane CR and returns its Reconciled condition,
+// failing the test when the condition is absent.
+func getReconciledCondition(ctx context.Context, name, namespace string) (*bindplanev1alpha1.Bindplane, metav1.Condition) {
+	bp := &bindplanev1alpha1.Bindplane{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, bp)).To(Succeed())
+	for i := range bp.Status.Conditions {
+		if bp.Status.Conditions[i].Type == conditionTypeReconciled {
+			return bp, bp.Status.Conditions[i]
+		}
+	}
+	Fail("Reconciled condition not found on Bindplane " + name)
+	return bp, metav1.Condition{}
 }
 
 var _ = Describe("Reconcile - finalizer lifecycle", func() {
@@ -714,6 +748,166 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, freshJob)).To(Succeed())
 		Expect(freshJob.UID).NotTo(Equal(origUID), "expected a freshly created Job, not the failed one")
 		Expect(isJobFailed(freshJob)).To(BeFalse())
+	})
+
+	// expectDownstreamWorkloads asserts that the workloads gated by the migrate Job exist.
+	expectDownstreamWorkloads := func(name string) {
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, &appsv1.Deployment{})).To(Succeed())
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, &appsv1.Deployment{})).To(Succeed())
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-nats", Namespace: testNamespace}, &appsv1.StatefulSet{})).To(Succeed())
+	}
+
+	// failMigrationAndAssertBlocked drives a fresh Bindplane to a Failed migrate Job and
+	// asserts the default gate is engaged. Returns the migrate Job name.
+	failMigrationAndAssertBlocked := func(r *BindplaneReconciler, name string) string {
+		jobName := reconcileUntilMigration(testCtx, r, name, testNamespace)
+		markJobFailed(testCtx, jobName, testNamespace)
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		_, cond := getReconciledCondition(testCtx, name, testNamespace)
+		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(cond.Reason).To(Equal("MigrationFailed"))
+		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, &appsv1.Deployment{})
+		Expect(errors.IsNotFound(err)).To(BeTrue(), "downstream workloads must be blocked by default")
+		return jobName
+	}
+
+	It("skip-migrate-check bypasses a Failed migrate Job", func() {
+		name := "bp-migrate-skip-failed"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		jobName := failMigrationAndAssertBlocked(r, name)
+
+		setBindplaneAnnotationTrue(testCtx, name, testNamespace, annotationSkipMigrateCheck)
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero(), "a terminal Failed Job must not requeue even when bypassed")
+
+		expectDownstreamWorkloads(name)
+
+		updated, cond := getReconciledCondition(testCtx, name, testNamespace)
+		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(cond.Reason).To(Equal("MigrationCheckSkipped"))
+		Expect(cond.Message).To(ContainSubstring(jobName))
+		Expect(cond.Message).To(ContainSubstring("Failed"))
+		Expect(updated.Status.Phase).NotTo(Equal("Degraded"))
+		Expect(updated.Status.Components.JobsMigrate.Image).To(BeEmpty(), "bypass must not record a migrated image")
+
+		// The Job itself is untouched: still present and still Failed.
+		job := &batchv1.Job{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, job)).To(Succeed())
+		Expect(isJobFailed(job)).To(BeTrue())
+	})
+
+	It("skip-migrate-check bypasses a running migrate Job, keeps polling, and records success", func() {
+		name := "bp-migrate-skip-running"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Annotations = map[string]string{annotationSkipMigrateCheck: "true"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		// First reconcile adds the finalizer; second creates the Job and, because the
+		// gate is bypassed, proceeds to downstream workloads while still polling.
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(Equal(10*time.Second), "must keep polling a running Job so success is recorded")
+
+		jobName := name + "-migrate"
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: jobName, Namespace: testNamespace}, &batchv1.Job{})).To(Succeed())
+		expectDownstreamWorkloads(name)
+
+		updated, cond := getReconciledCondition(testCtx, name, testNamespace)
+		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(cond.Reason).To(Equal("MigrationCheckSkipped"))
+		Expect(cond.Message).To(ContainSubstring("not yet complete"))
+		Expect(updated.Status.Components.JobsMigrate.Image).To(BeEmpty())
+
+		// Once the Job succeeds the normal condition and migrated image are recorded,
+		// even with the annotation still present.
+		markJobComplete(testCtx, jobName, testNamespace)
+		result, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated, cond = getReconciledCondition(testCtx, name, testNamespace)
+		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(cond.Reason).To(Equal("Reconciled"))
+		Expect(updated.Annotations).To(HaveKeyWithValue(annotationSkipMigrateCheck, "true"), "annotation is sticky")
+		Expect(updated.Status.Components.JobsMigrate.Image).To(Equal(getBindplaneJobsMigrateImage(updated)))
+	})
+
+	It("removing skip-migrate-check re-engages the gate without rolling back workloads", func() {
+		name := "bp-migrate-skip-remove"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		failMigrationAndAssertBlocked(r, name)
+
+		setBindplaneAnnotationTrue(testCtx, name, testNamespace, annotationSkipMigrateCheck)
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		expectDownstreamWorkloads(name)
+
+		removeBindplaneAnnotation(testCtx, name, testNamespace, annotationSkipMigrateCheck)
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated, cond := getReconciledCondition(testCtx, name, testNamespace)
+		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(cond.Reason).To(Equal("MigrationFailed"))
+		Expect(updated.Status.Phase).To(Equal("Degraded"))
+
+		// Workloads created during the bypass are left in place; the gate only blocks updates.
+		expectDownstreamWorkloads(name)
+	})
+
+	It("skip-migrate-check coexists with force-migrate", func() {
+		name := "bp-migrate-skip-force"
+		bp := newTestBindplane(name, testNamespace)
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		failMigrationAndAssertBlocked(r, name)
+
+		setBindplaneAnnotationTrue(testCtx, name, testNamespace, annotationSkipMigrateCheck)
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		expectDownstreamWorkloads(name)
+
+		setBindplaneAnnotationTrue(testCtx, name, testNamespace, "k8s.bindplane.com/force-migrate")
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).NotTo(BeZero(), "force-migrate resets the gate to in-progress, which keeps polling")
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Annotations).NotTo(HaveKey("k8s.bindplane.com/force-migrate"), "force-migrate is one-shot")
+		Expect(updated.Annotations).To(HaveKeyWithValue(annotationSkipMigrateCheck, "true"), "skip-migrate-check is sticky")
+		Expect(updated.Status.Components.JobsMigrate.Image).To(BeEmpty())
+		expectDownstreamWorkloads(name)
+	})
+
+	It("skip-migrate-check set to a value other than true has no effect", func() {
+		name := "bp-migrate-skip-false"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Annotations = map[string]string{annotationSkipMigrateCheck: "false"}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		failMigrationAndAssertBlocked(r, name)
+
+		updated, _ := getReconciledCondition(testCtx, name, testNamespace)
+		Expect(updated.Status.Phase).To(Equal("Degraded"))
 	})
 })
 
