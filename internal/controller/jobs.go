@@ -343,7 +343,7 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 	// MigratedImage so a fresh Job is created on the next reconcile. Deleting the existing
 	// Job is required to retry at an unchanged image (e.g. after a failure) — otherwise the
 	// next reconcile would just re-read the old Job's terminal state.
-	if bindplane.Annotations[forceMigrateAnnotation] == annotationValueTrue {
+	if annotationEnabled(bindplane.Annotations, forceMigrateAnnotation) {
 		existingJob := &batchv1.Job{}
 		if err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ns}, existingJob); err == nil {
 			log.Info("force-migrate: deleting existing Jobs Migrate Job", "name", jobName)

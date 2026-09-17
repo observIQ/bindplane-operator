@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -305,10 +306,6 @@ const (
 	// Example: kubectl annotate bindplane my-bindplane k8s.bindplane.com/skip-migrate-check=true
 	annotationSkipMigrateCheck = "k8s.bindplane.com/skip-migrate-check"
 
-	// annotationValueTrue is the string value that enables a boolean operator annotation
-	// (e.g. pause-reconciliation, force-migrate, skip-migrate-check).
-	annotationValueTrue = "true"
-
 	// migrateJobPollInterval is how often the controller requeues while the Jobs Migrate
 	// Job is still running.
 	migrateJobPollInterval = 10 * time.Second
@@ -323,10 +320,20 @@ const (
 	bindplaneFinalizer = "k8s.bindplane.com/finalizer"
 )
 
-// skipMigrateCheck reports whether the Bindplane CR carries the skip-migrate-check annotation
-// set to "true", meaning downstream workloads must not be gated on the Jobs Migrate Job.
+// annotationEnabled reports whether the named boolean operator annotation (e.g.
+// pause-reconciliation, force-migrate, skip-migrate-check) is set to a truthy value as
+// understood by strconv.ParseBool: "true", "True", "TRUE", "t", "1" and friends. A missing
+// annotation, an empty value, or an unparseable value is treated as false, so a typo never
+// silently enables behavior.
+func annotationEnabled(annotations map[string]string, key string) bool {
+	enabled, err := strconv.ParseBool(annotations[key])
+	return err == nil && enabled
+}
+
+// skipMigrateCheck reports whether the Bindplane CR carries a truthy skip-migrate-check
+// annotation, meaning downstream workloads must not be gated on the Jobs Migrate Job.
 func skipMigrateCheck(bindplane *bindplanev1alpha1.Bindplane) bool {
-	return bindplane.Annotations[annotationSkipMigrateCheck] == annotationValueTrue
+	return annotationEnabled(bindplane.Annotations, annotationSkipMigrateCheck)
 }
 
 // resolveImage returns override when non-empty, otherwise falls back to defaultRef.
@@ -536,8 +543,8 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	// Check for pause annotation — if set to "true", skip reconciliation entirely.
-	if bindplane.Annotations[annotationPauseReconciliation] == annotationValueTrue {
+	// Check for pause annotation — if set to a truthy value, skip reconciliation entirely.
+	if annotationEnabled(bindplane.Annotations, annotationPauseReconciliation) {
 		log.Info("Reconciliation paused via annotation; skipping", "annotation", annotationPauseReconciliation)
 		condition := metav1.Condition{
 			Type:               "Reconciled",

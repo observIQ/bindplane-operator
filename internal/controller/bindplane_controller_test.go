@@ -163,7 +163,7 @@ func setBindplaneAnnotationTrue(ctx context.Context, name, namespace, key string
 	if bp.Annotations == nil {
 		bp.Annotations = map[string]string{}
 	}
-	bp.Annotations[key] = annotationValueTrue
+	bp.Annotations[key] = "true"
 	Expect(k8sClient.Update(ctx, bp)).To(Succeed())
 }
 
