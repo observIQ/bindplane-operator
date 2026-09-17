@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -297,9 +298,17 @@ const (
 	// Example: kubectl annotate bindplane my-bindplane k8s.bindplane.com/pause-reconciliation=true
 	annotationPauseReconciliation = "k8s.bindplane.com/pause-reconciliation"
 
-	// annotationValueTrue is the string value that enables a boolean operator annotation
-	// (e.g. pause-reconciliation, force-migrate).
-	annotationValueTrue = "true"
+	// annotationSkipMigrateCheck is the annotation key that, when set to "true", stops the
+	// operator from gating downstream workloads (Jobs, NATS, Node, OpAMP) on the Jobs Migrate
+	// Job completing successfully. The Job is still created, tracked, and recorded on success;
+	// only the gate is bypassed. The annotation is sticky: it is never cleared by the operator,
+	// and removing it restores the default gating behavior on the next reconcile.
+	// Example: kubectl annotate bindplane my-bindplane k8s.bindplane.com/skip-migrate-check=true
+	annotationSkipMigrateCheck = "k8s.bindplane.com/skip-migrate-check"
+
+	// migrateJobPollInterval is how often the controller requeues while the Jobs Migrate
+	// Job is still running.
+	migrateJobPollInterval = 10 * time.Second
 
 	// annotationPreserveSelectorKeys is an internal operator annotation placed on Service objects
 	// to signal which selector keys should be preserved from the live Service (e.g.
@@ -310,6 +319,22 @@ const (
 	// can perform cleanup before the CR is removed from etcd.
 	bindplaneFinalizer = "k8s.bindplane.com/finalizer"
 )
+
+// annotationEnabled reports whether the named boolean operator annotation (e.g.
+// pause-reconciliation, force-migrate, skip-migrate-check) is set to a truthy value as
+// understood by strconv.ParseBool: "true", "True", "TRUE", "t", "1" and friends. A missing
+// annotation, an empty value, or an unparseable value is treated as false, so a typo never
+// silently enables behavior.
+func annotationEnabled(annotations map[string]string, key string) bool {
+	enabled, err := strconv.ParseBool(annotations[key])
+	return err == nil && enabled
+}
+
+// skipMigrateCheck reports whether the Bindplane CR carries a truthy skip-migrate-check
+// annotation, meaning downstream workloads must not be gated on the Jobs Migrate Job.
+func skipMigrateCheck(bindplane *bindplanev1alpha1.Bindplane) bool {
+	return annotationEnabled(bindplane.Annotations, annotationSkipMigrateCheck)
+}
 
 // resolveImage returns override when non-empty, otherwise falls back to defaultRef.
 func resolveImage(override, defaultRef string) string {
@@ -518,8 +543,8 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	// Check for pause annotation — if set to "true", skip reconciliation entirely.
-	if bindplane.Annotations[annotationPauseReconciliation] == annotationValueTrue {
+	// Check for pause annotation — if set to a truthy value, skip reconciliation entirely.
+	if annotationEnabled(bindplane.Annotations, annotationPauseReconciliation) {
 		log.Info("Reconciliation paused via annotation; skipping", "annotation", annotationPauseReconciliation)
 		condition := metav1.Condition{
 			Type:               "Reconciled",
@@ -590,28 +615,19 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile the Jobs Migrate batch/v1 Job; block downstream workloads until it completes.
+	// Reconcile the Jobs Migrate batch/v1 Job; block downstream workloads until it completes,
+	// unless the skip-migrate-check annotation bypasses the gate.
 	state, err := r.reconcileMigrateJob(ctx, bindplane, log)
 	if err != nil {
 		log.Error(err, "unable to reconcile Jobs Migrate Job")
 		return ctrl.Result{}, err
 	}
-	switch state {
-	case migrateFailed:
-		// The MigrationFailed condition and Degraded phase are set inside
-		// reconcileMigrateJob. Do not requeue: a terminal Failed Job will not change
-		// state on its own, so requeueing would only spam logs. A spec change or the
-		// k8s.bindplane.com/force-migrate annotation triggers a fresh reconcile via
-		// the CR watch.
-		log.Info("Jobs Migrate Job failed; halting rollout. Inspect the failed Job's pods for logs, "+
-			"then set the k8s.bindplane.com/force-migrate annotation to retry",
-			"job", getResourceName(bindplane, bindplaneJobsMigrateComponent))
-		return ctrl.Result{}, nil
-	case migrateInProgress:
-		log.Info("waiting for Jobs Migrate Job to complete")
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-	case migrateComplete:
-		// Migration is complete for the desired image; proceed to downstream workloads.
+	halt, requeueAfter, err := r.applyMigrateGate(ctx, bindplane, state, log)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if halt != nil {
+		return *halt, nil
 	}
 
 	// Reconcile Bindplane Jobs resources
@@ -639,15 +655,7 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Mark as reconciled so any previous InvalidName condition is cleared
-	condition := metav1.Condition{
-		Type:               "Reconciled",
-		Status:             metav1.ConditionTrue,
-		Reason:             "Reconciled",
-		Message:            "All resources reconciled successfully",
-		ObservedGeneration: bindplane.Generation,
-		LastTransitionTime: metav1.Now(),
-	}
-	meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
+	meta.SetStatusCondition(&bindplane.Status.Conditions, reconciledCondition(bindplane, state))
 
 	// Populate per-component ready replica counts and overall phase.
 	r.updateReadyReplicaStatus(ctx, bindplane)
@@ -659,7 +667,82 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Error(err, "failed to update Bindplane status")
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// applyMigrateGate applies the migration gate policy to the state reported by
+// reconcileMigrateJob. When halt is non-nil the caller must stop and return it: downstream
+// workloads are blocked (default behavior). When halt is nil the caller proceeds to downstream
+// workloads and should requeue after requeueAfter (zero means no requeue).
+//
+// The gate is bypassed when the skip-migrate-check annotation is set: a Failed or still-running
+// Job no longer blocks downstream workloads. The Job itself is still managed as usual, and a
+// running Job keeps being polled so its success is recorded.
+func (r *BindplaneReconciler) applyMigrateGate(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, state migrateState, log logr.Logger) (halt *ctrl.Result, requeueAfter time.Duration, err error) {
+	skipMigrate := skipMigrateCheck(bindplane)
+	migrateJobName := getResourceName(bindplane, bindplaneJobsMigrateComponent)
+
+	switch state {
+	case migrateFailed:
+		if !skipMigrate {
+			// Surface the failure and halt. Do not requeue: a terminal Failed Job will
+			// not change state on its own, so requeueing would only spam logs. A spec
+			// change or the k8s.bindplane.com/force-migrate annotation triggers a fresh
+			// reconcile via the CR watch.
+			setMigrateFailureCondition(bindplane)
+			if err := r.Status().Update(ctx, bindplane); err != nil {
+				log.Error(err, "failed to update Bindplane status for migration failure")
+				return nil, 0, err
+			}
+			log.Info("Jobs Migrate Job failed; halting rollout. Inspect the failed Job's pods for logs, "+
+				"then set the k8s.bindplane.com/force-migrate annotation to retry",
+				"job", migrateJobName)
+			return &ctrl.Result{}, 0, nil
+		}
+		log.Info("Jobs Migrate Job failed but the migration check is skipped via annotation; "+
+			"reconciling downstream workloads without a confirmed migration",
+			"annotation", annotationSkipMigrateCheck, "job", migrateJobName)
+		return nil, 0, nil
+	case migrateInProgress:
+		if !skipMigrate {
+			log.Info("waiting for Jobs Migrate Job to complete")
+			return &ctrl.Result{RequeueAfter: migrateJobPollInterval}, 0, nil
+		}
+		log.Info("Jobs Migrate Job not yet complete but the migration check is skipped via annotation; "+
+			"reconciling downstream workloads without a confirmed migration",
+			"annotation", annotationSkipMigrateCheck, "job", migrateJobName)
+		return nil, migrateJobPollInterval, nil
+	default:
+		// migrateComplete: migration is complete for the desired image; proceed.
+		return nil, 0, nil
+	}
+}
+
+// reconciledCondition builds the Reconciled=True condition written at the end of a
+// successful reconcile. When the migration gate was bypassed via the skip-migrate-check
+// annotation and the migrate Job is not complete, the Reason is MigrationCheckSkipped so
+// the bypass is visible in status.
+func reconciledCondition(bindplane *bindplanev1alpha1.Bindplane, state migrateState) metav1.Condition {
+	condition := metav1.Condition{
+		Type:               "Reconciled",
+		Status:             metav1.ConditionTrue,
+		Reason:             "Reconciled",
+		Message:            "All resources reconciled successfully",
+		ObservedGeneration: bindplane.Generation,
+		LastTransitionTime: metav1.Now(),
+	}
+	if !skipMigrateCheck(bindplane) || state == migrateComplete {
+		return condition
+	}
+	jobState := "not yet complete"
+	if state == migrateFailed {
+		jobState = "Failed"
+	}
+	condition.Reason = "MigrationCheckSkipped"
+	condition.Message = fmt.Sprintf("Migration gate bypassed by annotation %s; Jobs Migrate Job %s is %s. "+
+		"Downstream workloads were reconciled without a confirmed database migration.",
+		annotationSkipMigrateCheck, getResourceName(bindplane, bindplaneJobsMigrateComponent), jobState)
+	return condition
 }
 
 // updateReadyReplicaStatus queries the owned workloads for their current ready

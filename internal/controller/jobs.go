@@ -68,8 +68,10 @@ const (
 	// migrateComplete means migration for the desired image succeeded (or was
 	// already recorded); downstream workloads may proceed.
 	migrateComplete
-	// migrateFailed means the Job reached a terminal Failed state; the reconciler
-	// should surface the failure and stop, awaiting a manual retry.
+	// migrateFailed means the Job reached a terminal Failed state. The caller is
+	// responsible for surfacing the failure (MigrationFailed condition) and for
+	// deciding whether to halt, awaiting a manual retry, or to proceed when the
+	// skip-migrate-check annotation is set.
 	migrateFailed
 )
 
@@ -314,8 +316,10 @@ func (r *BindplaneReconciler) bindplaneJobsMigrateJob(bindplane *bindplanev1alph
 	}
 }
 
-// reconcileMigrateJob ensures the migration batch/v1 Job runs to completion before downstream
-// workloads (NATS, Jobs, Node) are reconciled. Returns the migrate state and an error.
+// reconcileMigrateJob manages the migration batch/v1 Job lifecycle (creation, stale-image
+// cleanup, force-migrate, and recording the migrated image on success) and reports its state.
+// It does not write failure conditions; the caller decides whether a non-complete state gates
+// downstream workloads (NATS, Jobs, Node) or is bypassed via the skip-migrate-check annotation.
 func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger) (migrateState, error) {
 	jobName := getResourceName(bindplane, bindplaneJobsMigrateComponent)
 	ns := bindplane.Namespace
@@ -339,7 +343,7 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 	// MigratedImage so a fresh Job is created on the next reconcile. Deleting the existing
 	// Job is required to retry at an unchanged image (e.g. after a failure) — otherwise the
 	// next reconcile would just re-read the old Job's terminal state.
-	if bindplane.Annotations[forceMigrateAnnotation] == annotationValueTrue {
+	if annotationEnabled(bindplane.Annotations, forceMigrateAnnotation) {
 		existingJob := &batchv1.Job{}
 		if err := r.Get(ctx, types.NamespacedName{Name: jobName, Namespace: ns}, existingJob); err == nil {
 			log.Info("force-migrate: deleting existing Jobs Migrate Job", "name", jobName)
@@ -415,10 +419,6 @@ func (r *BindplaneReconciler) reconcileMigrateJob(ctx context.Context, bindplane
 	}
 
 	if isJobFailed(existingJob) {
-		setMigrateFailureCondition(bindplane)
-		if err := r.Status().Update(ctx, bindplane); err != nil {
-			return migrateInProgress, err
-		}
 		return migrateFailed, nil
 	}
 

@@ -12,7 +12,7 @@ The Operator is installed once with `kubectl apply`. All ongoing management — 
 
 Helm applies all resource changes at once and has no built-in mechanism to enforce ordering across components during an upgrade.
 
-The Operator can sequence upgrades when ordering matters. For example, the database migration Job runs and completes before the NATS cluster, Jobs service, and Bindplane Node are updated. If the migration Job fails, the Operator surfaces a `MigrationFailed` status on the `Bindplane` resource and leaves the currently running version intact.
+The Operator can sequence upgrades when ordering matters. For example, the database migration Job runs and completes before the NATS cluster, Jobs service, and Bindplane Node are updated. If the migration Job fails, the Operator surfaces a `MigrationFailed` status on the `Bindplane` resource and leaves the currently running version intact. Operators who need to proceed anyway can opt out of this gate with the `k8s.bindplane.com/skip-migrate-check` annotation (see [Skip migration check](configuration/configuration.md#skip-migration-check)).
 
 ## Mutual TLS Between Internal Services
 

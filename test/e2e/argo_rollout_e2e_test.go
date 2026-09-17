@@ -56,11 +56,18 @@ var _ = Describe("Bindplane with Argo Rollouts", Ordered, Label(ginkgoLabelRequi
 		By("waiting for the finalizer to be set")
 		waitForBindplaneFinalizer(argoRolloutsBindplaneName, bindplaneNamespace, defaultEventuallyShortTimeout)
 
-		By("bypassing the migration gate (no postgres in this test)")
-		skipMigrateJob(argoRolloutsBindplaneName, bindplaneNamespace, defaultEventuallyShortTimeout)
+		By("verifying the fixture bypasses the migration gate (no postgres in this test)")
+		bindplane, err := getBindplane(argoRolloutsBindplaneName, bindplaneNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(bindplane.Annotations).To(HaveKeyWithValue(skipMigrateCheckAnnotation, "true"))
 
 		By("waiting for the node Rollout to be created")
 		waitForRolloutExists(argoRolloutsBindplaneName+"-node", bindplaneNamespace, defaultEventuallyShortTimeout)
+
+		By("verifying the Reconciled condition reports the bypassed migration check")
+		// The migrate Job can never succeed without postgres, so the bypass reason persists.
+		waitForBindplaneCondition(argoRolloutsBindplaneName, bindplaneNamespace, "Reconciled",
+			metav1.ConditionTrue, "MigrationCheckSkipped", defaultEventuallyShortTimeout)
 
 		By("verifying no Deployment exists for the node component")
 		_, err = getDeployment(argoRolloutsBindplaneName+"-node", bindplaneNamespace)

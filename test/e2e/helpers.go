@@ -778,29 +778,6 @@ func waitForRolloutExists(name, namespace string, timeout time.Duration) {
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
-// skipMigrateJob waits for the operator to create the migrate Job for a Bindplane instance,
-// then patches the Bindplane status so the migration gate is bypassed without running the Job.
-// This is used in tests that have no postgres, since the migrate Job requires a real postgres host.
-func skipMigrateJob(bindplaneName, namespace string, timeout time.Duration) {
-	jobName := bindplaneName + "-migrate"
-
-	var jobImage string
-	By("waiting for the migrate Job to be created")
-	Eventually(func(g Gomega) {
-		out, err := runCmd(kubectl(namespace, "get", "job", jobName,
-			"-o", "jsonpath={.spec.template.spec.containers[0].image}"))
-		g.Expect(err).NotTo(HaveOccurred())
-		g.Expect(strings.TrimSpace(out)).NotTo(BeEmpty())
-		jobImage = strings.TrimSpace(out)
-	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
-
-	By("patching jobsMigrate status to bypass the migration gate")
-	patch := fmt.Sprintf(`{"status":{"components":{"jobsMigrate":{"image":%q}}}}`, jobImage)
-	_, err := runCmd(kubectl(namespace, "patch", "bindplane", bindplaneName,
-		"--subresource=status", "--type=merge", "--patch", patch))
-	Expect(err).NotTo(HaveOccurred(), "failed to patch status.components.jobsMigrate.image")
-}
-
 // verifyKubectlContext ensures the active kubectl context is the expected Kind
 // cluster before any cluster-mutating work begins. The expected context is
 // "kind-<KIND_CLUSTER>" (defaulting to "kind-bindplane-operator-test-e2e").
