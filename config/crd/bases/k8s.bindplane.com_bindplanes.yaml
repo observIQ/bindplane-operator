@@ -15482,6 +15482,22 @@ spec:
                             type: string
                           insecure:
                             type: boolean
+                          temporality:
+                            default: cumulative
+                            enum:
+                            - cumulative
+                            - delta
+                            type: string
+                          keepAlive:
+                            properties:
+                              enabled:
+                                type: boolean
+                              time:
+                                type: string
+                              timeout:
+                                type: string
+                              permitWithoutStream:
+                                type: boolean
                         type: object
                       prometheus:
                         properties:
