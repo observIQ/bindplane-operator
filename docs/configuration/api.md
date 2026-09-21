@@ -368,6 +368,22 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `endpoint` _string_ | Endpoint is the gRPC endpoint to send metrics to (e.g. localhost:4317). |  | Optional: \{\} <br /> |
 | `insecure` _boolean_ | Insecure disables TLS verification for the OTLP connection. |  | Optional: \{\} <br /> |
+| `temporality` _string_ | Temporality is the aggregation temporality used when exporting metrics. One of: cumulative, delta. | cumulative | Enum: [cumulative delta] <br />Optional: \{\} <br /> |
+| `keepAlive` _[MetricsOTLPKeepAliveConfig](#metricsotlpkeepaliveconfig)_ | KeepAlive configures gRPC client keepalive pings for the OTLP connection. |  | Optional: \{\} <br /> |
+
+#### MetricsOTLPKeepAliveConfig
+
+MetricsOTLPKeepAliveConfig defines gRPC client keepalive configuration for the OTLP metrics connection
+
+_Appears in:_
+- [MetricsOTLPConfig](#metricsotlpconfig)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled controls whether gRPC keepalive pings are sent. |  | Optional: \{\} <br /> |
+| `time` _string_ | Time is the interval between keepalive pings when there is no activity (e.g. 30s). |  | Optional: \{\} <br /> |
+| `timeout` _string_ | Timeout is how long to wait for a keepalive ping ack before closing the connection (e.g. 20s). |  | Optional: \{\} <br /> |
+| `permitWithoutStream` _boolean_ | PermitWithoutStream controls whether keepalive pings are sent when there are no active streams. |  | Optional: \{\} <br /> |
 
 #### MetricsPrometheusConfig
 
