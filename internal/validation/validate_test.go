@@ -425,6 +425,43 @@ func TestValidateMetricsConfig_AcceptsOTLPWithEndpoint(t *testing.T) {
 	}
 }
 
+func TestValidateMetricsConfig_AcceptsValidKeepAliveDurations(t *testing.T) {
+	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+		Metrics: &bindplanev1alpha1.MetricsConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{
+				Endpoint:  "collector:4317",
+				KeepAlive: &bindplanev1alpha1.MetricsOTLPKeepAliveConfig{Enabled: true, Time: "30s", Timeout: "20s"},
+			},
+		},
+	}
+	if err := validation.ValidateMetricsConfig(cfg); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateMetricsConfig_RejectsInvalidKeepAliveDurations(t *testing.T) {
+	cases := map[string]*bindplanev1alpha1.MetricsOTLPKeepAliveConfig{
+		"unparseable time":    {Time: "thirty"},
+		"zero time":           {Time: "0s"},
+		"negative timeout":    {Timeout: "-5s"},
+		"unparseable timeout": {Timeout: "20"},
+	}
+	for name, ka := range cases {
+		t.Run(name, func(t *testing.T) {
+			cfg := &bindplanev1alpha1.BindplaneConfigSpec{
+				Metrics: &bindplanev1alpha1.MetricsConfig{
+					Type: "otlp",
+					OTLP: &bindplanev1alpha1.MetricsOTLPConfig{Endpoint: "collector:4317", KeepAlive: ka},
+				},
+			}
+			if err := validation.ValidateMetricsConfig(cfg); err == nil {
+				t.Error("expected error for invalid keepAlive duration")
+			}
+		})
+	}
+}
+
 // ---- ValidateTracingConfig ----
 
 func TestValidateTracingConfig_AcceptsNilOrNonOTLP(t *testing.T) {

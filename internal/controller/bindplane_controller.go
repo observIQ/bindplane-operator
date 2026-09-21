@@ -147,6 +147,12 @@ const (
 	bindplaneMetricsPrometheusPasswordEnvVar = "BINDPLANE_METRICS_PROMETHEUS_PASSWORD" // #nosec G101 -- env var name, not a credential
 	bindplaneMetricsOTLPEndpointEnvVar       = "BINDPLANE_METRICS_OTLP_ENDPOINT"
 	bindplaneMetricsOTLPInsecureEnvVar       = "BINDPLANE_METRICS_OTLP_INSECURE"
+	bindplaneMetricsOTLPTemporalityEnvVar    = "BINDPLANE_METRICS_OTLP_TEMPORALITY"
+
+	bindplaneMetricsOTLPKeepAliveEnabledEnvVar             = "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_ENABLED"
+	bindplaneMetricsOTLPKeepAliveTimeEnvVar                = "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIME"
+	bindplaneMetricsOTLPKeepAliveTimeoutEnvVar             = "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIMEOUT"
+	bindplaneMetricsOTLPKeepAlivePermitWithoutStreamEnvVar = "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_PERMIT_WITHOUT_STREAM"
 
 	// Postgres configuration
 	bindplanePostgresHostEnvVar               = "BINDPLANE_POSTGRES_HOST"

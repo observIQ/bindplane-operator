@@ -575,6 +575,8 @@ Metrics configuration is optional. When `spec.config.metrics` is omitted, the op
 
 Supported types: `prometheus`, `otlp`. For `prometheus`, the server exposes metrics on an HTTP path; you can optionally set basic auth via `username` and `password` or `passwordSecretRef`.
 
+For `otlp`, metrics are exported over gRPC to `otlp.endpoint`. You can choose the aggregation `temporality` (`cumulative` or `delta`; some backends, such as Dynatrace, require `delta`). The `otlp.keepAlive` block configures gRPC client keepalive pings, which help keep long-lived connections open through load balancers and proxies that drop idle connections. Keepalive is disabled unless `keepAlive.enabled` is `true`; `time` and `timeout` are Go durations (e.g. `30s`), and `permitWithoutStream` sends pings even when no RPC is in flight.
+
 | CRD Field | Environment Variable | Default | Required |
 |---|---|---|---|
 | `spec.config.metrics.type` | `BINDPLANE_METRICS_TYPE` | `prometheus` | No |
@@ -585,6 +587,11 @@ Supported types: `prometheus`, `otlp`. For `prometheus`, the server exposes metr
 | `spec.config.metrics.prometheus.passwordSecretRef` | `BINDPLANE_METRICS_PROMETHEUS_PASSWORD` | — | No |
 | `spec.config.metrics.otlp.endpoint` | `BINDPLANE_METRICS_OTLP_ENDPOINT` | — | Yes when type is `otlp` |
 | `spec.config.metrics.otlp.insecure` | `BINDPLANE_METRICS_OTLP_INSECURE` | `false` | No |
+| `spec.config.metrics.otlp.temporality` | `BINDPLANE_METRICS_OTLP_TEMPORALITY` | `cumulative` | No |
+| `spec.config.metrics.otlp.keepAlive.enabled` | `BINDPLANE_METRICS_OTLP_KEEP_ALIVE_ENABLED` | `false` | No |
+| `spec.config.metrics.otlp.keepAlive.time` | `BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIME` | `30s` | No |
+| `spec.config.metrics.otlp.keepAlive.timeout` | `BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIMEOUT` | `20s` | No |
+| `spec.config.metrics.otlp.keepAlive.permitWithoutStream` | `BINDPLANE_METRICS_OTLP_KEEP_ALIVE_PERMIT_WITHOUT_STREAM` | `false` | No |
 
 Example (default Prometheus metrics; optional—same as omitting `metrics`):
 
@@ -624,6 +631,25 @@ spec:
       otlp:
         endpoint: otel-collector.observability.svc:4317
         insecure: true
+```
+
+Example (OTLP metrics with delta temporality and gRPC keepalive):
+
+```yaml
+spec:
+  config:
+    metrics:
+      type: otlp
+      interval: "60s"
+      otlp:
+        endpoint: otel-collector.observability.svc:4317
+        insecure: true
+        temporality: delta
+        keepAlive:
+          enabled: true
+          time: "30s"
+          timeout: "20s"
+          permitWithoutStream: true
 ```
 
 ## TSDB

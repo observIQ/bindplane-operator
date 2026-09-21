@@ -927,6 +927,35 @@ type MetricsOTLPConfig struct {
 	// Insecure disables TLS verification for the OTLP connection.
 	// +optional
 	Insecure bool `json:"insecure,omitempty"`
+
+	// Temporality is the aggregation temporality used when exporting metrics. One of: cumulative, delta.
+	// +optional
+	// +kubebuilder:validation:Enum=cumulative;delta
+	// +kubebuilder:default=cumulative
+	Temporality string `json:"temporality,omitempty"`
+
+	// KeepAlive configures gRPC client keepalive pings for the OTLP connection.
+	// +optional
+	KeepAlive *MetricsOTLPKeepAliveConfig `json:"keepAlive,omitempty"`
+}
+
+// MetricsOTLPKeepAliveConfig defines gRPC client keepalive configuration for the OTLP metrics connection
+type MetricsOTLPKeepAliveConfig struct {
+	// Enabled controls whether gRPC keepalive pings are sent.
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Time is the interval between keepalive pings when there is no activity (e.g. 30s).
+	// +optional
+	Time string `json:"time,omitempty"`
+
+	// Timeout is how long to wait for a keepalive ping ack before closing the connection (e.g. 20s).
+	// +optional
+	Timeout string `json:"timeout,omitempty"`
+
+	// PermitWithoutStream controls whether keepalive pings are sent when there are no active streams.
+	// +optional
+	PermitWithoutStream bool `json:"permitWithoutStream,omitempty"`
 }
 
 // TransformAgentComponentSpec defines the Transform Agent component pod specification
