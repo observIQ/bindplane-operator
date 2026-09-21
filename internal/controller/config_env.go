@@ -359,6 +359,32 @@ func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.
 		if metrics.OTLP.Insecure {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPInsecureEnvVar, Value: "true"})
 		}
+		if metrics.OTLP.Temporality != "" {
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPTemporalityEnvVar, Value: metrics.OTLP.Temporality})
+		}
+		envVars = append(envVars, getMetricsOTLPKeepAliveEnvVars(metrics.OTLP.KeepAlive)...)
+	}
+	return envVars
+}
+
+// getMetricsOTLPKeepAliveEnvVars returns env vars for spec.config.metrics.otlp.keepAlive.
+// Only explicitly set fields are emitted; Bindplane applies its own defaults otherwise.
+func getMetricsOTLPKeepAliveEnvVars(keepAlive *bindplanev1alpha1.MetricsOTLPKeepAliveConfig) []corev1.EnvVar {
+	if keepAlive == nil {
+		return nil
+	}
+	var envVars []corev1.EnvVar
+	if keepAlive.Enabled {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAliveEnabledEnvVar, Value: "true"})
+	}
+	if keepAlive.Time != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAliveTimeEnvVar, Value: keepAlive.Time})
+	}
+	if keepAlive.Timeout != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAliveTimeoutEnvVar, Value: keepAlive.Timeout})
+	}
+	if keepAlive.PermitWithoutStream {
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAlivePermitWithoutStreamEnvVar, Value: "true"})
 	}
 	return envVars
 }

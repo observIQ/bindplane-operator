@@ -426,6 +426,29 @@ func ValidateMetricsConfig(config *bindplanev1alpha1.BindplaneConfigSpec) error 
 	if config.Metrics.OTLP == nil || config.Metrics.OTLP.Endpoint == "" {
 		return fmt.Errorf("spec.config.metrics.otlp.endpoint is required when metrics type is \"otlp\"")
 	}
+	if ka := config.Metrics.OTLP.KeepAlive; ka != nil {
+		if err := validatePositiveDuration("spec.config.metrics.otlp.keepAlive.time", ka.Time); err != nil {
+			return err
+		}
+		if err := validatePositiveDuration("spec.config.metrics.otlp.keepAlive.timeout", ka.Timeout); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validatePositiveDuration returns an error if value is set and is not a parseable duration greater than zero.
+func validatePositiveDuration(field, value string) error {
+	if value == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return fmt.Errorf("%s %q is not a valid duration: %w", field, value, err)
+	}
+	if d <= 0 {
+		return fmt.Errorf("%s %q must be greater than 0", field, value)
+	}
 	return nil
 }
 

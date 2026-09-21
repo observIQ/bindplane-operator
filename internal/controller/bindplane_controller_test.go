@@ -2581,6 +2581,49 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		Expect(envVarByName(envVars, "BINDPLANE_METRICS_PROMETHEUS_ENDPOINT")).To(Equal("/metrics"))
 	})
 
+	It("sets metrics type otlp with temporality and keepAlive env vars", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{
+				Endpoint:    "otel:4317",
+				Insecure:    true,
+				Temporality: "delta",
+				KeepAlive: &bindplanev1alpha1.MetricsOTLPKeepAliveConfig{
+					Enabled:             true,
+					Time:                "45s",
+					Timeout:             "15s",
+					PermitWithoutStream: true,
+				},
+			},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_TYPE")).To(Equal("otlp"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_ENDPOINT")).To(Equal("otel:4317"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_INSECURE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_TEMPORALITY")).To(Equal("delta"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_ENABLED")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIME")).To(Equal("45s"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIMEOUT")).To(Equal("15s"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_PERMIT_WITHOUT_STREAM")).To(Equal("true"))
+	})
+
+	It("omits metrics otlp keepAlive env vars when keepAlive is not set", func() {
+		bindplane := baseBindplane()
+		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
+			Type: "otlp",
+			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{Endpoint: "otel:4317"},
+		}
+		envVars := getBindplaneConfigEnvVars(bindplane)
+
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_TEMPORALITY")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_ENABLED")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIME")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIMEOUT")).To(BeEmpty())
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_PERMIT_WITHOUT_STREAM")).To(BeEmpty())
+	})
+
 	It("sets tracing type otlp with endpoint, insecure, and sampling rate", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Tracing = &bindplanev1alpha1.TracingConfig{
