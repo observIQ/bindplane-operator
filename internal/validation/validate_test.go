@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -148,19 +149,20 @@ func TestValidatePodDisruptionBudget(t *testing.T) {
 	strPtr := func(s string) *intstr.IntOrString { v := intstr.FromString(s); return &v }
 	tests := []struct {
 		name    string
-		pdb     *bindplanev1alpha1.PodDisruptionBudgetSpec
+		pdb     *policyv1.PodDisruptionBudgetSpec
 		wantErr bool
 	}{
 		{name: "nil", pdb: nil},
-		{name: "empty", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{}},
-		{name: "minAvailable int", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MinAvailable: intPtr(2)}},
-		{name: "maxUnavailable int", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MaxUnavailable: intPtr(0)}},
-		{name: "maxUnavailable percent", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MaxUnavailable: strPtr("25%")}},
-		{name: "minAvailable 100 percent", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MinAvailable: strPtr("100%")}},
-		{name: "both set", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MinAvailable: intPtr(1), MaxUnavailable: intPtr(1)}, wantErr: true},
-		{name: "negative int", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MaxUnavailable: intPtr(-1)}, wantErr: true},
-		{name: "percent over 100", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MinAvailable: strPtr("101%")}, wantErr: true},
-		{name: "non-percent string", pdb: &bindplanev1alpha1.PodDisruptionBudgetSpec{MaxUnavailable: strPtr("two")}, wantErr: true},
+		{name: "empty", pdb: &policyv1.PodDisruptionBudgetSpec{}},
+		{name: "minAvailable int", pdb: &policyv1.PodDisruptionBudgetSpec{MinAvailable: intPtr(2)}},
+		{name: "maxUnavailable int", pdb: &policyv1.PodDisruptionBudgetSpec{MaxUnavailable: intPtr(0)}},
+		{name: "maxUnavailable percent", pdb: &policyv1.PodDisruptionBudgetSpec{MaxUnavailable: strPtr("25%")}},
+		{name: "minAvailable 100 percent", pdb: &policyv1.PodDisruptionBudgetSpec{MinAvailable: strPtr("100%")}},
+		{name: "both set", pdb: &policyv1.PodDisruptionBudgetSpec{MinAvailable: intPtr(1), MaxUnavailable: intPtr(1)}, wantErr: true},
+		{name: "negative int", pdb: &policyv1.PodDisruptionBudgetSpec{MaxUnavailable: intPtr(-1)}, wantErr: true},
+		{name: "percent over 100", pdb: &policyv1.PodDisruptionBudgetSpec{MinAvailable: strPtr("101%")}, wantErr: true},
+		{name: "non-percent string", pdb: &policyv1.PodDisruptionBudgetSpec{MaxUnavailable: strPtr("two")}, wantErr: true},
+		{name: "selector set", pdb: &policyv1.PodDisruptionBudgetSpec{MaxUnavailable: intPtr(1), Selector: &metav1.LabelSelector{}}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

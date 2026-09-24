@@ -195,7 +195,7 @@ When `autoscaling.enabled: true`, `spec.bindplane.replicas` has no effect. The D
 
 The operator creates a `PodDisruptionBudget` for each replicated component (`spec.bindplane`, `spec.opamp`, `spec.nats` and `spec.transformAgent`). Keep the PDB enabled when using autoscaling. It limits how many pods the cluster autoscaler and other voluntary evictions can remove at once.
 
-By default the PDB uses `minAvailable: 1`. With many replicas this allows all but one pod to be evicted at the same time. For example, a node scale-down can evict 19 of 20 OpAMP pods. Set `podDisruptionBudget` on the component to use a different budget. You can set `minAvailable` or `maxUnavailable`, but not both. Each accepts an integer or a percentage such as `"25%"`.
+By default the PDB uses `minAvailable: 1`. With many replicas this allows all but one pod to be evicted at the same time. For example, a node scale-down can evict 19 of 20 OpAMP pods. Set `podDisruptionBudget` on the component to use a different budget. The field uses the upstream [policy/v1 PodDisruptionBudgetSpec](https://pkg.go.dev/k8s.io/api/policy/v1#PodDisruptionBudgetSpec). You can set `minAvailable` or `maxUnavailable`, but not both. Each accepts an integer or a percentage such as `"25%"`. `unhealthyPodEvictionPolicy` is passed through. Do not set `selector`: the operator sets it, and a spec that includes it is rejected.
 
 | CRD Field | Default | Description |
 |---|---|---|

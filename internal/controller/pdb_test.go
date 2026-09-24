@@ -49,27 +49,39 @@ var _ = Describe("newPodDisruptionBudget", func() {
 	})
 
 	It("defaults to minAvailable: 1 when spec sets neither field", func() {
-		pdb := newPodDisruptionBudget(bindplane, nodeComponent, &bindplanev1alpha1.PodDisruptionBudgetSpec{})
+		pdb := newPodDisruptionBudget(bindplane, nodeComponent, &policyv1.PodDisruptionBudgetSpec{})
 		Expect(pdb.Spec.MinAvailable).To(Equal(intOrStrPtr(intstr.FromInt32(1))))
 		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
 	})
 
 	It("uses maxUnavailable when set", func() {
-		spec := &bindplanev1alpha1.PodDisruptionBudgetSpec{MaxUnavailable: intOrStrPtr(intstr.FromString("25%"))}
+		spec := &policyv1.PodDisruptionBudgetSpec{MaxUnavailable: intOrStrPtr(intstr.FromString("25%"))}
 		pdb := newPodDisruptionBudget(bindplane, opampComponent, spec)
 		Expect(pdb.Spec.MinAvailable).To(BeNil())
 		Expect(pdb.Spec.MaxUnavailable).To(Equal(intOrStrPtr(intstr.FromString("25%"))))
 	})
 
 	It("uses minAvailable when set", func() {
-		spec := &bindplanev1alpha1.PodDisruptionBudgetSpec{MinAvailable: intOrStrPtr(intstr.FromInt32(2))}
+		spec := &policyv1.PodDisruptionBudgetSpec{MinAvailable: intOrStrPtr(intstr.FromInt32(2))}
 		pdb := newPodDisruptionBudget(bindplane, natsComponent, spec)
 		Expect(pdb.Spec.MinAvailable).To(Equal(intOrStrPtr(intstr.FromInt32(2))))
 		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
 	})
 
+	It("passes through unhealthyPodEvictionPolicy and keeps the operator selector", func() {
+		policy := policyv1.AlwaysAllow
+		spec := &policyv1.PodDisruptionBudgetSpec{
+			MaxUnavailable:             intOrStrPtr(intstr.FromInt32(2)),
+			UnhealthyPodEvictionPolicy: &policy,
+			Selector:                   &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		}
+		pdb := newPodDisruptionBudget(bindplane, opampComponent, spec)
+		Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(&policy))
+		Expect(pdb.Spec.Selector.MatchLabels).To(Equal(getSelectorLabels(bindplane, opampComponent)))
+	})
+
 	It("does not alias the spec values", func() {
-		spec := &bindplanev1alpha1.PodDisruptionBudgetSpec{MaxUnavailable: intOrStrPtr(intstr.FromInt32(1))}
+		spec := &policyv1.PodDisruptionBudgetSpec{MaxUnavailable: intOrStrPtr(intstr.FromInt32(1))}
 		pdb := newPodDisruptionBudget(bindplane, natsComponent, spec)
 		Expect(pdb.Spec.MaxUnavailable).NotTo(BeIdenticalTo(spec.MaxUnavailable))
 	})
@@ -124,11 +136,11 @@ var _ = Describe("Reconcile - PodDisruptionBudget", func() {
 	It("applies maxUnavailable and minAvailable per component", func() {
 		name := "bp-pdb-custom"
 		bp := newTestBindplaneWithOpAMP(name, testNamespace)
-		bp.Spec.OpAMP.PodDisruptionBudget = &bindplanev1alpha1.PodDisruptionBudgetSpec{
+		bp.Spec.OpAMP.PodDisruptionBudget = &policyv1.PodDisruptionBudgetSpec{
 			MaxUnavailable: intOrStrPtr(intstr.FromInt32(2)),
 		}
 		bp.Spec.Nats = &bindplanev1alpha1.NatsComponentSpec{
-			PodDisruptionBudget: &bindplanev1alpha1.PodDisruptionBudgetSpec{
+			PodDisruptionBudget: &policyv1.PodDisruptionBudgetSpec{
 				MinAvailable: intOrStrPtr(intstr.FromString("50%")),
 			},
 		}
@@ -159,7 +171,7 @@ var _ = Describe("Reconcile - PodDisruptionBudget", func() {
 		Expect(getPDB(name + "-node").Spec.MinAvailable).To(Equal(intOrStrPtr(intstr.FromInt32(1))))
 
 		updateSpec(r, name, func(bp *bindplanev1alpha1.Bindplane) {
-			bp.Spec.Bindplane.PodDisruptionBudget = &bindplanev1alpha1.PodDisruptionBudgetSpec{
+			bp.Spec.Bindplane.PodDisruptionBudget = &policyv1.PodDisruptionBudgetSpec{
 				MaxUnavailable: intOrStrPtr(intstr.FromInt32(1)),
 			}
 		})
@@ -168,7 +180,7 @@ var _ = Describe("Reconcile - PodDisruptionBudget", func() {
 		Expect(pdb.Spec.MaxUnavailable).To(Equal(intOrStrPtr(intstr.FromInt32(1))))
 
 		updateSpec(r, name, func(bp *bindplanev1alpha1.Bindplane) {
-			bp.Spec.Bindplane.PodDisruptionBudget = &bindplanev1alpha1.PodDisruptionBudgetSpec{
+			bp.Spec.Bindplane.PodDisruptionBudget = &policyv1.PodDisruptionBudgetSpec{
 				MinAvailable: intOrStrPtr(intstr.FromInt32(2)),
 			}
 		})
@@ -188,7 +200,7 @@ var _ = Describe("Reconcile - PodDisruptionBudget", func() {
 		name := "bp-pdb-disabled"
 		bp := newTestBindplane(name, testNamespace)
 		bp.Spec.Nats = &bindplanev1alpha1.NatsComponentSpec{
-			PodDisruptionBudget: &bindplanev1alpha1.PodDisruptionBudgetSpec{
+			PodDisruptionBudget: &policyv1.PodDisruptionBudgetSpec{
 				MaxUnavailable: intOrStrPtr(intstr.FromInt32(1)),
 			},
 		}
@@ -207,12 +219,23 @@ var _ = Describe("Reconcile - PodDisruptionBudget", func() {
 
 	It("rejects a spec that sets both minAvailable and maxUnavailable", func() {
 		bp := newTestBindplane("bp-pdb-both", testNamespace)
-		bp.Spec.Bindplane.PodDisruptionBudget = &bindplanev1alpha1.PodDisruptionBudgetSpec{
+		bp.Spec.Bindplane.PodDisruptionBudget = &policyv1.PodDisruptionBudgetSpec{
 			MinAvailable:   intOrStrPtr(intstr.FromInt32(1)),
 			MaxUnavailable: intOrStrPtr(intstr.FromInt32(1)),
 		}
 		err := k8sClient.Create(testCtx, bp)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("minAvailable and maxUnavailable are mutually exclusive"))
+	})
+
+	It("rejects a spec that sets a selector", func() {
+		bp := newTestBindplane("bp-pdb-selector", testNamespace)
+		bp.Spec.Bindplane.PodDisruptionBudget = &policyv1.PodDisruptionBudgetSpec{
+			MaxUnavailable: intOrStrPtr(intstr.FromInt32(1)),
+			Selector:       &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		}
+		err := k8sClient.Create(testCtx, bp)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("selector is managed by the operator"))
 	})
 })

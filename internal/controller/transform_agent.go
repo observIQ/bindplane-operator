@@ -22,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -62,7 +63,7 @@ func (r *BindplaneReconciler) reconcileTransformAgent(ctx context.Context, bindp
 
 	// Reconcile PodDisruptionBudget
 	if bindplane.Spec.TransformAgent == nil || !bindplane.Spec.TransformAgent.DisablePodDisruptionBudget {
-		var pdbSpec *bindplanev1alpha1.PodDisruptionBudgetSpec
+		var pdbSpec *policyv1.PodDisruptionBudgetSpec
 		if bindplane.Spec.TransformAgent != nil {
 			pdbSpec = bindplane.Spec.TransformAgent.PodDisruptionBudget
 		}

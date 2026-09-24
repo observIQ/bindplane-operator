@@ -1387,10 +1387,41 @@ spec:
                         - type: integer
                         - type: string
                         x-kubernetes-int-or-string: true
+                      selector:
+                        properties:
+                          matchExpressions:
+                            items:
+                              properties:
+                                key:
+                                  type: string
+                                operator:
+                                  type: string
+                                values:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      unhealthyPodEvictionPolicy:
+                        type: string
                     type: object
                     x-kubernetes-validations:
                     - message: minAvailable and maxUnavailable are mutually exclusive
                       rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
+                    - message: selector is managed by the operator and must not be
+                        set
+                      rule: '!has(self.selector)'
                   podTemplate:
                     properties:
                       metadata:
@@ -16795,10 +16826,41 @@ spec:
                         - type: integer
                         - type: string
                         x-kubernetes-int-or-string: true
+                      selector:
+                        properties:
+                          matchExpressions:
+                            items:
+                              properties:
+                                key:
+                                  type: string
+                                operator:
+                                  type: string
+                                values:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      unhealthyPodEvictionPolicy:
+                        type: string
                     type: object
                     x-kubernetes-validations:
                     - message: minAvailable and maxUnavailable are mutually exclusive
                       rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
+                    - message: selector is managed by the operator and must not be
+                        set
+                      rule: '!has(self.selector)'
                   podTemplate:
                     properties:
                       metadata:
@@ -22098,10 +22160,41 @@ spec:
                         - type: integer
                         - type: string
                         x-kubernetes-int-or-string: true
+                      selector:
+                        properties:
+                          matchExpressions:
+                            items:
+                              properties:
+                                key:
+                                  type: string
+                                operator:
+                                  type: string
+                                values:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      unhealthyPodEvictionPolicy:
+                        type: string
                     type: object
                     x-kubernetes-validations:
                     - message: minAvailable and maxUnavailable are mutually exclusive
                       rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
+                    - message: selector is managed by the operator and must not be
+                        set
+                      rule: '!has(self.selector)'
                   podTemplate:
                     properties:
                       metadata:
@@ -27059,10 +27152,41 @@ spec:
                         - type: integer
                         - type: string
                         x-kubernetes-int-or-string: true
+                      selector:
+                        properties:
+                          matchExpressions:
+                            items:
+                              properties:
+                                key:
+                                  type: string
+                                operator:
+                                  type: string
+                                values:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              required:
+                              - key
+                              - operator
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          matchLabels:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      unhealthyPodEvictionPolicy:
+                        type: string
                     type: object
                     x-kubernetes-validations:
                     - message: minAvailable and maxUnavailable are mutually exclusive
                       rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
+                    - message: selector is managed by the operator and must not be
+                        set
+                      rule: '!has(self.selector)'
                   podTemplate:
                     properties:
                       metadata:
