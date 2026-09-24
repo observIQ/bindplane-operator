@@ -79,7 +79,11 @@ func (r *BindplaneReconciler) reconcileNats(ctx context.Context, bindplane *bind
 
 	// Reconcile PodDisruptionBudget
 	if bindplane.Spec.Nats == nil || !bindplane.Spec.Nats.DisablePodDisruptionBudget {
-		pdb := newPodDisruptionBudget(bindplane, natsComponent)
+		var pdbSpec *bindplanev1alpha1.PodDisruptionBudgetSpec
+		if bindplane.Spec.Nats != nil {
+			pdbSpec = bindplane.Spec.Nats.PodDisruptionBudget
+		}
+		pdb := newPodDisruptionBudget(bindplane, natsComponent, pdbSpec)
 		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
 			return err
 		}

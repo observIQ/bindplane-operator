@@ -80,7 +80,7 @@ func (r *BindplaneReconciler) reconcileOpAMP(ctx context.Context, bindplane *bin
 
 	// Reconcile PodDisruptionBudget
 	if !bindplane.Spec.OpAMP.DisablePodDisruptionBudget {
-		pdb := newPodDisruptionBudget(bindplane, opampComponent)
+		pdb := newPodDisruptionBudget(bindplane, opampComponent, bindplane.Spec.OpAMP.PodDisruptionBudget)
 		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
 			return err
 		}

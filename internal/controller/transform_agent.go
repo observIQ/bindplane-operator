@@ -62,7 +62,11 @@ func (r *BindplaneReconciler) reconcileTransformAgent(ctx context.Context, bindp
 
 	// Reconcile PodDisruptionBudget
 	if bindplane.Spec.TransformAgent == nil || !bindplane.Spec.TransformAgent.DisablePodDisruptionBudget {
-		pdb := newPodDisruptionBudget(bindplane, transformAgentComponent)
+		var pdbSpec *bindplanev1alpha1.PodDisruptionBudgetSpec
+		if bindplane.Spec.TransformAgent != nil {
+			pdbSpec = bindplane.Spec.TransformAgent.PodDisruptionBudget
+		}
+		pdb := newPodDisruptionBudget(bindplane, transformAgentComponent, pdbSpec)
 		if err := r.reconcilePodDisruptionBudget(ctx, bindplane, pdb, log); err != nil {
 			return err
 		}

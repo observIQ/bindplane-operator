@@ -193,7 +193,26 @@ When `autoscaling.enabled: true`, `spec.bindplane.replicas` has no effect. The D
 
 ### PodDisruptionBudget
 
-The operator creates a `PodDisruptionBudget` with `minAvailable: 1` by default (controlled by `spec.bindplane.disablePodDisruptionBudget`). Keep the PDB enabled when using autoscaling — it prevents the cluster autoscaler and voluntary evictions from removing too many pods at once.
+The operator creates a `PodDisruptionBudget` for each replicated component (`spec.bindplane`, `spec.opamp`, `spec.nats` and `spec.transformAgent`). Keep the PDB enabled when using autoscaling. It limits how many pods the cluster autoscaler and other voluntary evictions can remove at once.
+
+By default the PDB uses `minAvailable: 1`. With many replicas this allows all but one pod to be evicted at the same time. For example, a node scale-down can evict 19 of 20 OpAMP pods. Set `podDisruptionBudget` on the component to use a different budget. You can set `minAvailable` or `maxUnavailable`, but not both. Each accepts an integer or a percentage such as `"25%"`.
+
+| CRD Field | Default | Description |
+|---|---|---|
+| `spec.<component>.podDisruptionBudget.minAvailable` | `1` | Pods that must stay available during a voluntary disruption |
+| `spec.<component>.podDisruptionBudget.maxUnavailable` | unset | Pods that can be unavailable during a voluntary disruption |
+| `spec.<component>.disablePodDisruptionBudget` | `false` | Removes the PDB. Takes precedence over `podDisruptionBudget` |
+
+```yaml
+spec:
+  opamp:
+    enabled: true
+    podDisruptionBudget:
+      maxUnavailable: 2
+  nats:
+    podDisruptionBudget:
+      maxUnavailable: 1
+```
 
 ### OpAMP shutdown grace period
 
@@ -213,7 +232,7 @@ When a Node pod is removed (by the HPA or any other mechanism), connected agents
 
 2. **Set `opampShutdownGracePeriod`.** A grace period of 30–60 seconds gives agents time to reconnect before a pod disappears entirely.
 
-3. **Keep the PDB enabled.** `spec.bindplane.disablePodDisruptionBudget: false` (the default) ensures voluntary disruptions cannot remove more than one pod at a time regardless of HPA decisions.
+3. **Keep the PDB enabled.** `spec.bindplane.disablePodDisruptionBudget: false` (the default) keeps a PDB in place regardless of HPA decisions. Set `podDisruptionBudget.maxUnavailable` to cap how many pods a voluntary disruption can remove at once.
 
 4. **Size CPU requests accurately.** The HPA scales on CPU *utilization* relative to the pod's CPU request. If the request is too low, the HPA will scale up prematurely; if too high, it will scale up too late. Tune `spec.bindplane.podTemplate.spec.containers[0].resources.requests.cpu` based on observed steady-state usage.
 
