@@ -27,6 +27,7 @@ import (
 	"unicode"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
@@ -34,6 +35,9 @@ import (
 // maxResourceNamePrefixLen is the maximum length for the Bindplane name prefix so that
 // derived resource names (e.g. "<name>-transform-agent") fit within the 63-character limit.
 const maxResourceNamePrefixLen = 63 - 1 - len("transform-agent") // 47
+
+// percentRegex matches a whole-number percentage from 0% to 100%.
+var percentRegex = regexp.MustCompile(`^(100|[1-9]?[0-9])%$`)
 
 // uuidRegex matches standard UUID format (case-insensitive).
 var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -151,6 +155,10 @@ func ValidateBindplane(bindplane *bindplanev1alpha1.Bindplane) error {
 		return err
 	}
 
+	if err := validateAllPodDisruptionBudgets(bindplane); err != nil {
+		return err
+	}
+
 	if err := ValidateArgoRollout(bindplane); err != nil {
 		return err
 	}
@@ -212,6 +220,60 @@ func ValidateArgoRollout(bindplane *bindplanev1alpha1.Bindplane) error {
 	}
 	if bindplane.Spec.Bindplane.Strategy != nil {
 		return fmt.Errorf("spec.bindplane.strategy and spec.bindplane.argoRollout.enabled are mutually exclusive (Argo Rollout uses BlueGreen)")
+	}
+	return nil
+}
+
+// validateAllPodDisruptionBudgets validates podDisruptionBudget for every component that has one.
+func validateAllPodDisruptionBudgets(bindplane *bindplanev1alpha1.Bindplane) error {
+	if err := ValidatePodDisruptionBudget("spec.bindplane.podDisruptionBudget", bindplane.Spec.Bindplane.PodDisruptionBudget); err != nil {
+		return err
+	}
+	if bindplane.Spec.OpAMP != nil {
+		if err := ValidatePodDisruptionBudget("spec.opamp.podDisruptionBudget", bindplane.Spec.OpAMP.PodDisruptionBudget); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.Nats != nil {
+		if err := ValidatePodDisruptionBudget("spec.nats.podDisruptionBudget", bindplane.Spec.Nats.PodDisruptionBudget); err != nil {
+			return err
+		}
+	}
+	if bindplane.Spec.TransformAgent != nil {
+		if err := ValidatePodDisruptionBudget("spec.transformAgent.podDisruptionBudget", bindplane.Spec.TransformAgent.PodDisruptionBudget); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidatePodDisruptionBudget checks that at most one of minAvailable and maxUnavailable is set
+// and that the value is a non-negative integer or a percentage from 0% to 100%.
+func ValidatePodDisruptionBudget(fieldPath string, pdb *bindplanev1alpha1.PodDisruptionBudgetSpec) error {
+	if pdb == nil {
+		return nil
+	}
+	if pdb.MinAvailable != nil && pdb.MaxUnavailable != nil {
+		return fmt.Errorf("%s: minAvailable and maxUnavailable are mutually exclusive", fieldPath)
+	}
+	if err := validateIntOrPercent(fieldPath+".minAvailable", pdb.MinAvailable); err != nil {
+		return err
+	}
+	return validateIntOrPercent(fieldPath+".maxUnavailable", pdb.MaxUnavailable)
+}
+
+func validateIntOrPercent(fieldPath string, v *intstr.IntOrString) error {
+	if v == nil {
+		return nil
+	}
+	if v.Type == intstr.Int {
+		if v.IntVal < 0 {
+			return fmt.Errorf("%s: must be >= 0, got %d", fieldPath, v.IntVal)
+		}
+		return nil
+	}
+	if !percentRegex.MatchString(v.StrVal) {
+		return fmt.Errorf("%s: must be an integer or a percentage from 0%% to 100%%, got %q", fieldPath, v.StrVal)
 	}
 	return nil
 }

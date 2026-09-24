@@ -1137,6 +1137,7 @@ When `spec.opamp.enabled` is `true`, the operator provisions a second Deployment
 | `spec.opamp.resources` | 2 CPU / 2 GiB | Compute resources for the OpAMP container |
 | `spec.opamp.podTemplate` | — | Pod template overrides (same merge rules as other components) |
 | `spec.opamp.disablePodDisruptionBudget` | `false` | Disables the operator-managed PDB |
+| `spec.opamp.podDisruptionBudget` | `minAvailable: 1` | Sets `minAvailable` or `maxUnavailable` on the operator-managed PDB |
 | `spec.opamp.minReadySeconds` | termination grace period | Minimum seconds a pod must be ready before considered available |
 | `spec.opamp.strategy` | RollingUpdate maxSurge=1 maxUnavailable=0 | Rollout strategy |
 | `spec.opamp.autoscaling` | — | HPA configuration (same structure as `spec.bindplane.autoscaling`) |

@@ -1180,9 +1180,18 @@ func (r *BindplaneReconciler) reconcilePodDisruptionBudget(ctx context.Context, 
 	return r.Update(ctx, found)
 }
 
-// newPodDisruptionBudget creates a PodDisruptionBudget for a component with minAvailable: 1.
-func newPodDisruptionBudget(bindplane *bindplanev1alpha1.Bindplane, component string) *policyv1.PodDisruptionBudget {
-	minAvailable := intstr.FromInt32(1)
+// newPodDisruptionBudget creates a PodDisruptionBudget for a component from spec.
+// It defaults to minAvailable: 1 when spec sets neither field.
+func newPodDisruptionBudget(bindplane *bindplanev1alpha1.Bindplane, component string, spec *bindplanev1alpha1.PodDisruptionBudgetSpec) *policyv1.PodDisruptionBudget {
+	var minAvailable, maxUnavailable *intstr.IntOrString
+	if spec != nil {
+		c := spec.DeepCopy()
+		minAvailable, maxUnavailable = c.MinAvailable, c.MaxUnavailable
+	}
+	if minAvailable == nil && maxUnavailable == nil {
+		v := intstr.FromInt32(1)
+		minAvailable = &v
+	}
 	return &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, component),
@@ -1190,7 +1199,8 @@ func newPodDisruptionBudget(bindplane *bindplanev1alpha1.Bindplane, component st
 			Labels:    getLabels(bindplane, component),
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
-			MinAvailable: &minAvailable,
+			MinAvailable:   minAvailable,
+			MaxUnavailable: maxUnavailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: getSelectorLabels(bindplane, component),
 			},

@@ -1375,6 +1375,22 @@ spec:
                     format: int32
                     minimum: 0
                     type: integer
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    type: object
+                    x-kubernetes-validations:
+                    - message: minAvailable and maxUnavailable are mutually exclusive
+                      rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
                   podTemplate:
                     properties:
                       metadata:
@@ -16767,6 +16783,22 @@ spec:
                   image:
                     minLength: 1
                     type: string
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    type: object
+                    x-kubernetes-validations:
+                    - message: minAvailable and maxUnavailable are mutually exclusive
+                      rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
                   podTemplate:
                     properties:
                       metadata:
@@ -22054,6 +22086,22 @@ spec:
                     format: int32
                     minimum: 0
                     type: integer
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    type: object
+                    x-kubernetes-validations:
+                    - message: minAvailable and maxUnavailable are mutually exclusive
+                      rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
                   podTemplate:
                     properties:
                       metadata:
@@ -26999,6 +27047,22 @@ spec:
                   image:
                     minLength: 1
                     type: string
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    type: object
+                    x-kubernetes-validations:
+                    - message: minAvailable and maxUnavailable are mutually exclusive
+                      rule: '!(has(self.minAvailable) && has(self.maxUnavailable))'
                   podTemplate:
                     properties:
                       metadata:
