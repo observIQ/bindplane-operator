@@ -1181,21 +1181,16 @@ func (r *BindplaneReconciler) reconcilePodDisruptionBudget(ctx context.Context, 
 }
 
 // newPodDisruptionBudget creates a PodDisruptionBudget for a component from spec.
-// It defaults to minAvailable: 1 when spec sets neither field. The selector is always operator-managed.
-func newPodDisruptionBudget(bindplane *bindplanev1alpha1.Bindplane, component string, spec *policyv1.PodDisruptionBudgetSpec) *policyv1.PodDisruptionBudget {
-	pdbSpec := policyv1.PodDisruptionBudgetSpec{}
+// It defaults to minAvailable: 1 when spec sets neither field.
+func newPodDisruptionBudget(bindplane *bindplanev1alpha1.Bindplane, component string, spec *bindplanev1alpha1.PodDisruptionBudgetSpec) *policyv1.PodDisruptionBudget {
+	var minAvailable, maxUnavailable *intstr.IntOrString
 	if spec != nil {
 		c := spec.DeepCopy()
-		pdbSpec.MinAvailable = c.MinAvailable
-		pdbSpec.MaxUnavailable = c.MaxUnavailable
-		pdbSpec.UnhealthyPodEvictionPolicy = c.UnhealthyPodEvictionPolicy
+		minAvailable, maxUnavailable = c.MinAvailable, c.MaxUnavailable
 	}
-	if pdbSpec.MinAvailable == nil && pdbSpec.MaxUnavailable == nil {
+	if minAvailable == nil && maxUnavailable == nil {
 		v := intstr.FromInt32(1)
-		pdbSpec.MinAvailable = &v
-	}
-	pdbSpec.Selector = &metav1.LabelSelector{
-		MatchLabels: getSelectorLabels(bindplane, component),
+		minAvailable = &v
 	}
 	return &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1203,7 +1198,13 @@ func newPodDisruptionBudget(bindplane *bindplanev1alpha1.Bindplane, component st
 			Namespace: bindplane.Namespace,
 			Labels:    getLabels(bindplane, component),
 		},
-		Spec: pdbSpec,
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable:   minAvailable,
+			MaxUnavailable: maxUnavailable,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: getSelectorLabels(bindplane, component),
+			},
+		},
 	}
 }
 

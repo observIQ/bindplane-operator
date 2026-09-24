@@ -27,7 +27,6 @@ import (
 	"unicode"
 
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
@@ -248,14 +247,11 @@ func validateAllPodDisruptionBudgets(bindplane *bindplanev1alpha1.Bindplane) err
 	return nil
 }
 
-// ValidatePodDisruptionBudget checks that the selector is unset, that at most one of minAvailable
-// and maxUnavailable is set, and that the value is a non-negative integer or a percentage from 0% to 100%.
-func ValidatePodDisruptionBudget(fieldPath string, pdb *policyv1.PodDisruptionBudgetSpec) error {
+// ValidatePodDisruptionBudget checks that at most one of minAvailable and maxUnavailable is set
+// and that the value is a non-negative integer or a percentage from 0% to 100%.
+func ValidatePodDisruptionBudget(fieldPath string, pdb *bindplanev1alpha1.PodDisruptionBudgetSpec) error {
 	if pdb == nil {
 		return nil
-	}
-	if pdb.Selector != nil {
-		return fmt.Errorf("%s.selector: is managed by the operator and must not be set", fieldPath)
 	}
 	if pdb.MinAvailable != nil && pdb.MaxUnavailable != nil {
 		return fmt.Errorf("%s: minAvailable and maxUnavailable are mutually exclusive", fieldPath)

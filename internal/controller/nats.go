@@ -25,7 +25,6 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -80,7 +79,7 @@ func (r *BindplaneReconciler) reconcileNats(ctx context.Context, bindplane *bind
 
 	// Reconcile PodDisruptionBudget
 	if bindplane.Spec.Nats == nil || !bindplane.Spec.Nats.DisablePodDisruptionBudget {
-		var pdbSpec *policyv1.PodDisruptionBudgetSpec
+		var pdbSpec *bindplanev1alpha1.PodDisruptionBudgetSpec
 		if bindplane.Spec.Nats != nil {
 			pdbSpec = bindplane.Spec.Nats.PodDisruptionBudget
 		}

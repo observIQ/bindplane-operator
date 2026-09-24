@@ -20,8 +20,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -114,6 +114,20 @@ type NodeAutoscalingSpec struct {
 	Behavior *autoscalingv2.HorizontalPodAutoscalerBehavior `json:"behavior,omitempty"`
 }
 
+// PodDisruptionBudgetSpec configures the operator-managed PodDisruptionBudget for a component.
+// +kubebuilder:validation:XValidation:rule="!(has(self.minAvailable) && has(self.maxUnavailable))",message="minAvailable and maxUnavailable are mutually exclusive"
+type PodDisruptionBudgetSpec struct {
+	// MinAvailable is the number or percentage of pods that must stay available
+	// during a voluntary disruption. Mutually exclusive with maxUnavailable.
+	// +optional
+	MinAvailable *intstr.IntOrString `json:"minAvailable,omitempty"`
+
+	// MaxUnavailable is the number or percentage of pods that can be unavailable
+	// during a voluntary disruption. Mutually exclusive with minAvailable.
+	// +optional
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+}
+
 // ServiceAccountSpec defines configuration for an operator-managed ServiceAccount.
 type ServiceAccountSpec struct {
 	// Annotations are added to the ServiceAccount's metadata.annotations.
@@ -148,15 +162,11 @@ type BindplaneComponentSpec struct {
 	// +kubebuilder:default=false
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 
-	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component,
-	// using the upstream policy/v1 PodDisruptionBudgetSpec
-	// (https://pkg.go.dev/k8s.io/api/policy/v1#PodDisruptionBudgetSpec). The operator sets the
-	// selector, so it must be omitted. When omitted, the operator creates a PDB with
-	// minAvailable: 1. Ignored when disablePodDisruptionBudget is true.
+	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component.
+	// When omitted, the operator creates a PDB with minAvailable: 1. Ignored when
+	// disablePodDisruptionBudget is true.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!(has(self.minAvailable) && has(self.maxUnavailable))",message="minAvailable and maxUnavailable are mutually exclusive"
-	// +kubebuilder:validation:XValidation:rule="!has(self.selector)",message="selector is managed by the operator and must not be set"
-	PodDisruptionBudget *policyv1.PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
 	// MinReadySeconds is the minimum number of seconds a newly created Node pod must be
 	// ready (passing its readiness probe) before it is considered available. During a
@@ -305,15 +315,11 @@ type OpAMPComponentSpec struct {
 	// +kubebuilder:default=false
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 
-	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component,
-	// using the upstream policy/v1 PodDisruptionBudgetSpec
-	// (https://pkg.go.dev/k8s.io/api/policy/v1#PodDisruptionBudgetSpec). The operator sets the
-	// selector, so it must be omitted. When omitted, the operator creates a PDB with
-	// minAvailable: 1. Ignored when disablePodDisruptionBudget is true.
+	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component.
+	// When omitted, the operator creates a PDB with minAvailable: 1. Ignored when
+	// disablePodDisruptionBudget is true.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!(has(self.minAvailable) && has(self.maxUnavailable))",message="minAvailable and maxUnavailable are mutually exclusive"
-	// +kubebuilder:validation:XValidation:rule="!has(self.selector)",message="selector is managed by the operator and must not be set"
-	PodDisruptionBudget *policyv1.PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
 	// MinReadySeconds is the minimum number of seconds a newly created OpAMP pod
 	// must be ready before it is considered available. When omitted, the operator
@@ -1008,15 +1014,11 @@ type TransformAgentComponentSpec struct {
 	// +optional
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 
-	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component,
-	// using the upstream policy/v1 PodDisruptionBudgetSpec
-	// (https://pkg.go.dev/k8s.io/api/policy/v1#PodDisruptionBudgetSpec). The operator sets the
-	// selector, so it must be omitted. When omitted, the operator creates a PDB with
-	// minAvailable: 1. Ignored when disablePodDisruptionBudget is true.
+	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component.
+	// When omitted, the operator creates a PDB with minAvailable: 1. Ignored when
+	// disablePodDisruptionBudget is true.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!(has(self.minAvailable) && has(self.maxUnavailable))",message="minAvailable and maxUnavailable are mutually exclusive"
-	// +kubebuilder:validation:XValidation:rule="!has(self.selector)",message="selector is managed by the operator and must not be set"
-	PodDisruptionBudget *policyv1.PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
 	// ExtraEnv is a list of additional environment variables to inject into the
 	// primary container of this component. These are prepended BEFORE the
@@ -1158,15 +1160,11 @@ type NatsComponentSpec struct {
 	// +optional
 	DisablePodDisruptionBudget bool `json:"disablePodDisruptionBudget,omitempty"`
 
-	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component,
-	// using the upstream policy/v1 PodDisruptionBudgetSpec
-	// (https://pkg.go.dev/k8s.io/api/policy/v1#PodDisruptionBudgetSpec). The operator sets the
-	// selector, so it must be omitted. When omitted, the operator creates a PDB with
-	// minAvailable: 1. Ignored when disablePodDisruptionBudget is true.
+	// PodDisruptionBudget configures the operator-managed PodDisruptionBudget for this component.
+	// When omitted, the operator creates a PDB with minAvailable: 1. Ignored when
+	// disablePodDisruptionBudget is true.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="!(has(self.minAvailable) && has(self.maxUnavailable))",message="minAvailable and maxUnavailable are mutually exclusive"
-	// +kubebuilder:validation:XValidation:rule="!has(self.selector)",message="selector is managed by the operator and must not be set"
-	PodDisruptionBudget *policyv1.PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
 	// ExtraEnv is a list of additional environment variables to inject into the
 	// primary container of this component. These are prepended BEFORE the
