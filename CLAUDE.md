@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # Bindplane Operator - Project Rules
 
 ## Project Overview
