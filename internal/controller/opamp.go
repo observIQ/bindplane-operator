@@ -236,6 +236,7 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 						Containers: []corev1.Container{
 							{
 								Name:         opampContainerName,
+								Args:         []string{skipSeedArg},
 								Image:        getOpAMPImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{
