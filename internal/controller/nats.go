@@ -154,6 +154,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 						Containers: []corev1.Container{
 							{
 								Name:         natsContainerName,
+								Args:         []string{skipSeedArg},
 								Image:        getNatsImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{

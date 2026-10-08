@@ -22,6 +22,8 @@ The primary service that users and managed collectors connect to. Exposes the Bi
 
 Manages periodic background jobs, such as agent cleanup and maintenance tasks.
 
+The Jobs pod is the only component that seeds Bindplane resources (such as resource types) into the store on startup. All other `bindplane serve` workloads (Node, Node Argo Rollout, OpAMP, and NATS) are started with `--skip-seed`. The Jobs Migrate Job does not seed resources.
+
 **Scaling**: Always one pod.
 
 ### Bindplane Jobs Migrate
