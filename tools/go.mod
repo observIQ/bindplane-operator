@@ -1,6 +1,6 @@
 module github.com/observiq/bindplane-operator/tools
 
-go 1.26.6
+go 1.26.9
 
 tool (
 	github.com/elastic/crd-ref-docs
