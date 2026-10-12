@@ -156,6 +156,8 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 		nodeResources = *bindplane.Spec.Bindplane.Resources
 	}
 
+	health := newBindplaneContainerHealth(getNodeImage(bindplane), nodeHTTPPortName)
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, nodeComponent),
@@ -185,64 +187,28 @@ func (r *BindplaneReconciler) nodeDeployment(bindplane *bindplanev1alpha1.Bindpl
 								Args:         []string{skipSeedArg},
 								Image:        getNodeImage(bindplane),
 								VolumeMounts: configMounts,
-								Ports: []corev1.ContainerPort{
+								Ports: append([]corev1.ContainerPort{
 									{
 										Name:          nodeHTTPPortName,
 										ContainerPort: nodeHTTPPort,
 										Protocol:      corev1.ProtocolTCP,
 									},
-								},
+								}, health.ports...),
 								Env: prependExtraEnv(
 									bindplane.Spec.Bindplane.ExtraEnv,
 									getKubernetesEnvVars(nodeContainerName),
 									getNodeEnvVars(),
 									getBindplaneCommonEnvVars(bindplane),
 									getNatsClientEnvVars(bindplane),
+									health.env,
 								),
-								Resources: nodeResources,
-								StartupProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(nodeHTTPPortName),
-										},
-									},
-									InitialDelaySeconds: probeStartupInitialDelaySeconds,
-									PeriodSeconds:       probeStartupPeriodSeconds,
-									FailureThreshold:    probeStartupFailureThreshold,
-									SuccessThreshold:    probeStartupSuccessThreshold,
-									TimeoutSeconds:      probeStartupTimeoutSeconds,
-								},
-								ReadinessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(nodeHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
-								LivenessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(nodeHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
+								Resources:       nodeResources,
+								StartupProbe:    health.startup,
+								ReadinessProbe:  health.readiness,
+								LivenessProbe:   health.liveness,
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
-								Lifecycle: &corev1.Lifecycle{
-									PreStop: &corev1.LifecycleHandler{
-										Exec: &corev1.ExecAction{
-											Command: []string{preStopCommand, preStopArgs, preStopSleep},
-										},
-									},
-								},
+								Lifecycle:       health.lifecycle,
 							},
 						},
 						TerminationGracePeriodSeconds: &terminationGracePeriod,

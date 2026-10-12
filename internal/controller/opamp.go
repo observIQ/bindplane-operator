@@ -210,6 +210,8 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 		opampResources = *cfg.Resources
 	}
 
+	health := newBindplaneContainerHealth(getOpAMPImage(bindplane), opampHTTPPortName)
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, opampComponent),
@@ -239,13 +241,13 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 								Args:         []string{skipSeedArg},
 								Image:        getOpAMPImage(bindplane),
 								VolumeMounts: configMounts,
-								Ports: []corev1.ContainerPort{
+								Ports: append([]corev1.ContainerPort{
 									{
 										Name:          opampHTTPPortName,
 										ContainerPort: opampHTTPPort,
 										Protocol:      corev1.ProtocolTCP,
 									},
-								},
+								}, health.ports...),
 								Env: prependExtraEnv(
 									bindplane.Spec.OpAMP.ExtraEnv,
 									getKubernetesEnvVars(opampContainerName),
@@ -253,51 +255,15 @@ func (r *BindplaneReconciler) opampDeployment(bindplane *bindplanev1alpha1.Bindp
 									getBindplaneCommonEnvVars(bindplane),
 									getNatsClientEnvVars(bindplane),
 									getOpAMPOverrideEnvVars(bindplane),
+									health.env,
 								),
-								Resources: opampResources,
-								StartupProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(opampHTTPPortName),
-										},
-									},
-									InitialDelaySeconds: probeStartupInitialDelaySeconds,
-									PeriodSeconds:       probeStartupPeriodSeconds,
-									FailureThreshold:    probeStartupFailureThreshold,
-									SuccessThreshold:    probeStartupSuccessThreshold,
-									TimeoutSeconds:      probeStartupTimeoutSeconds,
-								},
-								ReadinessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(opampHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
-								LivenessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(opampHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
+								Resources:       opampResources,
+								StartupProbe:    health.startup,
+								ReadinessProbe:  health.readiness,
+								LivenessProbe:   health.liveness,
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
-								Lifecycle: &corev1.Lifecycle{
-									PreStop: &corev1.LifecycleHandler{
-										Exec: &corev1.ExecAction{
-											Command: []string{preStopCommand, preStopArgs, preStopSleep},
-										},
-									},
-								},
+								Lifecycle:       health.lifecycle,
 							},
 						},
 						TerminationGracePeriodSeconds: &terminationGracePeriod,

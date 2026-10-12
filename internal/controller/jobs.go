@@ -134,6 +134,8 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 	configVols = appendExtraVolumes(configVols, getBindplaneJobsExtraVolumes(bindplane))
 	configMounts = appendExtraVolumeMounts(configMounts, getBindplaneJobsExtraVolumeMounts(bindplane))
 
+	health := newBindplaneContainerHealth(getBindplaneJobsImage(bindplane), bindplaneJobsHTTPPortName)
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      getResourceName(bindplane, bindplaneJobsComponent),
@@ -167,13 +169,13 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 								Name:         bindplaneJobsContainerName,
 								Image:        getBindplaneJobsImage(bindplane),
 								VolumeMounts: configMounts,
-								Ports: []corev1.ContainerPort{
+								Ports: append([]corev1.ContainerPort{
 									{
 										Name:          bindplaneJobsHTTPPortName,
 										ContainerPort: bindplaneJobsHTTPPort,
 										Protocol:      corev1.ProtocolTCP,
 									},
-								},
+								}, health.ports...),
 								Env: prependExtraEnv(
 									getBindplaneJobsExtraEnv(bindplane),
 									getKubernetesEnvVars(bindplaneJobsContainerName),
@@ -185,51 +187,15 @@ func (r *BindplaneReconciler) bindplaneJobsDeployment(bindplane *bindplanev1alph
 									},
 									getBindplaneCommonEnvVars(bindplane),
 									getNatsClientEnvVars(bindplane),
+									health.env,
 								),
-								Resources: resources,
-								StartupProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(bindplaneJobsHTTPPortName),
-										},
-									},
-									InitialDelaySeconds: probeStartupInitialDelaySeconds,
-									PeriodSeconds:       probeStartupPeriodSeconds,
-									FailureThreshold:    probeStartupFailureThreshold,
-									SuccessThreshold:    probeStartupSuccessThreshold,
-									TimeoutSeconds:      probeStartupTimeoutSeconds,
-								},
-								ReadinessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(bindplaneJobsHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
-								LivenessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(bindplaneJobsHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
+								Resources:       resources,
+								StartupProbe:    health.startup,
+								ReadinessProbe:  health.readiness,
+								LivenessProbe:   health.liveness,
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
-								Lifecycle: &corev1.Lifecycle{
-									PreStop: &corev1.LifecycleHandler{
-										Exec: &corev1.ExecAction{
-											Command: []string{preStopCommand, preStopArgs, preStopSleep},
-										},
-									},
-								},
+								Lifecycle:       health.lifecycle,
 							},
 						},
 						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),

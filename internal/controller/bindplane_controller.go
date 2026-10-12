@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/version"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -452,6 +453,135 @@ const (
 	probeSuccessThreshold int32 = 1
 	probeTimeoutSeconds   int32 = 5
 )
+
+// Bindplane health probe listener constants
+const (
+	// bindplaneHealthPortName is the container port name of the Bindplane health probe listener.
+	bindplaneHealthPortName = "health"
+	// bindplaneHealthPort is the plain HTTP, unauthenticated port of the Bindplane health probe listener.
+	bindplaneHealthPort = int32(3002)
+	// bindplaneHealthProbeMinVersion is the first Bindplane version that serves the health probe listener.
+	bindplaneHealthProbeMinVersion = "1.105.0"
+	// bindplaneProbePortEnvVar configures the port of the Bindplane health probe listener.
+	bindplaneProbePortEnvVar = "BINDPLANE_PROBE_PORT"
+	// bindplaneStartupPath returns 200 once Bindplane has finished starting.
+	bindplaneStartupPath = "/startupz"
+	// bindplaneReadinessPath returns 200 while Bindplane is serving and 503 while starting or draining.
+	bindplaneReadinessPath = "/readyz"
+	// bindplaneLivenessPath returns 200 while the Bindplane process is up.
+	bindplaneLivenessPath = "/livez"
+)
+
+var healthProbeMinVersion = version.MustParseGeneric(bindplaneHealthProbeMinVersion)
+
+// supportsHealthProbes reports whether the image tag is a Bindplane version that serves the
+// health probe listener. Digests, untagged images, and non-semver tags are treated as unsupported.
+func supportsHealthProbes(image string) bool {
+	if strings.Contains(image, "@") {
+		return false
+	}
+	name := image[strings.LastIndex(image, "/")+1:]
+	i := strings.LastIndex(name, ":")
+	if i < 0 {
+		return false
+	}
+	v, err := version.ParseSemantic(name[i+1:])
+	if err != nil {
+		return false
+	}
+	// Compare only major.minor.patch so pre-releases of the minimum version qualify.
+	return version.MajorMinor(v.Major(), v.Minor()).WithPatch(v.Patch()).AtLeast(healthProbeMinVersion)
+}
+
+// bindplaneContainerHealth holds the container fields that depend on whether the Bindplane
+// image serves the health probe listener.
+type bindplaneContainerHealth struct {
+	ports     []corev1.ContainerPort
+	env       []corev1.EnvVar
+	startup   *corev1.Probe
+	readiness *corev1.Probe
+	liveness  *corev1.Probe
+	lifecycle *corev1.Lifecycle
+}
+
+// newBindplaneContainerHealth returns the probes, ports, env, and lifecycle for a Bindplane
+// container running image. Images that serve the health probe listener get HTTP probes on it
+// and no preStop hook, because the server drains on SIGTERM. Older images get TCP probes on
+// tcpPortName and a preStop sleep.
+//
+//nolint:unparam // each workload passes its own port name constant; today they all happen to be "http".
+func newBindplaneContainerHealth(image, tcpPortName string) bindplaneContainerHealth {
+	if !supportsHealthProbes(image) {
+		tcp := func() corev1.ProbeHandler {
+			return corev1.ProbeHandler{
+				TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString(tcpPortName)},
+			}
+		}
+		return bindplaneContainerHealth{
+			startup:   newStartupProbe(tcp()),
+			readiness: newProbe(tcp()),
+			liveness:  newProbe(tcp()),
+			lifecycle: &corev1.Lifecycle{
+				PreStop: &corev1.LifecycleHandler{
+					Exec: &corev1.ExecAction{
+						Command: []string{preStopCommand, preStopArgs, preStopSleep},
+					},
+				},
+			},
+		}
+	}
+
+	httpGet := func(path string) corev1.ProbeHandler {
+		return corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path:   path,
+				Port:   intstr.FromString(bindplaneHealthPortName),
+				Scheme: corev1.URISchemeHTTP,
+			},
+		}
+	}
+	return bindplaneContainerHealth{
+		ports: []corev1.ContainerPort{
+			{
+				Name:          bindplaneHealthPortName,
+				ContainerPort: bindplaneHealthPort,
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
+		env: []corev1.EnvVar{
+			{
+				Name:  bindplaneProbePortEnvVar,
+				Value: strconv.Itoa(int(bindplaneHealthPort)),
+			},
+		},
+		startup:   newStartupProbe(httpGet(bindplaneStartupPath)),
+		readiness: newProbe(httpGet(bindplaneReadinessPath)),
+		liveness:  newProbe(httpGet(bindplaneLivenessPath)),
+	}
+}
+
+// newStartupProbe returns a startup probe with the standard startup timings.
+func newStartupProbe(handler corev1.ProbeHandler) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:        handler,
+		InitialDelaySeconds: probeStartupInitialDelaySeconds,
+		PeriodSeconds:       probeStartupPeriodSeconds,
+		FailureThreshold:    probeStartupFailureThreshold,
+		SuccessThreshold:    probeStartupSuccessThreshold,
+		TimeoutSeconds:      probeStartupTimeoutSeconds,
+	}
+}
+
+// newProbe returns a readiness or liveness probe with the standard timings.
+func newProbe(handler corev1.ProbeHandler) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:     handler,
+		PeriodSeconds:    probePeriodSeconds,
+		FailureThreshold: probeFailureThreshold,
+		SuccessThreshold: probeSuccessThreshold,
+		TimeoutSeconds:   probeTimeoutSeconds,
+	}
+}
 
 // Argo Rollouts constants
 const (
@@ -1921,7 +2051,29 @@ func mergeSingleContainer(operatorContainer, userContainer corev1.Container) cor
 	mergedContainer.Command = operatorContainer.Command
 	mergedContainer.Args = operatorContainer.Args
 
+	// A user probe with its own handler replaces the operator probe wholesale. Deep merging
+	// could combine handlers (e.g. tcpSocket and httpGet), which Kubernetes rejects. A user
+	// probe without a handler only tunes timings and keeps the deep merged result.
+	if probeHasHandler(userContainer.StartupProbe) {
+		mergedContainer.StartupProbe = userContainer.StartupProbe.DeepCopy()
+	}
+	if probeHasHandler(userContainer.ReadinessProbe) {
+		mergedContainer.ReadinessProbe = userContainer.ReadinessProbe.DeepCopy()
+	}
+	if probeHasHandler(userContainer.LivenessProbe) {
+		mergedContainer.LivenessProbe = userContainer.LivenessProbe.DeepCopy()
+	}
+
 	return *mergedContainer
+}
+
+// probeHasHandler reports whether the probe sets a probe handler.
+func probeHasHandler(p *corev1.Probe) bool {
+	if p == nil {
+		return false
+	}
+	h := p.ProbeHandler
+	return h.Exec != nil || h.HTTPGet != nil || h.TCPSocket != nil || h.GRPC != nil
 }
 
 // mergeVolumes merges user-provided volumes into the operator-managed set by name.

@@ -128,6 +128,8 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 		natsResources = *bindplane.Spec.Nats.Resources
 	}
 
+	health := newBindplaneContainerHealth(getNatsImage(bindplane), natsHTTPPortName)
+
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
@@ -157,7 +159,7 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 								Args:         []string{skipSeedArg},
 								Image:        getNatsImage(bindplane),
 								VolumeMounts: configMounts,
-								Ports: []corev1.ContainerPort{
+								Ports: append([]corev1.ContainerPort{
 									{
 										Name:          natsClientPortName,
 										ContainerPort: natsClientPort,
@@ -173,58 +175,22 @@ func (r *BindplaneReconciler) natsStatefulSet(bindplane *bindplanev1alpha1.Bindp
 										ContainerPort: natsClusterPort,
 										Protocol:      corev1.ProtocolTCP,
 									},
-								},
+								}, health.ports...),
 								Env: prependExtraEnv(
 									getNatsExtraEnv(bindplane),
 									getKubernetesEnvVars(natsContainerName),
 									getNatsEnvVars(bindplane, headlessServiceName, replicas),
 									getBindplaneCommonEnvVars(bindplane),
+									health.env,
 								),
 								Resources: natsResources,
-								// TODO(jsirianni): When NATS TLS is enabled the HTTP port serves TLS; Kubernetes HTTPGet does not support TLS. Use TCPSocket for now; add Bindplane CLI healthchecks that support exec probes for proper TLS healthcheck when available.
-								StartupProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(natsHTTPPortName),
-										},
-									},
-									InitialDelaySeconds: probeStartupInitialDelaySeconds,
-									PeriodSeconds:       probeStartupPeriodSeconds,
-									FailureThreshold:    probeStartupFailureThreshold,
-									SuccessThreshold:    probeStartupSuccessThreshold,
-									TimeoutSeconds:      probeStartupTimeoutSeconds,
-								},
-								ReadinessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(natsHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
-								LivenessProbe: &corev1.Probe{
-									ProbeHandler: corev1.ProbeHandler{
-										TCPSocket: &corev1.TCPSocketAction{
-											Port: intstr.FromString(natsHTTPPortName),
-										},
-									},
-									PeriodSeconds:    probePeriodSeconds,
-									FailureThreshold: probeFailureThreshold,
-									SuccessThreshold: probeSuccessThreshold,
-									TimeoutSeconds:   probeTimeoutSeconds,
-								},
+								// Images without the plain HTTP health listener use TCPSocket probes because the NATS HTTP port serves TLS when NATS TLS is enabled, which HTTPGet does not support.
+								StartupProbe:    health.startup,
+								ReadinessProbe:  health.readiness,
+								LivenessProbe:   health.liveness,
 								SecurityContext: newContainerSecurityContext(WithRunAsUser(defaultRunAsUser)),
 								ImagePullPolicy: corev1.PullIfNotPresent,
-								Lifecycle: &corev1.Lifecycle{
-									PreStop: &corev1.LifecycleHandler{
-										Exec: &corev1.ExecAction{
-											Command: []string{preStopCommand, preStopArgs, preStopSleep},
-										},
-									},
-								},
+								Lifecycle:       health.lifecycle,
 							},
 						},
 						TerminationGracePeriodSeconds: new(defaultTerminationGracePeriodSeconds),

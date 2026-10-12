@@ -38,6 +38,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
 - [Argo Rollouts (primary Bindplane component)](#argo-rollouts-primary-bindplane-component)
 - [OpAMP deployment split](#opamp-deployment-split)
 - [Container images](#container-images)
+- [Health probes](#health-probes)
 - [Service account annotations](#service-account-annotations)
 - [Scope](#scope)
 - [Force migration](#force-migration)
@@ -1282,6 +1283,31 @@ spec:
 ```
 
 > **Warning:** `spec.bindplaneJobsMigrate.image` controls the image used by the database migration Job. The operator gates downstream rollouts on this Job completing successfully and records the migrate image in `status.components.jobsMigrate.image`. If you pin jobs-migrate to a different version than node, jobs, and nats, ensure the migration is compatible with the runtime image — the operator does not enforce this constraint.
+
+## Health probes
+
+Bindplane 1.105.0 and later serve a dedicated health probe listener on port `3002`. The operator detects this per component from the **resolved** container image (the per-component `image` override if set, otherwise `spec.version`) and configures the Node, OpAMP, NATS, and Jobs containers accordingly. The Jobs Migrate Job has no probes and is unaffected.
+
+| Image tag | Probes | `preStop` hook |
+|---|---|---|
+| `1.105.0` or later, including pre-releases such as `1.105.0-beta.0` | HTTP `GET` on the `health` port (`3002`) | None |
+| Earlier versions, digests (`@sha256:...`), and non-semver tags such as `latest` | TCP socket on the component's existing `http` port | `sh -c "sleep 5"` |
+
+When the health listener is used, the operator adds a `health` container port (`3002/TCP`), sets `BINDPLANE_PROBE_PORT=3002`, and configures the probes against these paths:
+
+| Probe | Path | Behavior |
+|---|---|---|
+| Startup | `/startupz` | `200` once startup completes, `503` before. |
+| Readiness | `/readyz` | `200` while serving, `503` while starting or draining after `SIGTERM`. |
+| Liveness | `/livez` | `200` while the process is up. |
+
+The health listener always serves plain HTTP and requires no authentication, so it works unchanged when [Network TLS](#network) or mutual TLS is enabled on the main port (`3001`). It is not added to any Service and is only reachable from inside the cluster network (for example, by the kubelet).
+
+The `preStop` sleep hook is dropped for these versions because the Bindplane server handles `SIGTERM` itself: it immediately reports not ready on `/readyz` and keeps serving for 10 seconds before closing its listeners, which gives Services and load balancers time to stop sending it traffic. The termination grace period is unchanged.
+
+Images pinned by digest are always treated as pre-1.105.0 because their version cannot be read from the reference. Tag the image with its version to get the HTTP probes.
+
+To customize a probe, set it on the component's container in `podTemplate`. A probe that sets a handler (`tcpSocket`, `httpGet`, `exec`, or `grpc`) replaces the operator's probe of the same kind entirely, so switching handlers is safe. A probe that only sets timings, such as `periodSeconds` or `failureThreshold`, is merged into the operator's probe and keeps its handler. Probes you do not set keep the operator defaults.
 
 ## Service account annotations
 

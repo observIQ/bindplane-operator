@@ -150,6 +150,10 @@ This install path:
 - Starts the operator with `--enable-validating-webhook=false` (port 9443 is not opened).
 - Skips admission-time validation; invalid `Bindplane` specs are not rejected at create/update time.
 
+## Health probe listener
+
+Bindplane 1.105.0 and later expose an unauthenticated, plain HTTP health probe listener on port `3002` (`/startupz`, `/readyz`, `/livez`). It only reports health status and does not serve the UI, API, or OpAMP. The operator uses it for kubelet probes but does not add it to any Service. Network TLS and mutual TLS on the main port (`3001`) are unaffected. If you enforce NetworkPolicies, allow kubelet traffic to port `3002`. See [Configuration – Health probes](configuration.md#health-probes).
+
 ## Operator RBAC
 
 The operator runs with a `ClusterRole` that grants exactly the permissions needed to manage Bindplane workloads. The key principles are:
