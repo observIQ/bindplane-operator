@@ -111,6 +111,7 @@ func (r *BindplaneReconciler) nodeRollout(bindplane *bindplanev1alpha1.Bindplane
 						Containers: []corev1.Container{
 							{
 								Name:         nodeContainerName,
+								Args:         []string{skipSeedArg},
 								Image:        getNodeImage(bindplane),
 								VolumeMounts: configMounts,
 								Ports: []corev1.ContainerPort{

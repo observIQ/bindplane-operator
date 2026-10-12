@@ -431,6 +431,9 @@ const (
 	preStopArgs = "-c"
 	// preStopSleep is the sleep command for preStop hooks
 	preStopSleep = "sleep 5"
+	// skipSeedArg is passed to `bindplane serve` on components that must not seed
+	// resources on startup. Seeding is performed only by the Bindplane Jobs pod.
+	skipSeedArg = "--skip-seed"
 )
 
 // Probe timing constants
