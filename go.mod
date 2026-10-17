@@ -3,7 +3,7 @@ module github.com/observiq/bindplane-operator
 go 1.26.9
 
 require (
-	github.com/argoproj/argo-rollouts v1.10.0
+	github.com/argoproj/argo-rollouts v1.10.1
 	github.com/cert-manager/cert-manager v1.21.2
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
