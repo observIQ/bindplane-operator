@@ -27,6 +27,7 @@ dockers:
     dockerfile: Dockerfile
     build_flag_templates:
       - "--platform=linux/amd64"
+      - "--pull"
     goarch: amd64
     extra_files: []
   - image_templates:
@@ -36,6 +37,7 @@ dockers:
     dockerfile: Dockerfile
     build_flag_templates:
       - "--platform=linux/arm64"
+      - "--pull"
     goarch: arm64
     extra_files: []
 

@@ -219,7 +219,7 @@ build: manifests generate fmt vet ## Build manager binary.
 .PHONY: docker-build
 docker-build: manifests generate ## Build manager Docker image for local/e2e use (e.g. Kind). Production images are built by Goreleaser.
 	CGO_ENABLED=0 GOOS=linux go build -o manager -a cmd/main.go
-	docker build -t $(IMG) .
+	docker build --pull -t $(IMG) .
 	rm -f manager
 
 .PHONY: run
