@@ -47,7 +47,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching Kubernetes events")
-			cmd = kubectl(operatorNamespace, "get", "events", "--sort-by=.lastTimestamp")
+			cmd = kubectl(operatorNamespace, kubectlGet, "events", "--sort-by=.lastTimestamp")
 			eventsOutput, err := runCmd(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
@@ -86,7 +86,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
 
 				// Validate the pod's status
-				cmd := kubectl(operatorNamespace, "get", "pods", controllerPodName, "-o", "jsonpath={.status.phase}")
+				cmd := kubectl(operatorNamespace, kubectlGet, "pods", controllerPodName, "-o", "jsonpath={.status.phase}")
 				output, err := runCmd(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Running"), "Incorrect controller-manager pod status")
@@ -106,7 +106,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("validating that the metrics service is available")
-			cmd = kubectl(operatorNamespace, "get", "service", operatorMetricsServiceName)
+			cmd = kubectl(operatorNamespace, kubectlGet, "service", operatorMetricsServiceName)
 			_, err = runCmd(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
@@ -117,7 +117,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := kubectl(operatorNamespace, "get", "endpoints", operatorMetricsServiceName)
+				cmd := kubectl(operatorNamespace, kubectlGet, "endpoints", operatorMetricsServiceName)
 				output, err := runCmd(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
@@ -166,7 +166,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the curl-metrics pod to complete.")
 			verifyCurlUp := func(g Gomega) {
-				cmd := kubectl(operatorNamespace, "get", "pods", "curl-metrics", "-o", "jsonpath={.status.phase}")
+				cmd := kubectl(operatorNamespace, kubectlGet, "pods", "curl-metrics", "-o", "jsonpath={.status.phase}")
 				output, err := runCmd(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")

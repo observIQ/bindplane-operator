@@ -41,9 +41,6 @@ import (
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
 
-// conditionTypeReconciled is the condition type used by the controller to report reconcile status.
-const conditionTypeReconciled = "Reconciled"
-
 // newTestBindplane returns a minimal valid Bindplane CR for integration tests.
 func newTestBindplane(name, namespace string) *bindplanev1alpha1.Bindplane {
 	return &bindplanev1alpha1.Bindplane{
@@ -163,7 +160,7 @@ func setBindplaneAnnotationTrue(ctx context.Context, name, namespace, key string
 	if bp.Annotations == nil {
 		bp.Annotations = map[string]string{}
 	}
-	bp.Annotations[key] = "true"
+	bp.Annotations[key] = envValueTrue
 	Expect(k8sClient.Update(ctx, bp)).To(Succeed())
 }
 
@@ -264,7 +261,7 @@ var _ = Describe("Reconcile - pause annotation", func() {
 	It("pauses reconciliation and sets Reconciled=False/Paused", func() {
 		name := "bp-pause"
 		bp := newTestBindplane(name, testNamespace)
-		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": "true"}
+		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": envValueTrue}
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()
@@ -303,7 +300,7 @@ var _ = Describe("Reconcile - pause annotation", func() {
 	It("resumes when annotation removed", func() {
 		name := "bp-resume"
 		bp := newTestBindplane(name, testNamespace)
-		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": "true"}
+		bp.Annotations = map[string]string{"k8s.bindplane.com/pause-reconciliation": envValueTrue}
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()
@@ -477,7 +474,7 @@ var _ = Describe("Reconcile - Transform Agent", func() {
 		bp.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
 			Replicas: &replicas,
 			TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
-				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testTAIssuerName},
 			},
 		}
 		dep := newReconciler().transformAgentDeployment(bp)
@@ -712,7 +709,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		if patched.Annotations == nil {
 			patched.Annotations = map[string]string{}
 		}
-		patched.Annotations["k8s.bindplane.com/force-migrate"] = "true"
+		patched.Annotations["k8s.bindplane.com/force-migrate"] = envValueTrue
 		Expect(k8sClient.Update(testCtx, patched)).To(Succeed())
 
 		// Reconcile: operator deletes the existing Job, clears the annotation, resets MigratedImage.
@@ -808,7 +805,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 	It("skip-migrate-check bypasses a running migrate Job, keeps polling, and records success", func() {
 		name := "bp-migrate-skip-running"
 		bp := newTestBindplane(name, testNamespace)
-		bp.Annotations = map[string]string{annotationSkipMigrateCheck: "true"}
+		bp.Annotations = map[string]string{annotationSkipMigrateCheck: envValueTrue}
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()
@@ -840,7 +837,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		updated, cond = getReconciledCondition(testCtx, name, testNamespace)
 		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 		Expect(cond.Reason).To(Equal("Reconciled"))
-		Expect(updated.Annotations).To(HaveKeyWithValue(annotationSkipMigrateCheck, "true"), "annotation is sticky")
+		Expect(updated.Annotations).To(HaveKeyWithValue(annotationSkipMigrateCheck, envValueTrue), "annotation is sticky")
 		Expect(updated.Status.Components.JobsMigrate.Image).To(Equal(getBindplaneJobsMigrateImage(updated)))
 	})
 
@@ -892,7 +889,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		updated := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
 		Expect(updated.Annotations).NotTo(HaveKey("k8s.bindplane.com/force-migrate"), "force-migrate is one-shot")
-		Expect(updated.Annotations).To(HaveKeyWithValue(annotationSkipMigrateCheck, "true"), "skip-migrate-check is sticky")
+		Expect(updated.Annotations).To(HaveKeyWithValue(annotationSkipMigrateCheck, envValueTrue), "skip-migrate-check is sticky")
 		Expect(updated.Status.Components.JobsMigrate.Image).To(BeEmpty())
 		expectDownstreamWorkloads(name)
 	})
@@ -900,7 +897,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 	It("skip-migrate-check set to a value other than true has no effect", func() {
 		name := "bp-migrate-skip-false"
 		bp := newTestBindplane(name, testNamespace)
-		bp.Annotations = map[string]string{annotationSkipMigrateCheck: "false"}
+		bp.Annotations = map[string]string{annotationSkipMigrateCheck: testValueFalse}
 		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
 
 		r := newReconciler()
@@ -1193,7 +1190,7 @@ var _ = Describe("newService", func() {
 		bindplane = &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-bindplane",
-				Namespace: "default",
+				Namespace: testNamespaceDefault,
 			},
 		}
 	})
@@ -1204,7 +1201,7 @@ var _ = Describe("newService", func() {
 
 			Expect(service).NotTo(BeNil())
 			Expect(service.Name).To(Equal("test-bindplane-test-component"))
-			Expect(service.Namespace).To(Equal("default"))
+			Expect(service.Namespace).To(Equal(testNamespaceDefault))
 			Expect(service.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
 			Expect(service.Spec.Ports).To(HaveLen(1))
 			Expect(service.Spec.Ports[0].Name).To(Equal("http"))
@@ -1496,10 +1493,10 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				Labels: map[string]string{
 					"app.kubernetes.io/name":      "bindplane",
 					"app.kubernetes.io/instance":  "test-instance",
-					"app.kubernetes.io/component": "test",
+					"app.kubernetes.io/component": testValue,
 				},
 				Annotations: map[string]string{
-					"operator-managed": "true",
+					"operator-managed": envValueTrue,
 				},
 			},
 			Spec: corev1.PodSpec{
@@ -1537,7 +1534,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"user-label": "user-value",
+							testUserLabel: testUserValue,
 						},
 					},
 				},
@@ -1547,8 +1544,8 @@ var _ = Describe("mergePodTemplateSpec", func() {
 
 			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "bindplane"))
 			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", "test-instance"))
-			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "test"))
-			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", testValue))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue(testUserLabel, testUserValue))
 		})
 
 		It("should protect operator-managed selector labels from user overrides", func() {
@@ -1559,7 +1556,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 							"app.kubernetes.io/name":      "user-override-name",
 							"app.kubernetes.io/instance":  "user-override-instance",
 							"app.kubernetes.io/component": "user-override-component",
-							"user-label":                  "user-value",
+							testUserLabel:                 testUserValue,
 						},
 					},
 				},
@@ -1570,9 +1567,9 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			// Protected labels should retain operator-managed values
 			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/name", "bindplane"))
 			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/instance", "test-instance"))
-			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "test"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", testValue))
 			// User labels should still be merged
-			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue(testUserLabel, testUserValue))
 		})
 
 		It("should merge annotations from user-provided template", func() {
@@ -1580,7 +1577,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Annotations: map[string]string{
-							"user-annotation": "user-value",
+							"user-annotation": testUserValue,
 						},
 					},
 				},
@@ -1588,8 +1585,8 @@ var _ = Describe("mergePodTemplateSpec", func() {
 
 			result := mergePodTemplateSpec(operatorManaged, userProvided)
 
-			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("operator-managed", "true"))
-			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("user-annotation", "user-value"))
+			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("operator-managed", envValueTrue))
+			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("user-annotation", testUserValue))
 		})
 
 		It("should handle nil labels and annotations in operator-managed template", func() {
@@ -1600,10 +1597,10 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"user-label": "user-value",
+							testUserLabel: testUserValue,
 						},
 						Annotations: map[string]string{
-							"user-annotation": "user-value",
+							"user-annotation": testUserValue,
 						},
 					},
 				},
@@ -1611,8 +1608,8 @@ var _ = Describe("mergePodTemplateSpec", func() {
 
 			result := mergePodTemplateSpec(operatorManaged, userProvided)
 
-			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "user-value"))
-			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("user-annotation", "user-value"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue(testUserLabel, testUserValue))
+			Expect(result.ObjectMeta.Annotations).To(HaveKeyWithValue("user-annotation", testUserValue))
 		})
 	})
 
@@ -1624,7 +1621,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 						{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
-									"app": "test",
+									"app": testValue,
 								},
 							},
 							TopologyKey: "kubernetes.io/hostname",
@@ -2050,7 +2047,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 				PodTemplateSpec: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{
 						Labels: map[string]string{
-							"user-label": "value",
+							testUserLabel: "value",
 						},
 					},
 					Spec: corev1.PodSpec{
@@ -2074,7 +2071,7 @@ var _ = Describe("mergePodTemplateSpec", func() {
 			result := mergePodTemplateSpec(operatorManaged, userProvided)
 
 			// Verify all user fields are merged
-			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue("user-label", "value"))
+			Expect(result.ObjectMeta.Labels).To(HaveKeyWithValue(testUserLabel, "value"))
 			Expect(result.Spec.Affinity).To(Equal(userAffinity))
 			Expect(result.Spec.Tolerations).To(HaveLen(1))
 			Expect(result.Spec.NodeSelector).To(HaveKeyWithValue("zone", "us-west-1"))
@@ -2159,7 +2156,7 @@ var _ = Describe("mergePodTemplateSpec Go runtime env vars", func() {
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
-						Name: "server",
+						Name: nodeContainerName,
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("1000m"),
@@ -2182,7 +2179,7 @@ var _ = Describe("mergePodTemplateSpec Go runtime env vars", func() {
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
 					{
-						Name: "server",
+						Name: nodeContainerName,
 						Env:  []corev1.EnvVar{{Name: "BASE_ENV", Value: "operator"}},
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
@@ -2199,7 +2196,7 @@ var _ = Describe("mergePodTemplateSpec Go runtime env vars", func() {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name: "server",
+							Name: nodeContainerName,
 							Env:  []corev1.EnvVar{{Name: goMaxProcsEnvVar, Value: "99"}},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
@@ -2233,8 +2230,8 @@ var _ = Describe("workload Go runtime env vars", func() {
 		replicas := int32(3)
 		return &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-bp",
-				Namespace: "default",
+				Name:      testBindplaneName,
+				Namespace: testNamespaceDefault,
 			},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
@@ -2277,7 +2274,7 @@ var _ = Describe("component-level resources field", func() {
 	newBindplane := func() *bindplanev1alpha1.Bindplane {
 		replicas := int32(3)
 		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					Store: bindplanev1alpha1.StoreConfig{
@@ -2477,8 +2474,8 @@ var _ = Describe("workload pod security context defaults", func() {
 		transformAgentReplicas := int32(2)
 		return &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-bp",
-				Namespace: "default",
+				Name:      testBindplaneName,
+				Namespace: testNamespaceDefault,
 			},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
@@ -2539,12 +2536,12 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-bp",
-				Namespace: "default",
+				Name:      testBindplaneName,
+				Namespace: testNamespaceDefault,
 			},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store: bindplanev1alpha1.StoreConfig{
 						Postgres: &bindplanev1alpha1.PostgresConfig{
 							Host: "pg",
@@ -2584,7 +2581,7 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 	It("sets metrics type otlp with temporality and keepAlive env vars", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
-			Type: "otlp",
+			Type: telemetryTypeOTLP,
 			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{
 				Endpoint:    "otel:4317",
 				Insecure:    true,
@@ -2599,20 +2596,20 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
 
-		Expect(envVarByName(envVars, "BINDPLANE_METRICS_TYPE")).To(Equal("otlp"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_TYPE")).To(Equal(telemetryTypeOTLP))
 		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_ENDPOINT")).To(Equal("otel:4317"))
-		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_INSECURE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_INSECURE")).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_TEMPORALITY")).To(Equal("delta"))
-		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_ENABLED")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_ENABLED")).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIME")).To(Equal("45s"))
 		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_TIMEOUT")).To(Equal("15s"))
-		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_PERMIT_WITHOUT_STREAM")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_METRICS_OTLP_KEEP_ALIVE_PERMIT_WITHOUT_STREAM")).To(Equal(envValueTrue))
 	})
 
 	It("omits metrics otlp keepAlive env vars when keepAlive is not set", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Metrics = &bindplanev1alpha1.MetricsConfig{
-			Type: "otlp",
+			Type: telemetryTypeOTLP,
 			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{Endpoint: "otel:4317"},
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
@@ -2627,7 +2624,7 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 	It("sets tracing type otlp with endpoint, insecure, and sampling rate", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Tracing = &bindplanev1alpha1.TracingConfig{
-			Type: "otlp",
+			Type: telemetryTypeOTLP,
 			OTLP: &bindplanev1alpha1.TracingOTLPConfig{
 				Endpoint: "http://otel:4317",
 				Insecure: true,
@@ -2636,9 +2633,9 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
 
-		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(Equal("otlp"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_TYPE")).To(Equal(telemetryTypeOTLP))
 		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_ENDPOINT")).To(Equal("http://otel:4317"))
-		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_INSECURE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_TRACING_OTLP_INSECURE")).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, "BINDPLANE_TRACING_SAMPLING_RATE")).To(Equal("0.5"))
 	})
 
@@ -2742,7 +2739,7 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_TLS_MIN_VERSION")).To(Equal("1.2"))
-		Expect(envVarByName(envVars, "BINDPLANE_TLS_SKIP_VERIFY")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_TLS_SKIP_VERIFY")).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, "BINDPLANE_TLS_CERT")).To(BeEmpty())
 		Expect(envVarByName(envVars, "BINDPLANE_TLS_KEY")).To(BeEmpty())
 	})
@@ -2751,9 +2748,9 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
 			TLS: &bindplanev1alpha1.NetworkTLSConfig{
-				SecretName: "tls-secret",
-				CertKey:    "tls.crt",
-				KeyKey:     "tls.key",
+				SecretName: testTLSSecretName,
+				CertKey:    tlsSecretCertKey,
+				KeyKey:     tlsSecretKeyKey,
 			},
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
@@ -2766,10 +2763,10 @@ var _ = Describe("getBindplaneConfigEnvVars", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Network = &bindplanev1alpha1.NetworkConfig{
 			TLS: &bindplanev1alpha1.NetworkTLSConfig{
-				SecretName: "tls-secret",
-				CertKey:    "tls.crt",
-				KeyKey:     "tls.key",
-				CAKey:      "ca.crt",
+				SecretName: testTLSSecretName,
+				CertKey:    tlsSecretCertKey,
+				KeyKey:     tlsSecretKeyKey,
+				CAKey:      tlsSecretCAKey,
 			},
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
@@ -2825,12 +2822,12 @@ var _ = Describe("getStatusEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-bp",
-				Namespace: "default",
+				Name:      testBindplaneName,
+				Namespace: testNamespaceDefault,
 			},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store: bindplanev1alpha1.StoreConfig{
 						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
 					},
@@ -2842,7 +2839,7 @@ var _ = Describe("getStatusEnvVars", func() {
 	It("enables status and references the managed secret when status is omitted", func() {
 		bindplane := baseBindplane()
 		envVars := getStatusEnvVars(bindplane)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal(envValueTrue))
 		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
 		Expect(ref).NotTo(BeNil())
 		Expect(ref.Name).To(Equal("test-bp-status-secret"))
@@ -2853,7 +2850,7 @@ var _ = Describe("getStatusEnvVars", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: true}
 		envVars := getStatusEnvVars(bindplane)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal(envValueTrue))
 		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
 		Expect(ref).NotTo(BeNil())
 		Expect(ref.Name).To(Equal("test-bp-status-secret"))
@@ -2864,7 +2861,7 @@ var _ = Describe("getStatusEnvVars", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Status = &bindplanev1alpha1.StatusConfig{Enabled: false}
 		envVars := getStatusEnvVars(bindplane)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("false"))
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal(testValueFalse))
 		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(BeEmpty())
 		Expect(envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)).To(BeNil())
 	})
@@ -2876,7 +2873,7 @@ var _ = Describe("getStatusEnvVars", func() {
 			Keys:    []string{"11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"},
 		}
 		envVars := getStatusEnvVars(bindplane)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, bindplaneStatusKeysEnvVar)).To(Equal("11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222"))
 		Expect(envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)).To(BeNil())
 	})
@@ -2891,7 +2888,7 @@ var _ = Describe("getStatusEnvVars", func() {
 			},
 		}
 		envVars := getStatusEnvVars(bindplane)
-		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneStatusEnabledEnvVar)).To(Equal(envValueTrue))
 		ref := envVarSecretKeyRef(envVars, bindplaneStatusKeysEnvVar)
 		Expect(ref).NotTo(BeNil())
 		Expect(ref.Name).To(Equal("user-status-secret"))
@@ -2924,7 +2921,7 @@ var _ = Describe("getNetworkTLSVolumeAndMount", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 					Network: &bindplanev1alpha1.NetworkConfig{
-						TLS: &bindplanev1alpha1.NetworkTLSConfig{SecretName: "tls-secret"},
+						TLS: &bindplanev1alpha1.NetworkTLSConfig{SecretName: testTLSSecretName},
 					},
 				},
 			},
@@ -2941,9 +2938,9 @@ var _ = Describe("getNetworkTLSVolumeAndMount", func() {
 					Store: bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 					Network: &bindplanev1alpha1.NetworkConfig{
 						TLS: &bindplanev1alpha1.NetworkTLSConfig{
-							SecretName: "tls-secret",
-							CertKey:    "tls.crt",
-							KeyKey:     "tls.key",
+							SecretName: testTLSSecretName,
+							CertKey:    tlsSecretCertKey,
+							KeyKey:     tlsSecretKeyKey,
 						},
 					},
 				},
@@ -2953,7 +2950,7 @@ var _ = Describe("getNetworkTLSVolumeAndMount", func() {
 		Expect(vols).To(HaveLen(1))
 		Expect(vols[0].Name).To(Equal("network-tls"))
 		Expect(vols[0].Secret).ToNot(BeNil())
-		Expect(vols[0].Secret.SecretName).To(Equal("tls-secret"))
+		Expect(vols[0].Secret.SecretName).To(Equal(testTLSSecretName))
 		Expect(mounts).To(HaveLen(1))
 		Expect(mounts[0].Name).To(Equal("network-tls"))
 		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/network-tls"))
@@ -2963,10 +2960,10 @@ var _ = Describe("getNetworkTLSVolumeAndMount", func() {
 var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store: bindplanev1alpha1.StoreConfig{
 						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
 					},
@@ -2992,8 +2989,8 @@ var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
 	It("sets postgres TLS root cert only when TLS has secretName and caKey (server-side TLS)", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Store.Postgres.TLS = &bindplanev1alpha1.PostgresTLSConfig{
-			SecretName: "pg-tls",
-			CAKey:      "ca.crt",
+			SecretName: testPostgresTLSSecretName,
+			CAKey:      tlsSecretCAKey,
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(Equal("/etc/bindplane/postgres-tls/ca.crt"))
@@ -3004,10 +3001,10 @@ var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
 	It("sets postgres TLS root cert, cert, and key when mutual TLS (caKey, certKey, keyKey)", func() {
 		bindplane := baseBindplane()
 		bindplane.Spec.Config.Store.Postgres.TLS = &bindplanev1alpha1.PostgresTLSConfig{
-			SecretName: "pg-tls",
-			CAKey:      "ca.crt",
-			CertKey:    "tls.crt",
-			KeyKey:     "tls.key",
+			SecretName: testPostgresTLSSecretName,
+			CAKey:      tlsSecretCAKey,
+			CertKey:    tlsSecretCertKey,
+			KeyKey:     tlsSecretKeyKey,
 		}
 		envVars := getBindplaneConfigEnvVars(bindplane)
 		Expect(envVarByName(envVars, "BINDPLANE_POSTGRES_SSL_ROOT_CERT")).To(Equal("/etc/bindplane/postgres-tls/ca.crt"))
@@ -3036,10 +3033,10 @@ var _ = Describe("getBindplaneConfigEnvVars Postgres TLS", func() {
 var _ = Describe("getStoreConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store: bindplanev1alpha1.StoreConfig{
 						Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"},
 					},
@@ -3112,7 +3109,7 @@ var _ = Describe("defaultRequiredHosts", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
 				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
@@ -3129,7 +3126,7 @@ var _ = Describe("defaultRequiredHosts", func() {
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
 				Nats: &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
@@ -3207,10 +3204,10 @@ var _ = Describe("migrate Job helpers", func() {
 
 		BeforeEach(func() {
 			bindplane = &bindplanev1alpha1.Bindplane{
-				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: testValue, Namespace: testNamespaceDefault},
 				Spec: bindplanev1alpha1.BindplaneSpec{
 					Config: bindplanev1alpha1.BindplaneConfigSpec{
-						License: "license",
+						License: testLicense,
 						Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 					},
 				},
@@ -3221,7 +3218,7 @@ var _ = Describe("migrate Job helpers", func() {
 		It("produces a Job with correct name and namespace", func() {
 			job := r.bindplaneJobsMigrateJob(bindplane)
 			Expect(job.Name).To(Equal("test-migrate"))
-			Expect(job.Namespace).To(Equal("default"))
+			Expect(job.Namespace).To(Equal(testNamespaceDefault))
 		})
 
 		It("sets the migrate command", func() {
@@ -3260,7 +3257,7 @@ var _ = Describe("migrate Job helpers", func() {
 		It("does not mount the NATS TLS volume even when NATS cert-manager TLS is configured", func() {
 			bindplane.Spec.Config.Nats = &bindplanev1alpha1.NatsConfig{
 				TLS: &bindplanev1alpha1.NatsTLSConfig{
-					CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer"},
+					CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testIssuerName},
 				},
 			}
 			job := r.bindplaneJobsMigrateJob(bindplane)
@@ -3279,12 +3276,12 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 		nodeReplicas := int32(3)
 		natsReplicas := int32(2)
 		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Bindplane: bindplanev1alpha1.BindplaneComponentSpec{Replicas: &nodeReplicas},
 				Nats:      &bindplanev1alpha1.NatsComponentSpec{Replicas: &natsReplicas},
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
 			},
@@ -3339,10 +3336,10 @@ var _ = Describe("getEventBusHealthEnvVars", func() {
 var _ = Describe("getLoggingConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
 			},
@@ -3401,7 +3398,7 @@ var _ = Describe("getPostgresTLSVolumeAndMount", func() {
 					Store: bindplanev1alpha1.StoreConfig{
 						Postgres: &bindplanev1alpha1.PostgresConfig{
 							Host: "pg",
-							TLS:  &bindplanev1alpha1.PostgresTLSConfig{SecretName: "pg-tls"},
+							TLS:  &bindplanev1alpha1.PostgresTLSConfig{SecretName: testPostgresTLSSecretName},
 						},
 					},
 				},
@@ -3420,8 +3417,8 @@ var _ = Describe("getPostgresTLSVolumeAndMount", func() {
 						Postgres: &bindplanev1alpha1.PostgresConfig{
 							Host: "pg",
 							TLS: &bindplanev1alpha1.PostgresTLSConfig{
-								SecretName: "pg-tls",
-								CAKey:      "ca.crt",
+								SecretName: testPostgresTLSSecretName,
+								CAKey:      tlsSecretCAKey,
 							},
 						},
 					},
@@ -3432,7 +3429,7 @@ var _ = Describe("getPostgresTLSVolumeAndMount", func() {
 		Expect(vols).To(HaveLen(1))
 		Expect(vols[0].Name).To(Equal("postgres-tls"))
 		Expect(vols[0].Secret).ToNot(BeNil())
-		Expect(vols[0].Secret.SecretName).To(Equal("pg-tls"))
+		Expect(vols[0].Secret.SecretName).To(Equal(testPostgresTLSSecretName))
 		Expect(mounts).To(HaveLen(1))
 		Expect(mounts[0].MountPath).To(Equal("/etc/bindplane/postgres-tls"))
 	})
@@ -3451,11 +3448,11 @@ func envVarSecretKeyRef(envVars []corev1.EnvVar, name string) *corev1.SecretKeyS
 var _ = Describe("getTSDBEnvVars", func() {
 	It("returns enable_remote, host, port, and username/password from generated secret when internal TLS is disabled", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 		}
 		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVars).To(HaveLen(6))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("my-bp-tsdb.default.svc"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_AUTH_TYPE")).To(Equal("basic"))
@@ -3472,7 +3469,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 	})
 	It("uses remote Prometheus env vars and skips operator-generated basic auth when remote.enable is true", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
@@ -3480,7 +3477,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
 							Enable:          true,
-							Host:            "vm.example.internal",
+							Host:            testVMHost,
 							QueryPathPrefix: "/select/0/prometheus",
 							RemoteWrite: &bindplanev1alpha1.TSDBRemoteWriteConfig{
 								Host: "vm-write.example.internal",
@@ -3492,8 +3489,8 @@ var _ = Describe("getTSDBEnvVars", func() {
 			},
 		}
 		envVars := getTSDBEnvVars(bindplane)
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal("true"))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal("vm.example.internal"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_REMOTE")).To(Equal(envValueTrue))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_HOST")).To(Equal(testVMHost))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_PORT")).To(Equal("9090"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_QUERY_PATH_PREFIX")).To(Equal("/select/0/prometheus"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_REMOTE_WRITE_HOST")).To(Equal("vm-write.example.internal"))
@@ -3505,7 +3502,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 	})
 	It("uses remote write endpoint override when provided", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
@@ -3513,7 +3510,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
 							Enable: true,
-							Host:   "vm.example.internal",
+							Host:   testVMHost,
 							Port:   8080,
 							RemoteWrite: &bindplanev1alpha1.TSDBRemoteWriteConfig{
 								Host:     "vm-write.example.internal",
@@ -3531,14 +3528,14 @@ var _ = Describe("getTSDBEnvVars", func() {
 	})
 	It("adds Prometheus TLS env vars when cert-manager TLS is enabled", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						TLS: &bindplanev1alpha1.TSDBTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer", Kind: "ClusterIssuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testCAIssuerName, Kind: certManagerClusterIssuerKind},
 						},
 					},
 				},
@@ -3546,21 +3543,21 @@ var _ = Describe("getTSDBEnvVars", func() {
 		}
 		envVars := getTSDBEnvVars(bindplane)
 		Expect(envVars).To(HaveLen(10))
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_ENABLE_TLS")).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CERT")).To(Equal(internalTLSTSDBClientMountPath + "/tls.crt"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_KEY")).To(Equal(internalTLSTSDBClientMountPath + "/tls.key"))
 		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_CA")).To(Equal(internalTLSTSDBClientMountPath + "/ca.crt"))
 	})
 	It("adds BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY when prometheus TLS skipVerify is true", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						TLS: &bindplanev1alpha1.TSDBTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testCAIssuerName},
 							SkipVerify:  true,
 						},
 					},
@@ -3568,7 +3565,7 @@ var _ = Describe("getTSDBEnvVars", func() {
 			},
 		}
 		envVars := getTSDBEnvVars(bindplane)
-		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY")).To(Equal("true"))
+		Expect(envVarByName(envVars, "BINDPLANE_PROMETHEUS_TLS_SKIP_VERIFY")).To(Equal(envValueTrue))
 		Expect(envVars).To(HaveLen(11))
 	})
 })
@@ -3595,7 +3592,7 @@ var _ = Describe("reconcileTSDB", func() {
 		// return nil without error (all deletes are no-ops on IsNotFound).
 		reconciler := newReconciler()
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: testNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespace},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
@@ -3603,13 +3600,13 @@ var _ = Describe("reconcileTSDB", func() {
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						Remote: &bindplanev1alpha1.TSDBRemoteConfig{
 							Enable: true,
-							Host:   "vm.example.internal",
+							Host:   testVMHost,
 						},
 					},
 				},
 			},
 		}
-		Expect(reconciler.reconcileTSDB(testCtx, bindplane, logf.Log.WithName("test"))).To(Succeed())
+		Expect(reconciler.reconcileTSDB(testCtx, bindplane, logf.Log.WithName(testValue))).To(Succeed())
 	})
 })
 
@@ -3644,7 +3641,7 @@ var _ = Describe("validateTSDBTLSConfig (controller_test)", func() {
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						TLS: &bindplanev1alpha1.TSDBTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer", Kind: "Issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testIssuerName, Kind: certManagerIssuerKind},
 						},
 					},
 				},
@@ -3656,14 +3653,14 @@ var _ = Describe("validateTSDBTLSConfig (controller_test)", func() {
 
 var _ = Describe("getInternalTLSVolumesAndMounts", func() {
 	It("returns nil when cert-manager TLS is not configured", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault}}
 		vols, mounts := getInternalTLSVolumesAndMounts(bindplane)
 		Expect(vols).To(BeNil())
 		Expect(mounts).To(BeNil())
 	})
 	It("returns one volume and one mount when cert-manager TLS is enabled", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					License: "x",
@@ -3688,18 +3685,18 @@ var _ = Describe("getInternalTLSVolumesAndMounts", func() {
 
 var _ = Describe("getNatsTLSEnvVars", func() {
 	It("returns nil when NATS TLS cert-manager is not configured", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault}}
 		envVars := getNatsTLSEnvVars(bindplane)
 		Expect(envVars).To(BeNil())
 	})
 	It("returns NATS TLS env vars when spec.config.nats.tls.certManager is set", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					Nats: &bindplanev1alpha1.NatsConfig{
 						TLS: &bindplanev1alpha1.NatsTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testNatsIssuerName},
 						},
 					},
 				},
@@ -3707,7 +3704,7 @@ var _ = Describe("getNatsTLSEnvVars", func() {
 		}
 		envVars := getNatsTLSEnvVars(bindplane)
 		Expect(envVars).NotTo(BeNil())
-		Expect(envVarByName(envVars, bindplaneNatsEnableTLSEnvVar)).To(Equal("true"))
+		Expect(envVarByName(envVars, bindplaneNatsEnableTLSEnvVar)).To(Equal(envValueTrue))
 		Expect(envVarByName(envVars, bindplaneNatsTLSCertEnvVar)).To(Equal(internalTLSNatsMountPath + "/tls.crt"))
 		Expect(envVarByName(envVars, bindplaneNatsTLSKeyEnvVar)).To(Equal(internalTLSNatsMountPath + "/tls.key"))
 		Expect(envVarByName(envVars, bindplaneNatsTLSCAEnvVar)).To(Equal(internalTLSNatsMountPath + "/ca.crt"))
@@ -3717,19 +3714,19 @@ var _ = Describe("getNatsTLSEnvVars", func() {
 
 var _ = Describe("getNatsTLSVolumesAndMounts", func() {
 	It("returns nil when NATS TLS cert-manager is not configured", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault}}
 		vols, mounts := getNatsTLSVolumesAndMounts(bindplane)
 		Expect(vols).To(BeNil())
 		Expect(mounts).To(BeNil())
 	})
 	It("returns one volume and one mount when spec.config.nats.tls.certManager is set", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					Nats: &bindplanev1alpha1.NatsConfig{
 						TLS: &bindplanev1alpha1.NatsTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testNatsIssuerName},
 						},
 					},
 				},
@@ -3747,18 +3744,18 @@ var _ = Describe("getNatsTLSVolumesAndMounts", func() {
 
 var _ = Describe("getTransformAgentTLSEnvVars", func() {
 	It("returns nil when Transform Agent TLS cert-manager is not configured", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault}}
 		envVars := getTransformAgentTLSEnvVars(bindplane)
 		Expect(envVars).To(BeNil())
 	})
 
 	It("returns Transform Agent TLS env vars when spec.transformAgent.tls.certManager is set", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
 					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
-						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testTAIssuerName},
 					},
 				},
 			},
@@ -3773,7 +3770,7 @@ var _ = Describe("getTransformAgentTLSEnvVars", func() {
 
 var _ = Describe("getTransformAgentTLSVolumesAndMounts", func() {
 	It("returns nil when Transform Agent TLS cert-manager is not configured", func() {
-		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"}}
+		bindplane := &bindplanev1alpha1.Bindplane{ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault}}
 		vols, mounts := getTransformAgentTLSVolumesAndMounts(bindplane)
 		Expect(vols).To(BeNil())
 		Expect(mounts).To(BeNil())
@@ -3781,11 +3778,11 @@ var _ = Describe("getTransformAgentTLSVolumesAndMounts", func() {
 
 	It("returns one volume and one mount when spec.transformAgent.tls.certManager is set", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
 					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
-						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testTAIssuerName},
 					},
 				},
 			},
@@ -3802,10 +3799,10 @@ var _ = Describe("getTransformAgentTLSVolumesAndMounts", func() {
 
 var _ = Describe("bindplaneJobsMigrateJob", func() {
 	It("mounts Transform Agent TLS when enabled", func() {
-		bindplane := newTestBindplane("bp-migrate-ta-tls", "default")
+		bindplane := newTestBindplane("bp-migrate-ta-tls", testNamespaceDefault)
 		bindplane.Spec.TransformAgent = &bindplanev1alpha1.TransformAgentComponentSpec{
 			TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
-				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+				CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testTAIssuerName},
 			},
 		}
 
@@ -3846,10 +3843,10 @@ var _ = Describe("generateTSDBBasicAuthSecretData", func() {
 var _ = Describe("getAgentsConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
 			},
@@ -3965,10 +3962,10 @@ var _ = Describe("getAgentsConfigEnvVars", func() {
 var _ = Describe("getAgentVersionsConfigEnvVars", func() {
 	baseBindplane := func() *bindplanev1alpha1.Bindplane {
 		return &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "test-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
-					License: "license",
+					License: testLicense,
 					Store:   bindplanev1alpha1.StoreConfig{Postgres: &bindplanev1alpha1.PostgresConfig{Host: "pg"}},
 				},
 			},

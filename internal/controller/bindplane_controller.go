@@ -479,9 +479,32 @@ const (
 	// natsModeValue is the BINDPLANE_MODE value for NATS nodes
 	natsModeValue = "node"
 	// natsServerEnableValue is the value to enable NATS server
-	natsServerEnableValue = "true"
+	natsServerEnableValue = envValueTrue
 	// enableRemoteValue is the value to enable remote services
-	enableRemoteValue = "true"
+	enableRemoteValue = envValueTrue
+
+	// envValueTrue is the string value used for boolean "true" environment variables
+	envValueTrue = "true"
+	// tlsSecretCertKey is the default certificate key in a kubernetes.io/tls Secret
+	tlsSecretCertKey = "tls.crt"
+	// tlsSecretKeyKey is the default private key key in a kubernetes.io/tls Secret
+	tlsSecretKeyKey = "tls.key"
+	// tlsSecretCAKey is the default CA certificate key in a TLS Secret
+	tlsSecretCAKey = "ca.crt"
+	// conditionTypeReconciled is the status condition type (and reason) set after a reconcile
+	conditionTypeReconciled = "Reconciled"
+	// hostLocalhost is the loopback hostname
+	hostLocalhost = "localhost"
+	// metricsTypePrometheus is the Prometheus metrics exporter type
+	metricsTypePrometheus = "prometheus"
+	// telemetryTypeOTLP is the OTLP metrics/tracing exporter type
+	telemetryTypeOTLP = "otlp"
+	// certManagerIssuerKind is the cert-manager namespaced Issuer kind
+	certManagerIssuerKind = "Issuer"
+	// certManagerClusterIssuerKind is the cert-manager ClusterIssuer kind
+	certManagerClusterIssuerKind = "ClusterIssuer"
+	// certManagerGroup is the cert-manager API group
+	certManagerGroup = "cert-manager.io"
 )
 
 // BindplaneReconciler reconciles a Bindplane object
@@ -556,7 +579,7 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if annotationEnabled(bindplane.Annotations, annotationPauseReconciliation) {
 		log.Info("Reconciliation paused via annotation; skipping", "annotation", annotationPauseReconciliation)
 		condition := metav1.Condition{
-			Type:               "Reconciled",
+			Type:               conditionTypeReconciled,
 			Status:             metav1.ConditionFalse,
 			Reason:             "Paused",
 			Message:            fmt.Sprintf("Reconciliation paused. Remove annotation %s or set to false to resume.", annotationPauseReconciliation),
@@ -577,7 +600,7 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := validation.ValidateBindplane(bindplane); err != nil {
 		log.Error(err, "invalid Bindplane resource")
 		condition := metav1.Condition{
-			Type:               "Reconciled",
+			Type:               conditionTypeReconciled,
 			Status:             metav1.ConditionFalse,
 			Reason:             "Invalid",
 			Message:            err.Error(),
@@ -733,9 +756,9 @@ func (r *BindplaneReconciler) applyMigrateGate(ctx context.Context, bindplane *b
 // the bypass is visible in status.
 func reconciledCondition(bindplane *bindplanev1alpha1.Bindplane, state migrateState) metav1.Condition {
 	condition := metav1.Condition{
-		Type:               "Reconciled",
+		Type:               conditionTypeReconciled,
 		Status:             metav1.ConditionTrue,
-		Reason:             "Reconciled",
+		Reason:             conditionTypeReconciled,
 		Message:            "All resources reconciled successfully",
 		ObservedGeneration: bindplane.Generation,
 		LastTransitionTime: metav1.Now(),
@@ -1676,13 +1699,13 @@ func getInternalTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]c
 	} else {
 		certKey, keyKey, caKey := tls.CertKey, tls.KeyKey, tls.CAKey
 		if certKey == "" {
-			certKey = "tls.crt"
+			certKey = tlsSecretCertKey
 		}
 		if keyKey == "" {
-			keyKey = "tls.key"
+			keyKey = tlsSecretKeyKey
 		}
 		if caKey == "" {
-			caKey = "ca.crt"
+			caKey = tlsSecretCAKey
 		}
 		vol = corev1.Volume{
 			Name: internalTLSTSDBClientVolumeName,
@@ -1690,9 +1713,9 @@ func getInternalTLSVolumesAndMounts(bindplane *bindplanev1alpha1.Bindplane) ([]c
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: tls.SecretName,
 					Items: []corev1.KeyToPath{
-						{Key: certKey, Path: "tls.crt"},
-						{Key: keyKey, Path: "tls.key"},
-						{Key: caKey, Path: "ca.crt"},
+						{Key: certKey, Path: tlsSecretCertKey},
+						{Key: keyKey, Path: tlsSecretKeyKey},
+						{Key: caKey, Path: tlsSecretCAKey},
 					},
 				},
 			},

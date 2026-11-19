@@ -39,7 +39,7 @@ var _ = Describe("newPodDisruptionBudget", func() {
 	var bindplane *bindplanev1alpha1.Bindplane
 
 	BeforeEach(func() {
-		bindplane = newTestBindplane("my-bp", "default")
+		bindplane = newTestBindplane(testMyBindplaneName, testNamespaceDefault)
 	})
 
 	It("defaults to minAvailable: 1 when spec is nil", func() {

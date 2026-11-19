@@ -47,7 +47,7 @@ func TestAppendExtraVolumes_EmptyExtra(t *testing.T) {
 
 func TestAppendExtraVolumes_OperatorFirst(t *testing.T) {
 	op := []corev1.Volume{{Name: testOpVolName}}
-	extra := []corev1.Volume{{Name: "user-vol"}}
+	extra := []corev1.Volume{{Name: testUserVolumeName}}
 	result := appendExtraVolumes(op, extra)
 	if len(result) != 2 {
 		t.Fatalf("expected 2 volumes, got %d", len(result))
@@ -55,15 +55,15 @@ func TestAppendExtraVolumes_OperatorFirst(t *testing.T) {
 	if result[0].Name != testOpVolName {
 		t.Errorf("expected %s first, got %s", testOpVolName, result[0].Name)
 	}
-	if result[1].Name != "user-vol" {
+	if result[1].Name != testUserVolumeName {
 		t.Errorf("expected user-vol second, got %s", result[1].Name)
 	}
 }
 
 func TestAppendExtraVolumes_NilOperator(t *testing.T) {
-	extra := []corev1.Volume{{Name: "user-vol"}}
+	extra := []corev1.Volume{{Name: testUserVolumeName}}
 	result := appendExtraVolumes(nil, extra)
-	if len(result) != 1 || result[0].Name != "user-vol" {
+	if len(result) != 1 || result[0].Name != testUserVolumeName {
 		t.Errorf("unexpected result: %v", result)
 	}
 }
@@ -71,29 +71,29 @@ func TestAppendExtraVolumes_NilOperator(t *testing.T) {
 // --- appendExtraVolumeMounts ---
 
 func TestAppendExtraVolumeMounts_NilExtra(t *testing.T) {
-	op := []corev1.VolumeMount{{Name: "op-vol", MountPath: "/op"}}
+	op := []corev1.VolumeMount{{Name: testOpVolName, MountPath: testOpMountPath}}
 	result := appendExtraVolumeMounts(op, nil)
-	if len(result) != 1 || result[0].Name != "op-vol" {
+	if len(result) != 1 || result[0].Name != testOpVolName {
 		t.Errorf("unexpected result: %v", result)
 	}
 }
 
 func TestAppendExtraVolumeMounts_EmptyExtra(t *testing.T) {
-	op := []corev1.VolumeMount{{Name: "op-vol", MountPath: "/op"}}
+	op := []corev1.VolumeMount{{Name: testOpVolName, MountPath: testOpMountPath}}
 	result := appendExtraVolumeMounts(op, []corev1.VolumeMount{})
-	if len(result) != 1 || result[0].Name != "op-vol" {
+	if len(result) != 1 || result[0].Name != testOpVolName {
 		t.Errorf("unexpected result: %v", result)
 	}
 }
 
 func TestAppendExtraVolumeMounts_OperatorFirst(t *testing.T) {
-	op := []corev1.VolumeMount{{Name: "op-vol", MountPath: "/op"}}
-	extra := []corev1.VolumeMount{{Name: "user-vol", MountPath: "/user"}}
+	op := []corev1.VolumeMount{{Name: testOpVolName, MountPath: testOpMountPath}}
+	extra := []corev1.VolumeMount{{Name: testUserVolumeName, MountPath: "/user"}}
 	result := appendExtraVolumeMounts(op, extra)
 	if len(result) != 2 {
 		t.Fatalf("expected 2 mounts, got %d", len(result))
 	}
-	if result[0].MountPath != "/op" {
+	if result[0].MountPath != testOpMountPath {
 		t.Errorf("expected /op first, got %s", result[0].MountPath)
 	}
 	if result[1].MountPath != "/user" {
@@ -108,7 +108,7 @@ func newMinimalBindplane() *bindplanev1alpha1.Bindplane {
 	natsReplicas := int32(2)
 	taReplicas := int32(2)
 	return &bindplanev1alpha1.Bindplane{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testValue, Namespace: testNamespaceDefault},
 		Spec: bindplanev1alpha1.BindplaneSpec{
 			Version: "1.99.0",
 			Config: bindplanev1alpha1.BindplaneConfigSpec{
@@ -191,18 +191,18 @@ func TestNodeDeployment_ExtraVolumesInjected(t *testing.T) {
 	bp := newMinimalBindplane()
 	bp.Spec.Bindplane.ExtraVolumes = []corev1.Volume{
 		{
-			Name:         "redis-ca",
+			Name:         testRedisCAName,
 			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "redis-ca-secret"}},
 		},
 	}
 	bp.Spec.Bindplane.ExtraVolumeMounts = []corev1.VolumeMount{
-		{Name: "redis-ca", MountPath: "/etc/redis-ca"},
+		{Name: testRedisCAName, MountPath: "/etc/redis-ca"},
 	}
 
 	r := &BindplaneReconciler{}
 	dep := r.nodeDeployment(bp)
 
-	assertVolumePresent(t, dep.Spec.Template.Spec.Volumes, "redis-ca")
+	assertVolumePresent(t, dep.Spec.Template.Spec.Volumes, testRedisCAName)
 	assertMountPresent(t, dep.Spec.Template.Spec.Containers[0].VolumeMounts, "/etc/redis-ca")
 }
 
@@ -210,17 +210,17 @@ func TestJobsDeployment_ExtraVolumesInjected(t *testing.T) {
 	bp := newMinimalBindplane()
 	bp.Spec.BindplaneJobs = &bindplanev1alpha1.BindplaneJobsComponentSpec{
 		ExtraVolumes: []corev1.Volume{
-			{Name: "redis-ca", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "redis-ca-secret"}}},
+			{Name: testRedisCAName, VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "redis-ca-secret"}}},
 		},
 		ExtraVolumeMounts: []corev1.VolumeMount{
-			{Name: "redis-ca", MountPath: "/etc/redis-ca"},
+			{Name: testRedisCAName, MountPath: "/etc/redis-ca"},
 		},
 	}
 
 	r := &BindplaneReconciler{}
 	dep := r.bindplaneJobsDeployment(bp)
 
-	assertVolumePresent(t, dep.Spec.Template.Spec.Volumes, "redis-ca")
+	assertVolumePresent(t, dep.Spec.Template.Spec.Volumes, testRedisCAName)
 	assertMountPresent(t, dep.Spec.Template.Spec.Containers[0].VolumeMounts, "/etc/redis-ca")
 }
 

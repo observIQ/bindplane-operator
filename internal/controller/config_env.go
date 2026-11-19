@@ -82,7 +82,7 @@ func getLDAPEnvVars(ldap *bindplanev1alpha1.LDAPConfig) []corev1.EnvVar {
 		}
 	}
 	if ldap.TLSSkipVerify {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSSkipVerifyEnvVar, Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneLDAPTLSSkipVerifyEnvVar, Value: envValueTrue})
 	}
 	return envVars
 }
@@ -107,7 +107,7 @@ func getOIDCEnvVars(oidc *bindplanev1alpha1.OIDCConfig) []corev1.EnvVar {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCScopesEnvVar, Value: strings.Join(oidc.Scopes, ",")})
 	}
 	if oidc.DisableInvitations {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCDisableInvitationsEnvVar, Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneOIDCDisableInvitationsEnvVar, Value: envValueTrue})
 	}
 	envVars = append(envVars, getOIDCCustomClaimsEnvVars(oidc.CustomClaims)...)
 	return envVars
@@ -155,7 +155,7 @@ func getAuthConfigEnvVars(auth *bindplanev1alpha1.AuthConfig) []corev1.EnvVar {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuthTypeEnvVar, Value: auth.Type})
 	}
 	if auth.SessionsStrictMode {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuthSessionsStrictModeEnvVar, Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneAuthSessionsStrictModeEnvVar, Value: envValueTrue})
 	}
 	if ev := secretOrValue(bindplaneUsernameEnvVar, auth.Username, auth.UsernameSecretRef); ev != nil {
 		envVars = append(envVars, *ev)
@@ -201,7 +201,7 @@ func getNetworkConfigEnvVars(network *bindplanev1alpha1.NetworkConfig, bindplane
 				}
 			}
 			if tls.SkipVerify {
-				envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSSkipVerifyEnvVar, Value: "true"})
+				envVars = append(envVars, corev1.EnvVar{Name: bindplaneTLSSkipVerifyEnvVar, Value: envValueTrue})
 			}
 		}
 	}
@@ -302,12 +302,12 @@ func getTracingConfigEnvVars(tracing *bindplanev1alpha1.TracingConfig) []corev1.
 	envVars := []corev1.EnvVar{
 		{Name: bindplaneTracingTypeEnvVar, Value: tracing.Type},
 	}
-	if tracing.Type == "otlp" && tracing.OTLP != nil {
+	if tracing.Type == telemetryTypeOTLP && tracing.OTLP != nil {
 		if tracing.OTLP.Endpoint != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingOTLPEndpointEnvVar, Value: tracing.OTLP.Endpoint})
 		}
 		if tracing.OTLP.Insecure {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingOTLPInsecureEnvVar, Value: "true"})
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneTracingOTLPInsecureEnvVar, Value: envValueTrue})
 		}
 	}
 	if tracing.SamplingRate != "" {
@@ -320,14 +320,14 @@ func getTracingConfigEnvVars(tracing *bindplanev1alpha1.TracingConfig) []corev1.
 func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.EnvVar {
 	if metrics == nil {
 		return []corev1.EnvVar{
-			{Name: bindplaneMetricsTypeEnvVar, Value: "prometheus"},
+			{Name: bindplaneMetricsTypeEnvVar, Value: metricsTypePrometheus},
 			{Name: bindplaneMetricsIntervalEnvVar, Value: "60s"},
 			{Name: bindplaneMetricsPrometheusEndpointEnvVar, Value: "/metrics"},
 		}
 	}
 	metricsType := metrics.Type
 	if metricsType == "" {
-		metricsType = "prometheus"
+		metricsType = metricsTypePrometheus
 	}
 	interval := metrics.Interval
 	if interval == "" {
@@ -337,7 +337,7 @@ func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.
 		{Name: bindplaneMetricsTypeEnvVar, Value: metricsType},
 		{Name: bindplaneMetricsIntervalEnvVar, Value: interval},
 	}
-	if metricsType == "prometheus" {
+	if metricsType == metricsTypePrometheus {
 		endpoint := "/metrics"
 		if metrics.Prometheus != nil && metrics.Prometheus.Endpoint != "" {
 			endpoint = metrics.Prometheus.Endpoint
@@ -352,12 +352,12 @@ func getMetricsConfigEnvVars(metrics *bindplanev1alpha1.MetricsConfig) []corev1.
 			}
 		}
 	}
-	if metricsType == "otlp" && metrics.OTLP != nil {
+	if metricsType == telemetryTypeOTLP && metrics.OTLP != nil {
 		if metrics.OTLP.Endpoint != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPEndpointEnvVar, Value: metrics.OTLP.Endpoint})
 		}
 		if metrics.OTLP.Insecure {
-			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPInsecureEnvVar, Value: "true"})
+			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPInsecureEnvVar, Value: envValueTrue})
 		}
 		if metrics.OTLP.Temporality != "" {
 			envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPTemporalityEnvVar, Value: metrics.OTLP.Temporality})
@@ -375,7 +375,7 @@ func getMetricsOTLPKeepAliveEnvVars(keepAlive *bindplanev1alpha1.MetricsOTLPKeep
 	}
 	var envVars []corev1.EnvVar
 	if keepAlive.Enabled {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAliveEnabledEnvVar, Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAliveEnabledEnvVar, Value: envValueTrue})
 	}
 	if keepAlive.Time != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAliveTimeEnvVar, Value: keepAlive.Time})
@@ -384,7 +384,7 @@ func getMetricsOTLPKeepAliveEnvVars(keepAlive *bindplanev1alpha1.MetricsOTLPKeep
 		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAliveTimeoutEnvVar, Value: keepAlive.Timeout})
 	}
 	if keepAlive.PermitWithoutStream {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAlivePermitWithoutStreamEnvVar, Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneMetricsOTLPKeepAlivePermitWithoutStreamEnvVar, Value: envValueTrue})
 	}
 	return envVars
 }
@@ -538,15 +538,15 @@ func getTSDBRemoteWriteTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []core
 		return nil
 	}
 	// Cert-manager uses tls.crt, tls.key, ca.crt; user secret is mounted with Items to same names
-	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
+	const certKey, keyKey, caKey = tlsSecretCertKey, tlsSecretKeyKey, tlsSecretCAKey
 	envVars := []corev1.EnvVar{
-		{Name: bindplaneTSDBEnableTLSEnvVar, Value: "true"},
+		{Name: bindplaneTSDBEnableTLSEnvVar, Value: envValueTrue},
 		{Name: bindplaneTSDBTLSCertEnvVar, Value: internalTLSTSDBClientMountPath + "/" + certKey},
 		{Name: bindplaneTSDBTLSKeyEnvVar, Value: internalTLSTSDBClientMountPath + "/" + keyKey},
 		{Name: bindplaneTSDBTLSCAEnvVar, Value: internalTLSTSDBClientMountPath + "/" + caKey},
 	}
 	if bindplane.Spec.Config.TSDB.TLS.SkipVerify {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneTSDBTLSSkipVerifyEnvVar, Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneTSDBTLSSkipVerifyEnvVar, Value: envValueTrue})
 	}
 	return envVars
 }
@@ -557,15 +557,15 @@ func getNatsTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev1.EnvVar {
 	if !isNatsCertManagerTLSEnabled(bindplane) {
 		return nil
 	}
-	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
+	const certKey, keyKey, caKey = tlsSecretCertKey, tlsSecretKeyKey, tlsSecretCAKey
 	envVars := []corev1.EnvVar{
-		{Name: bindplaneNatsEnableTLSEnvVar, Value: "true"},
+		{Name: bindplaneNatsEnableTLSEnvVar, Value: envValueTrue},
 		{Name: bindplaneNatsTLSCertEnvVar, Value: internalTLSNatsMountPath + "/" + certKey},
 		{Name: bindplaneNatsTLSKeyEnvVar, Value: internalTLSNatsMountPath + "/" + keyKey},
 		{Name: bindplaneNatsTLSCAEnvVar, Value: internalTLSNatsMountPath + "/" + caKey},
 	}
 	if bindplane.Spec.Config.Nats != nil && bindplane.Spec.Config.Nats.TLS != nil && bindplane.Spec.Config.Nats.TLS.SkipVerify {
-		envVars = append(envVars, corev1.EnvVar{Name: bindplaneNatsTLSSkipVerifyEnvVar, Value: "true"})
+		envVars = append(envVars, corev1.EnvVar{Name: bindplaneNatsTLSSkipVerifyEnvVar, Value: envValueTrue})
 	}
 	return envVars
 }
@@ -576,7 +576,7 @@ func getTransformAgentTLSEnvVars(bindplane *bindplanev1alpha1.Bindplane) []corev
 	if !isTransformAgentCertManagerTLSEnabled(bindplane) {
 		return nil
 	}
-	const certKey, keyKey, caKey = "tls.crt", "tls.key", "ca.crt"
+	const certKey, keyKey, caKey = tlsSecretCertKey, tlsSecretKeyKey, tlsSecretCAKey
 	return []corev1.EnvVar{
 		{Name: bindplaneTransformAgentTLSCertEnvVar, Value: internalTLSTransformAgentMountPath + "/" + certKey},
 		{Name: bindplaneTransformAgentTLSKeyEnvVar, Value: internalTLSTransformAgentMountPath + "/" + keyKey},

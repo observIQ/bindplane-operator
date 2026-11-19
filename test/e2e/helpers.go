@@ -40,6 +40,10 @@ import (
 )
 
 const (
+	// kubectlGet is the kubectl get verb
+	kubectlGet = "get"
+	// certManagerNamespace is the namespace cert-manager is installed into
+	certManagerNamespace = "cert-manager"
 	// defaultCertManagerVersion is the pinned cert-manager release used by default.
 	// Bump this when upgrading the github.com/cert-manager/cert-manager Go module in go.mod.
 	// Override at runtime with CERT_MANAGER_VERSION=vX.Y.Z to test a different version.
@@ -139,7 +143,7 @@ func deleteFixture(name, namespace string) {
 }
 
 func ensureNamespace(namespace string) {
-	_, err := runCmd(kubectl("", "get", "namespace", namespace))
+	_, err := runCmd(kubectl("", kubectlGet, "namespace", namespace))
 	if err == nil {
 		return
 	}
@@ -306,14 +310,14 @@ func waitForJobComplete(name, namespace string, timeout time.Duration) {
 
 func waitForServiceExists(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "get", "service", name))
+		_, err := runCmd(kubectl(namespace, kubectlGet, "service", name))
 		g.Expect(err).NotTo(HaveOccurred())
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
 func waitForServiceEndpoints(name, namespace, expectedPort string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		output, err := runCmd(kubectl(namespace, "get", "endpoints", name))
+		output, err := runCmd(kubectl(namespace, kubectlGet, "endpoints", name))
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(output).To(ContainSubstring(expectedPort))
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
@@ -335,14 +339,14 @@ func waitForBindplaneWebhookReady(fixtureName, namespace string, timeout time.Du
 //nolint:unparam
 func waitForServiceAccountExists(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "get", "serviceaccount", name))
+		_, err := runCmd(kubectl(namespace, kubectlGet, "serviceaccount", name))
 		g.Expect(err).NotTo(HaveOccurred())
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
 
 func waitForPodDisruptionBudgetExists(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "get", "poddisruptionbudget", name))
+		_, err := runCmd(kubectl(namespace, kubectlGet, "poddisruptionbudget", name))
 		g.Expect(err).NotTo(HaveOccurred())
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }
@@ -385,7 +389,7 @@ func waitForBindplaneCondition(
 
 func waitForBindplaneDeleted(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "get", "bindplane", name))
+		_, err := runCmd(kubectl(namespace, kubectlGet, "bindplane", name))
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("NotFound"))
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
@@ -394,7 +398,8 @@ func waitForBindplaneDeleted(name, namespace string, timeout time.Duration) {
 // bindplaneCRDInstalled reports whether the bindplane CRD is registered on the cluster.
 // Used to short-circuit cleanup when BeforeSuite failed before CRDs were installed.
 func bindplaneCRDInstalled() bool {
-	_, err := runCmd(exec.Command("kubectl", "get", "crd", "bindplanes.k8s.bindplane.com")) // #nosec G204 -- fixed args
+	// #nosec G204 -- fixed args
+	_, err := runCmd(exec.Command("kubectl", kubectlGet, "crd", "bindplanes.k8s.bindplane.com"))
 	return err == nil
 }
 
@@ -411,7 +416,7 @@ func cleanupBindplane(name, namespace string, timeout time.Duration) {
 }
 
 func getBindplane(name, namespace string) (*bindplanev1alpha1.Bindplane, error) {
-	output, err := runCmd(kubectl(namespace, "get", "bindplane", name, "-o", "json"))
+	output, err := runCmd(kubectl(namespace, kubectlGet, "bindplane", name, "-o", "json"))
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +429,7 @@ func getBindplane(name, namespace string) (*bindplanev1alpha1.Bindplane, error) 
 
 //nolint:unparam
 func getDeployment(name, namespace string) (*appsv1.Deployment, error) {
-	output, err := runCmd(kubectl(namespace, "get", "deployment", name, "-o", "json"))
+	output, err := runCmd(kubectl(namespace, kubectlGet, "deployment", name, "-o", "json"))
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +442,7 @@ func getDeployment(name, namespace string) (*appsv1.Deployment, error) {
 
 //nolint:unparam
 func getStatefulSet(name, namespace string) (*appsv1.StatefulSet, error) {
-	output, err := runCmd(kubectl(namespace, "get", "statefulset", name, "-o", "json"))
+	output, err := runCmd(kubectl(namespace, kubectlGet, "statefulset", name, "-o", "json"))
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +454,7 @@ func getStatefulSet(name, namespace string) (*appsv1.StatefulSet, error) {
 }
 
 func getJob(name, namespace string) (*batchv1.Job, error) {
-	output, err := runCmd(kubectl(namespace, "get", "job", name, "-o", "json"))
+	output, err := runCmd(kubectl(namespace, kubectlGet, "job", name, "-o", "json"))
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +517,7 @@ func currentControllerPodName() string {
 		"{{ \"\\n\" }}{{ end }}{{ end }}"
 	cmd := kubectl(
 		operatorNamespace,
-		"get",
+		kubectlGet,
 		"pods",
 		"-l",
 		"control-plane=controller-manager",
@@ -597,7 +602,7 @@ func isCertManagerCRDsInstalled() bool {
 		"challenges.acme.cert-manager.io",
 	}
 
-	cmd := exec.Command("kubectl", "get", "crds")
+	cmd := exec.Command("kubectl", kubectlGet, "crds")
 	output, err := run(cmd)
 	if err != nil {
 		return false
@@ -638,10 +643,10 @@ func installCertManager() error {
 	// Wait for all three cert-manager workloads to become Available before proceeding.
 	// Waiting only on the webhook (as was done previously) misses cases where cainjector
 	// is still starting, causing "x509: certificate signed by unknown authority" errors.
-	for _, d := range []string{"cert-manager", "cert-manager-cainjector", "cert-manager-webhook"} {
+	for _, d := range []string{certManagerNamespace, "cert-manager-cainjector", "cert-manager-webhook"} {
 		cmd = exec.Command("kubectl", "wait", "deployment.apps/"+d, // #nosec G204 -- deployment name is a loop constant
 			"--for", "condition=Available",
-			"--namespace", "cert-manager",
+			"--namespace", certManagerNamespace,
 			"--timeout", "8m",
 		)
 		if _, err := run(cmd); err != nil {
@@ -656,7 +661,7 @@ func installCertManager() error {
 	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for cert-manager webhook CA to be ready...\n")
 	deadline := time.Now().Add(8 * time.Minute)
 	for time.Now().Before(deadline) {
-		cmd = exec.Command("kubectl", "get", "validatingwebhookconfiguration", // #nosec G204 -- test utility
+		cmd = exec.Command("kubectl", kubectlGet, "validatingwebhookconfiguration", // #nosec G204 -- test utility
 			"cert-manager-webhook",
 			"-o", `jsonpath={.webhooks[0].clientConfig.caBundle}`,
 		)
@@ -675,11 +680,11 @@ func installCertManager() error {
 func dumpCertManagerDiagnostics() {
 	_, _ = fmt.Fprintln(GinkgoWriter, "===== cert-manager diagnostics =====")
 	for _, args := range [][]string{
-		{"get", "pods", "-n", "cert-manager", "-o", "wide"},
-		{"describe", "pods", "-n", "cert-manager"},
-		{"get", "events", "-n", "cert-manager", "--sort-by=.lastTimestamp"},
-		{"get", "deployments", "-n", "cert-manager", "-o", "wide"},
-		{"get", "validatingwebhookconfiguration", "cert-manager-webhook", "-o", "yaml"},
+		{kubectlGet, "pods", "-n", certManagerNamespace, "-o", "wide"},
+		{"describe", "pods", "-n", certManagerNamespace},
+		{kubectlGet, "events", "-n", certManagerNamespace, "--sort-by=.lastTimestamp"},
+		{kubectlGet, "deployments", "-n", certManagerNamespace, "-o", "wide"},
+		{kubectlGet, "validatingwebhookconfiguration", "cert-manager-webhook", "-o", "yaml"},
 	} {
 		out, _ := exec.Command("kubectl", args...).CombinedOutput() // #nosec G204 -- fixed diagnostic args
 		_, _ = fmt.Fprintf(GinkgoWriter, "$ kubectl %s\n%s\n", strings.Join(args, " "), out)
@@ -712,7 +717,7 @@ func getArgoRolloutsURL() string {
 }
 
 func isArgoRolloutsCRDInstalled() bool {
-	cmd := exec.Command("kubectl", "get", "crd", "rollouts.argoproj.io") // #nosec G204 -- test utility
+	cmd := exec.Command("kubectl", kubectlGet, "crd", "rollouts.argoproj.io") // #nosec G204 -- test utility
 	_, err := run(cmd)
 	return err == nil
 }
@@ -740,7 +745,7 @@ func installArgoRollouts() error {
 	// Poll until the Deployment object exists — apply returns before objects are created.
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
-		cmd := exec.Command("kubectl", "get", "deployment/argo-rollouts", // #nosec G204 -- constant
+		cmd := exec.Command("kubectl", kubectlGet, "deployment/argo-rollouts", // #nosec G204 -- constant
 			"--namespace", argoRolloutsNamespace)
 		if _, err := run(cmd); err == nil {
 			break
@@ -773,7 +778,7 @@ func uninstallArgoRollouts() {
 
 func waitForRolloutExists(name, namespace string, timeout time.Duration) {
 	Eventually(func(g Gomega) {
-		_, err := runCmd(kubectl(namespace, "get", "rollout", name))
+		_, err := runCmd(kubectl(namespace, kubectlGet, "rollout", name))
 		g.Expect(err).NotTo(HaveOccurred())
 	}, timeout, defaultEventuallyPollInterval).Should(Succeed())
 }

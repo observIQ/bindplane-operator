@@ -29,7 +29,7 @@ const customImage = "myregistry.example.com/bindplane-ee:custom-tag"
 
 func newImageTestBindplane() *bindplanev1alpha1.Bindplane {
 	return &bindplanev1alpha1.Bindplane{
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testValue, Namespace: testNamespaceDefault},
 		Spec: bindplanev1alpha1.BindplaneSpec{
 			Version: testVersion,
 		},
@@ -151,13 +151,13 @@ func TestGetTSDBImage_UsesOverride(t *testing.T) {
 }
 
 func TestResolveImage_EmptyOverrideFallsBack(t *testing.T) {
-	if got := resolveImage("", "default"); got != "default" {
-		t.Errorf("resolveImage(\"\", \"default\") = %q, want %q", got, "default")
+	if got := resolveImage("", testNamespaceDefault); got != testNamespaceDefault {
+		t.Errorf("resolveImage(\"\", \"default\") = %q, want %q", got, testNamespaceDefault)
 	}
 }
 
 func TestResolveImage_NonEmptyOverrideWins(t *testing.T) {
-	if got := resolveImage("override", "default"); got != "override" {
+	if got := resolveImage("override", testNamespaceDefault); got != "override" {
 		t.Errorf("resolveImage(\"override\", \"default\") = %q, want %q", got, "override")
 	}
 }

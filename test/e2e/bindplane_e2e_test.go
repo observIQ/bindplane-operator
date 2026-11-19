@@ -197,7 +197,7 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 		Eventually(func(g Gomega) {
 			output, err := runCmd(kubectl(
 				bindplaneNamespace,
-				"get",
+				kubectlGet,
 				"pod",
 				"curl-bindplane-node",
 				"-o",
@@ -225,7 +225,7 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 		Eventually(func(g Gomega) {
 			output, err := runCmd(kubectl(
 				bindplaneNamespace,
-				"get",
+				kubectlGet,
 				"issuer",
 				"transform-agent-tls-issuer",
 				"-o",
@@ -251,14 +251,14 @@ var _ = Describe("Bindplane workloads", Ordered, Label(ginkgoLabelRequiresLicens
 		Eventually(func(g Gomega) {
 			_, err := runCmd(kubectl(
 				bindplaneNamespace,
-				"get",
+				kubectlGet,
 				"certificate.cert-manager.io",
 				bindplaneResourceName("transform-agent-tls"),
 			))
 			g.Expect(err).NotTo(HaveOccurred())
 			_, err = runCmd(kubectl(
 				bindplaneNamespace,
-				"get",
+				kubectlGet,
 				"secret",
 				bindplaneResourceName("transform-agent-tls"),
 			))

@@ -27,7 +27,7 @@ var _ = Describe("nodeHPAScaleTargetRef", func() {
 	var bindplane *bindplanev1alpha1.Bindplane
 
 	BeforeEach(func() {
-		bindplane = newTestBindplane("my-bp", "default")
+		bindplane = newTestBindplane(testMyBindplaneName, testNamespaceDefault)
 		bindplane.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
 	})
 
@@ -62,7 +62,7 @@ var _ = Describe("nodeHPA with ArgoRollout", func() {
 
 	BeforeEach(func() {
 		r = newReconciler()
-		bindplane = newTestBindplane("my-bp", "default")
+		bindplane = newTestBindplane(testMyBindplaneName, testNamespaceDefault)
 		bindplane.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
 	})
 

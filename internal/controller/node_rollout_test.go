@@ -39,13 +39,13 @@ var _ = Describe("nodeRollout", func() {
 
 	BeforeEach(func() {
 		r = newReconciler()
-		bindplane = newTestBindplaneWithArgoRollout("my-bp", "default")
+		bindplane = newTestBindplaneWithArgoRollout(testMyBindplaneName, testNamespaceDefault)
 	})
 
 	It("uses node component name and labels", func() {
 		rollout := r.nodeRollout(bindplane)
 		Expect(rollout.Name).To(Equal("my-bp-node"))
-		Expect(rollout.Namespace).To(Equal("default"))
+		Expect(rollout.Namespace).To(Equal(testNamespaceDefault))
 		Expect(rollout.Labels[labelKeyComponent]).To(Equal(nodeComponent))
 	})
 
@@ -106,7 +106,7 @@ var _ = Describe("nodeRollout", func() {
 		rollout := r.nodeRollout(bindplane)
 		Expect(rollout.Spec.Selector).NotTo(BeNil())
 		Expect(rollout.Spec.Selector.MatchLabels[labelKeyComponent]).To(Equal(nodeComponent))
-		Expect(rollout.Spec.Selector.MatchLabels[labelKeyInstance]).To(Equal("my-bp"))
+		Expect(rollout.Spec.Selector.MatchLabels[labelKeyInstance]).To(Equal(testMyBindplaneName))
 	})
 
 	It("applies default minReadySeconds from termination grace period", func() {
