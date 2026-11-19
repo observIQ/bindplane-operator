@@ -51,7 +51,7 @@ func requireNoEnvVar(t *testing.T, envVars []corev1.EnvVar, name string) {
 func TestGetOIDCEnvVars_DisableInvitations(t *testing.T) {
 	oidc := &bindplanev1alpha1.OIDCConfig{DisableInvitations: true}
 	envVars := getOIDCEnvVars(oidc)
-	requireEnvVar(t, envVars, bindplaneOIDCDisableInvitationsEnvVar, "true")
+	requireEnvVar(t, envVars, bindplaneOIDCDisableInvitationsEnvVar, envValueTrue)
 }
 
 func TestGetOIDCEnvVars_DisableInvitationsFalse(t *testing.T) {
@@ -77,7 +77,7 @@ func TestGetOIDCCustomClaimsEnvVars_EmptyEmitsNothing(t *testing.T) {
 
 func TestGetOIDCCustomClaimsEnvVars_AllFields(t *testing.T) {
 	customClaims := &bindplanev1alpha1.OIDCCustomClaimsConfig{
-		Groups:              "my_groups",
+		Groups:              testGroupsClaim,
 		GroupIDs:            "my_group_ids",
 		Roles:               "my_roles",
 		OrganizationAdmin:   "my_org_admin",
@@ -91,7 +91,7 @@ func TestGetOIDCCustomClaimsEnvVars_AllFields(t *testing.T) {
 	}
 	envVars := getOIDCCustomClaimsEnvVars(customClaims)
 
-	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupsEnvVar, "my_groups")
+	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupsEnvVar, testGroupsClaim)
 	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupIDsEnvVar, "my_group_ids")
 	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsRolesEnvVar, "my_roles")
 	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsOrganizationAdminEnvVar, "my_org_admin")
@@ -110,12 +110,12 @@ func TestGetOIDCCustomClaimsEnvVars_AllFields(t *testing.T) {
 
 func TestGetOIDCCustomClaimsEnvVars_PartialOmitsUnset(t *testing.T) {
 	customClaims := &bindplanev1alpha1.OIDCCustomClaimsConfig{
-		Groups:            "my_groups",
+		Groups:            testGroupsClaim,
 		OrgAdminGroupName: "acme-org-admin",
 	}
 	envVars := getOIDCCustomClaimsEnvVars(customClaims)
 
-	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupsEnvVar, "my_groups")
+	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupsEnvVar, testGroupsClaim)
 	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsOrgAdminGroupNameEnvVar, "acme-org-admin")
 	requireNoEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupIDsEnvVar)
 	requireNoEnvVar(t, envVars, bindplaneOIDCCustomClaimsRolesEnvVar)
@@ -134,13 +134,13 @@ func TestGetOIDCEnvVars_CustomClaimsPlumbedThrough(t *testing.T) {
 	oidc := &bindplanev1alpha1.OIDCConfig{
 		Issuer: "https://accounts.example.com",
 		CustomClaims: &bindplanev1alpha1.OIDCCustomClaimsConfig{
-			Groups:          "my_groups",
+			Groups:          testGroupsClaim,
 			ViewerGroupName: "acme-viewer",
 		},
 	}
 	envVars := getOIDCEnvVars(oidc)
 	requireEnvVar(t, envVars, bindplaneOIDCIssuerEnvVar, "https://accounts.example.com")
-	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupsEnvVar, "my_groups")
+	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsGroupsEnvVar, testGroupsClaim)
 	requireEnvVar(t, envVars, bindplaneOIDCCustomClaimsViewerGroupNameEnvVar, "acme-viewer")
 }
 
@@ -160,8 +160,8 @@ func TestGetNatsTLSEnvVars_SkipVerifyEmittedWhenSet(t *testing.T) {
 				Nats: &bindplanev1alpha1.NatsConfig{
 					TLS: &bindplanev1alpha1.NatsTLSConfig{
 						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{
-							Name: "my-issuer",
-							Kind: "ClusterIssuer",
+							Name: testIssuerName,
+							Kind: certManagerClusterIssuerKind,
 						},
 						SkipVerify: true,
 					},
@@ -170,7 +170,7 @@ func TestGetNatsTLSEnvVars_SkipVerifyEmittedWhenSet(t *testing.T) {
 		},
 	}
 	envVars := getNatsTLSEnvVars(bindplane)
-	requireEnvVar(t, envVars, bindplaneNatsTLSSkipVerifyEnvVar, "true")
+	requireEnvVar(t, envVars, bindplaneNatsTLSSkipVerifyEnvVar, envValueTrue)
 }
 
 func TestGetNatsTLSEnvVars_SkipVerifyFalseOmitted(t *testing.T) {
@@ -180,8 +180,8 @@ func TestGetNatsTLSEnvVars_SkipVerifyFalseOmitted(t *testing.T) {
 				Nats: &bindplanev1alpha1.NatsConfig{
 					TLS: &bindplanev1alpha1.NatsTLSConfig{
 						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{
-							Name: "my-issuer",
-							Kind: "ClusterIssuer",
+							Name: testIssuerName,
+							Kind: certManagerClusterIssuerKind,
 						},
 						SkipVerify: false,
 					},

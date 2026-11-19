@@ -269,7 +269,7 @@ func getTSDBServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string 
 		fmt.Sprintf("%s.%s.svc.cluster.local", name, ns),
 		fmt.Sprintf("%s.%s.svc", name, ns),
 		fmt.Sprintf("%s-0.%s.%s.svc.cluster.local", name, name, ns),
-		"localhost",
+		hostLocalhost,
 	}
 }
 
@@ -320,7 +320,7 @@ func getTransformAgentServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane)
 		fmt.Sprintf("%s.%s", name, ns),
 		fmt.Sprintf("%s.%s.svc", name, ns),
 		fmt.Sprintf("%s.%s.svc.cluster.local", name, ns),
-		"localhost",
+		hostLocalhost,
 	}
 }
 
@@ -342,7 +342,7 @@ func getNatsServerCertDNSNames(bindplane *bindplanev1alpha1.Bindplane) []string 
 		fmt.Sprintf("%s.%s", headlessName, ns),
 		fmt.Sprintf("%s.%s.svc.cluster.local", headlessName, ns),
 		fmt.Sprintf("%s.%s.svc", headlessName, ns),
-		"localhost",
+		hostLocalhost,
 	}
 	for i := int32(0); i < replicas; i++ {
 		names = append(names, fmt.Sprintf("%s-%d.%s.%s", name, i, headlessName, ns))
@@ -462,11 +462,11 @@ func buildTransformAgentCertificate(
 func issuerRefToCM(ref bindplanev1alpha1.CertManagerTLSIssuerRef) cmmeta.IssuerReference {
 	kind := ref.Kind
 	if kind == "" {
-		kind = "Issuer"
+		kind = certManagerIssuerKind
 	}
 	group := ref.Group
 	if group == "" {
-		group = "cert-manager.io"
+		group = certManagerGroup
 	}
 	return cmmeta.IssuerReference{Name: ref.Name, Kind: kind, Group: group}
 }

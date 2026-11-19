@@ -77,7 +77,7 @@ func TestValidateBindplaneName_RejectsTooLong(t *testing.T) {
 }
 
 func TestValidateBindplaneName_AcceptsValid(t *testing.T) {
-	for _, name := range []string{"a", "my-name", "abc-123", "bindplane"} {
+	for _, name := range []string{"a", "my-name", "abc-123", testBindplaneName} {
 		if err := validation.ValidateBindplaneName(name); err != nil {
 			t.Errorf("unexpected error for valid name %q: %v", name, err)
 		}
@@ -117,11 +117,11 @@ func TestValidateTransformAgentTLSConfig_AcceptsCertManagerName(t *testing.T) {
 func TestValidateBindplane_RejectsInvalidTransformAgentTLS(t *testing.T) {
 	replicas := int32(1)
 	bp := &bindplanev1alpha1.Bindplane{
-		ObjectMeta: metav1.ObjectMeta{Name: "bindplane"},
+		ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName},
 		Spec: bindplanev1alpha1.BindplaneSpec{
-			Version: "1.99.1",
+			Version: testBindplaneVersion,
 			Config: bindplanev1alpha1.BindplaneConfigSpec{
-				License: "test-license",
+				License: testLicense,
 				Store: bindplanev1alpha1.StoreConfig{
 					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres"},
 				},
@@ -183,7 +183,7 @@ func TestValidateLicenseConfig_RejectsNeither(t *testing.T) {
 
 func TestValidateLicenseConfig_RejectsBoth(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
-		License: "test-license",
+		License: testLicense,
 		LicenseSecretRef: &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: "bindplane-license"},
 			Key:                  "license",
@@ -195,7 +195,7 @@ func TestValidateLicenseConfig_RejectsBoth(t *testing.T) {
 }
 
 func TestValidateLicenseConfig_AcceptsDirectLicense(t *testing.T) {
-	cfg := &bindplanev1alpha1.BindplaneConfigSpec{License: "test-license"}
+	cfg := &bindplanev1alpha1.BindplaneConfigSpec{License: testLicense}
 	if err := validation.ValidateLicenseConfig(cfg); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestValidateAuthConfig_AcceptsNilAuth(t *testing.T) {
 }
 
 func TestValidateAuthConfig_LDAPRequiresLDAPConfig(t *testing.T) {
-	for _, authType := range []string{"ldap", "active-directory"} {
+	for _, authType := range []string{testAuthTypeLDAP, "active-directory"} {
 		cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 			Auth: &bindplanev1alpha1.AuthConfig{Type: authType},
 		}
@@ -235,11 +235,11 @@ func TestValidateAuthConfig_LDAPRequiresLDAPConfig(t *testing.T) {
 func TestValidateAuthConfig_LDAPRejectsMissingServer(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "ldap",
+			Type: testAuthTypeLDAP,
 			LDAP: &bindplanev1alpha1.LDAPConfig{
-				BaseDN:       "dc=example,dc=com",
-				BindUser:     "admin",
-				BindPassword: "pass",
+				BaseDN:       testLDAPBaseDN,
+				BindUser:     testUsername,
+				BindPassword: testPassword,
 			},
 		},
 	}
@@ -251,11 +251,11 @@ func TestValidateAuthConfig_LDAPRejectsMissingServer(t *testing.T) {
 func TestValidateAuthConfig_LDAPRejectsMissingBaseDN(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "ldap",
+			Type: testAuthTypeLDAP,
 			LDAP: &bindplanev1alpha1.LDAPConfig{
-				Server:       "ldap.example.com",
-				BindUser:     "admin",
-				BindPassword: "pass",
+				Server:       testLDAPHost,
+				BindUser:     testUsername,
+				BindPassword: testPassword,
 			},
 		},
 	}
@@ -267,11 +267,11 @@ func TestValidateAuthConfig_LDAPRejectsMissingBaseDN(t *testing.T) {
 func TestValidateAuthConfig_LDAPRejectsMissingBindUser(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "ldap",
+			Type: testAuthTypeLDAP,
 			LDAP: &bindplanev1alpha1.LDAPConfig{
-				Server:       "ldap.example.com",
-				BaseDN:       "dc=example,dc=com",
-				BindPassword: "pass",
+				Server:       testLDAPHost,
+				BaseDN:       testLDAPBaseDN,
+				BindPassword: testPassword,
 			},
 		},
 	}
@@ -283,11 +283,11 @@ func TestValidateAuthConfig_LDAPRejectsMissingBindUser(t *testing.T) {
 func TestValidateAuthConfig_LDAPRejectsMissingBindPassword(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "ldap",
+			Type: testAuthTypeLDAP,
 			LDAP: &bindplanev1alpha1.LDAPConfig{
-				Server:   "ldap.example.com",
-				BaseDN:   "dc=example,dc=com",
-				BindUser: "admin",
+				Server:   testLDAPHost,
+				BaseDN:   testLDAPBaseDN,
+				BindUser: testUsername,
 			},
 		},
 	}
@@ -299,12 +299,12 @@ func TestValidateAuthConfig_LDAPRejectsMissingBindPassword(t *testing.T) {
 func TestValidateAuthConfig_LDAPAcceptsValid(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "ldap",
+			Type: testAuthTypeLDAP,
 			LDAP: &bindplanev1alpha1.LDAPConfig{
-				Server:       "ldap.example.com",
-				BaseDN:       "dc=example,dc=com",
-				BindUser:     "admin",
-				BindPassword: "pass",
+				Server:       testLDAPHost,
+				BaseDN:       testLDAPBaseDN,
+				BindUser:     testUsername,
+				BindPassword: testPassword,
 			},
 		},
 	}
@@ -315,7 +315,7 @@ func TestValidateAuthConfig_LDAPAcceptsValid(t *testing.T) {
 
 func TestValidateAuthConfig_OIDCRequiresOIDCConfig(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
-		Auth: &bindplanev1alpha1.AuthConfig{Type: "oidc"},
+		Auth: &bindplanev1alpha1.AuthConfig{Type: testAuthTypeOIDC},
 	}
 	if err := validation.ValidateAuthConfig(cfg); err == nil {
 		t.Error("expected error for type oidc without oidc config")
@@ -325,10 +325,10 @@ func TestValidateAuthConfig_OIDCRequiresOIDCConfig(t *testing.T) {
 func TestValidateAuthConfig_OIDCRejectsMissingIssuer(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "oidc",
+			Type: testAuthTypeOIDC,
 			OIDC: &bindplanev1alpha1.OIDCConfig{
-				ClientID:     "client-id",
-				ClientSecret: "secret",
+				ClientID:     testClientID,
+				ClientSecret: testClientSecret,
 			},
 		},
 	}
@@ -340,10 +340,10 @@ func TestValidateAuthConfig_OIDCRejectsMissingIssuer(t *testing.T) {
 func TestValidateAuthConfig_OIDCRejectsMissingClientID(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "oidc",
+			Type: testAuthTypeOIDC,
 			OIDC: &bindplanev1alpha1.OIDCConfig{
-				Issuer:       "https://issuer.example.com",
-				ClientSecret: "secret",
+				Issuer:       testIssuerURL,
+				ClientSecret: testClientSecret,
 			},
 		},
 	}
@@ -355,10 +355,10 @@ func TestValidateAuthConfig_OIDCRejectsMissingClientID(t *testing.T) {
 func TestValidateAuthConfig_OIDCRejectsMissingClientSecret(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "oidc",
+			Type: testAuthTypeOIDC,
 			OIDC: &bindplanev1alpha1.OIDCConfig{
-				Issuer:   "https://issuer.example.com",
-				ClientID: "client-id",
+				Issuer:   testIssuerURL,
+				ClientID: testClientID,
 			},
 		},
 	}
@@ -370,11 +370,11 @@ func TestValidateAuthConfig_OIDCRejectsMissingClientSecret(t *testing.T) {
 func TestValidateAuthConfig_OIDCAcceptsValid(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type: "oidc",
+			Type: testAuthTypeOIDC,
 			OIDC: &bindplanev1alpha1.OIDCConfig{
-				Issuer:       "https://issuer.example.com",
-				ClientID:     "client-id",
-				ClientSecret: "secret",
+				Issuer:       testIssuerURL,
+				ClientID:     testClientID,
+				ClientSecret: testClientSecret,
 			},
 		},
 	}
@@ -386,8 +386,8 @@ func TestValidateAuthConfig_OIDCAcceptsValid(t *testing.T) {
 func TestValidateAuthConfig_SystemRejectsMissingUsername(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type:     "system",
-			Password: "pass",
+			Type:     testAuthTypeSystem,
+			Password: testPassword,
 		},
 	}
 	if err := validation.ValidateAuthConfig(cfg); err == nil {
@@ -398,8 +398,8 @@ func TestValidateAuthConfig_SystemRejectsMissingUsername(t *testing.T) {
 func TestValidateAuthConfig_SystemRejectsMissingPassword(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type:     "system",
-			Username: "admin",
+			Type:     testAuthTypeSystem,
+			Username: testUsername,
 		},
 	}
 	if err := validation.ValidateAuthConfig(cfg); err == nil {
@@ -410,9 +410,9 @@ func TestValidateAuthConfig_SystemRejectsMissingPassword(t *testing.T) {
 func TestValidateAuthConfig_SystemAcceptsValid(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Auth: &bindplanev1alpha1.AuthConfig{
-			Type:     "system",
-			Username: "admin",
-			Password: "pass",
+			Type:     testAuthTypeSystem,
+			Username: testUsername,
+			Password: testPassword,
 		},
 	}
 	if err := validation.ValidateAuthConfig(cfg); err != nil {
@@ -438,7 +438,7 @@ func TestValidateMetricsConfig_AcceptsNilOrNonOTLP(t *testing.T) {
 
 func TestValidateMetricsConfig_RejectsMissingOTLPEndpoint(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
-		Metrics: &bindplanev1alpha1.MetricsConfig{Type: "otlp"},
+		Metrics: &bindplanev1alpha1.MetricsConfig{Type: testTelemetryTypeOTLP},
 	}
 	if err := validation.ValidateMetricsConfig(cfg); err == nil {
 		t.Error("expected error when metrics type is otlp but endpoint is missing")
@@ -448,8 +448,8 @@ func TestValidateMetricsConfig_RejectsMissingOTLPEndpoint(t *testing.T) {
 func TestValidateMetricsConfig_AcceptsOTLPWithEndpoint(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Metrics: &bindplanev1alpha1.MetricsConfig{
-			Type: "otlp",
-			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{Endpoint: "http://collector:4317"},
+			Type: testTelemetryTypeOTLP,
+			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{Endpoint: testCollectorEndpoint},
 		},
 	}
 	if err := validation.ValidateMetricsConfig(cfg); err != nil {
@@ -460,7 +460,7 @@ func TestValidateMetricsConfig_AcceptsOTLPWithEndpoint(t *testing.T) {
 func TestValidateMetricsConfig_AcceptsValidKeepAliveDurations(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Metrics: &bindplanev1alpha1.MetricsConfig{
-			Type: "otlp",
+			Type: testTelemetryTypeOTLP,
 			OTLP: &bindplanev1alpha1.MetricsOTLPConfig{
 				Endpoint:  "collector:4317",
 				KeepAlive: &bindplanev1alpha1.MetricsOTLPKeepAliveConfig{Enabled: true, Time: "30s", Timeout: "20s"},
@@ -483,7 +483,7 @@ func TestValidateMetricsConfig_RejectsInvalidKeepAliveDurations(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 				Metrics: &bindplanev1alpha1.MetricsConfig{
-					Type: "otlp",
+					Type: testTelemetryTypeOTLP,
 					OTLP: &bindplanev1alpha1.MetricsOTLPConfig{Endpoint: "collector:4317", KeepAlive: ka},
 				},
 			}
@@ -512,7 +512,7 @@ func TestValidateTracingConfig_AcceptsNilOrNonOTLP(t *testing.T) {
 
 func TestValidateTracingConfig_RejectsMissingOTLPEndpoint(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
-		Tracing: &bindplanev1alpha1.TracingConfig{Type: "otlp"},
+		Tracing: &bindplanev1alpha1.TracingConfig{Type: testTelemetryTypeOTLP},
 	}
 	if err := validation.ValidateTracingConfig(cfg); err == nil {
 		t.Error("expected error when tracing type is otlp but endpoint is missing")
@@ -522,8 +522,8 @@ func TestValidateTracingConfig_RejectsMissingOTLPEndpoint(t *testing.T) {
 func TestValidateTracingConfig_AcceptsOTLPWithEndpoint(t *testing.T) {
 	cfg := &bindplanev1alpha1.BindplaneConfigSpec{
 		Tracing: &bindplanev1alpha1.TracingConfig{
-			Type: "otlp",
-			OTLP: &bindplanev1alpha1.TracingOTLPConfig{Endpoint: "http://collector:4317"},
+			Type: testTelemetryTypeOTLP,
+			OTLP: &bindplanev1alpha1.TracingOTLPConfig{Endpoint: testCollectorEndpoint},
 		},
 	}
 	if err := validation.ValidateTracingConfig(cfg); err != nil {
@@ -658,7 +658,7 @@ func TestValidateExtraEnv_AcceptsNonReservedNames(t *testing.T) {
 		{Name: "HTTPS_PROXY", Value: "http://proxy.example.com:3128"},
 		{Name: "NO_PROXY", Value: "localhost,127.0.0.1"},
 		{Name: "GOOGLE_APPLICATION_CREDENTIALS", Value: "/var/secrets/google/key.json"},
-		{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: "http://collector:4317"},
+		{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: testCollectorEndpoint},
 	}
 	if err := validation.ValidateExtraEnv("spec.bindplane.extraEnv", envVars, false); err != nil {
 		t.Errorf("unexpected error for valid env vars: %v", err)
@@ -681,11 +681,11 @@ func TestValidateExtraEnv_AcceptsEmpty(t *testing.T) {
 
 func newArgoRolloutTestBindplane() *bindplanev1alpha1.Bindplane {
 	return &bindplanev1alpha1.Bindplane{
-		ObjectMeta: metav1.ObjectMeta{Name: "bindplane"},
+		ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName},
 		Spec: bindplanev1alpha1.BindplaneSpec{
-			Version: "1.99.1",
+			Version: testBindplaneVersion,
 			Config: bindplanev1alpha1.BindplaneConfigSpec{
-				License: "test-license",
+				License: testLicense,
 				Store: bindplanev1alpha1.StoreConfig{
 					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres.example.com"},
 				},
@@ -741,11 +741,11 @@ func TestValidateBindplane_RejectsArgoRolloutWithStrategy(t *testing.T) {
 
 func newImageOverrideTestBindplane() *bindplanev1alpha1.Bindplane {
 	return &bindplanev1alpha1.Bindplane{
-		ObjectMeta: metav1.ObjectMeta{Name: "bindplane"},
+		ObjectMeta: metav1.ObjectMeta{Name: testBindplaneName},
 		Spec: bindplanev1alpha1.BindplaneSpec{
-			Version: "1.99.1",
+			Version: testBindplaneVersion,
 			Config: bindplanev1alpha1.BindplaneConfigSpec{
-				License: "test-license",
+				License: testLicense,
 				Store: bindplanev1alpha1.StoreConfig{
 					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres.example.com"},
 				},
@@ -1154,7 +1154,7 @@ func minimalBindplane() *bindplanev1alpha1.Bindplane {
 				Strategy: &appsv1.DeploymentStrategy{Type: appsv1.RollingUpdateDeploymentStrategyType},
 			},
 			Config: bindplanev1alpha1.BindplaneConfigSpec{
-				License: "test-license",
+				License: testLicense,
 				Store: bindplanev1alpha1.StoreConfig{
 					Postgres: &bindplanev1alpha1.PostgresConfig{Host: "postgres"},
 				},

@@ -65,13 +65,13 @@ var _ = Describe("opampDeployment", func() {
 
 	BeforeEach(func() {
 		r = newReconciler()
-		bindplane = newTestBindplaneWithOpAMP("my-bp", "default")
+		bindplane = newTestBindplaneWithOpAMP(testMyBindplaneName, testNamespaceDefault)
 	})
 
 	It("uses opamp component name and labels", func() {
 		dep := r.opampDeployment(bindplane)
 		Expect(dep.Name).To(Equal("my-bp-opamp"))
-		Expect(dep.Namespace).To(Equal("default"))
+		Expect(dep.Namespace).To(Equal(testNamespaceDefault))
 		Expect(dep.Labels[labelKeyComponent]).To(Equal(opampComponent))
 	})
 
@@ -152,7 +152,7 @@ var _ = Describe("getOpAMPOverrideEnvVars", func() {
 	var bindplane *bindplanev1alpha1.Bindplane
 
 	BeforeEach(func() {
-		bindplane = newTestBindplaneWithOpAMP("my-bp", "default")
+		bindplane = newTestBindplaneWithOpAMP(testMyBindplaneName, testNamespaceDefault)
 	})
 
 	It("returns empty slice when no overrides configured", func() {
@@ -200,21 +200,21 @@ var _ = Describe("opampDeployment env ordering", func() {
 
 	BeforeEach(func() {
 		r = newReconciler()
-		bindplane = newTestBindplaneWithOpAMP("my-bp", "default")
+		bindplane = newTestBindplaneWithOpAMP(testMyBindplaneName, testNamespaceDefault)
 	})
 
 	It("prepends spec.opamp.extraEnv before operator-managed env vars", func() {
 		bindplane.Spec.OpAMP.ExtraEnv = []corev1.EnvVar{
-			{Name: "HTTP_PROXY", Value: "http://proxy.example.com:3128"},
-			{Name: "NO_PROXY", Value: "localhost"},
+			{Name: testHTTPProxyEnv, Value: "http://proxy.example.com:3128"},
+			{Name: testNoProxyEnv, Value: "localhost"},
 		}
 
 		dep := r.opampDeployment(bindplane)
 		envVars := dep.Spec.Template.Spec.Containers[0].Env
 
-		Expect(envVars[0].Name).To(Equal("HTTP_PROXY"))
+		Expect(envVars[0].Name).To(Equal(testHTTPProxyEnv))
 		Expect(envVars[0].Value).To(Equal("http://proxy.example.com:3128"))
-		Expect(envVars[1].Name).To(Equal("NO_PROXY"))
+		Expect(envVars[1].Name).To(Equal(testNoProxyEnv))
 	})
 
 	It("operator-managed env vars win when spec.opamp.extraEnv duplicates a name", func() {
@@ -269,13 +269,13 @@ var _ = Describe("opampService", func() {
 
 	BeforeEach(func() {
 		r = newReconciler()
-		bindplane = newTestBindplaneWithOpAMP("my-bp", "default")
+		bindplane = newTestBindplaneWithOpAMP(testMyBindplaneName, testNamespaceDefault)
 	})
 
 	It("uses opamp component name", func() {
 		svc := r.opampService(bindplane)
 		Expect(svc.Name).To(Equal("my-bp-opamp"))
-		Expect(svc.Namespace).To(Equal("default"))
+		Expect(svc.Namespace).To(Equal(testNamespaceDefault))
 	})
 
 	It("selector labels use opamp component", func() {

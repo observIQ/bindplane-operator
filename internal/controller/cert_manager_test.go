@@ -61,7 +61,7 @@ var _ = Describe("isTSDBClientCertManagerTLSEnabled", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						TLS: &bindplanev1alpha1.TSDBTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testCAIssuerName},
 						},
 					},
 				},
@@ -81,7 +81,7 @@ var _ = Describe("isTSDBServerCertManagerTLSEnabled", func() {
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				TSDB: &bindplanev1alpha1.TSDBComponentSpec{
 					TLS: &bindplanev1alpha1.TSDBTLSConfig{
-						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer"},
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testIssuerName},
 					},
 				},
 			},
@@ -134,7 +134,7 @@ var _ = Describe("validateTSDBTLSConfig", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					TSDB: &bindplanev1alpha1.TSDBConfig{
 						TLS: &bindplanev1alpha1.TSDBTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "my-issuer", Kind: "Issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testIssuerName, Kind: certManagerIssuerKind},
 						},
 					},
 				},
@@ -179,7 +179,7 @@ var _ = Describe("isNatsCertManagerTLSEnabled", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					Nats: &bindplanev1alpha1.NatsConfig{
 						TLS: &bindplanev1alpha1.NatsTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testNatsIssuerName},
 						},
 					},
 				},
@@ -226,7 +226,7 @@ var _ = Describe("validateNatsTLSConfig", func() {
 				Config: bindplanev1alpha1.BindplaneConfigSpec{
 					Nats: &bindplanev1alpha1.NatsConfig{
 						TLS: &bindplanev1alpha1.NatsTLSConfig{
-							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "nats-issuer", Kind: "Issuer"},
+							CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testNatsIssuerName, Kind: certManagerIssuerKind},
 						},
 					},
 				},
@@ -256,7 +256,7 @@ var _ = Describe("isTransformAgentCertManagerTLSEnabled", func() {
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
 					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
-						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testTAIssuerName},
 					},
 				},
 			},
@@ -290,7 +290,7 @@ var _ = Describe("validateTransformAgentTLSConfig", func() {
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				TransformAgent: &bindplanev1alpha1.TransformAgentComponentSpec{
 					TLS: &bindplanev1alpha1.TransformAgentTLSConfig{
-						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ta-issuer"},
+						CertManager: &bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testTAIssuerName},
 					},
 				},
 			},
@@ -303,7 +303,7 @@ var _ = Describe("getNatsServerCertDNSNames", func() {
 	It("returns client service, headless, pod DNS names and localhost", func() {
 		replicas := int32(2)
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 			Spec: bindplanev1alpha1.BindplaneSpec{
 				Nats: &bindplanev1alpha1.NatsComponentSpec{
 					Replicas: &replicas,
@@ -327,7 +327,7 @@ var _ = Describe("getNatsServerCertDNSNames", func() {
 var _ = Describe("getTransformAgentServerCertDNSNames", func() {
 	It("returns service DNS names used by Bindplane clients", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 		}
 
 		names := getTransformAgentServerCertDNSNames(bindplane)
@@ -343,7 +343,7 @@ var _ = Describe("getTransformAgentServerCertDNSNames", func() {
 var _ = Describe("getTSDBServerCertDNSNames", func() {
 	It("returns service and pod DNS names for the bindplane tsdb component", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-bp", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: testMyBindplaneName, Namespace: testNamespaceDefault},
 		}
 		names := getTSDBServerCertDNSNames(bindplane)
 		Expect(names).To(ContainElement("my-bp-tsdb.default.svc.cluster.local"))
@@ -358,20 +358,20 @@ var _ = Describe("issuerRefToCM", func() {
 	It("converts name, kind, and group", func() {
 		ref := bindplanev1alpha1.CertManagerTLSIssuerRef{
 			Name:  "my-cluster-issuer",
-			Kind:  "ClusterIssuer",
-			Group: "cert-manager.io",
+			Kind:  certManagerClusterIssuerKind,
+			Group: certManagerGroup,
 		}
 		out := issuerRefToCM(ref)
 		Expect(out.Name).To(Equal("my-cluster-issuer"))
-		Expect(out.Kind).To(Equal("ClusterIssuer"))
-		Expect(out.Group).To(Equal("cert-manager.io"))
+		Expect(out.Kind).To(Equal(certManagerClusterIssuerKind))
+		Expect(out.Group).To(Equal(certManagerGroup))
 	})
 	It("defaults kind to Issuer and group to cert-manager.io when empty", func() {
-		ref := bindplanev1alpha1.CertManagerTLSIssuerRef{Name: "ca-issuer"}
+		ref := bindplanev1alpha1.CertManagerTLSIssuerRef{Name: testCAIssuerName}
 		out := issuerRefToCM(ref)
-		Expect(out.Name).To(Equal("ca-issuer"))
-		Expect(out.Kind).To(Equal("Issuer"))
-		Expect(out.Group).To(Equal("cert-manager.io"))
+		Expect(out.Name).To(Equal(testCAIssuerName))
+		Expect(out.Kind).To(Equal(certManagerIssuerKind))
+		Expect(out.Group).To(Equal(certManagerGroup))
 	})
 })
 
@@ -385,7 +385,7 @@ var _ = Describe("buildCertificate", func() {
 	})
 
 	It("builds server certificate with DNS names and server auth usage", func() {
-		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: "Issuer", Group: "cert-manager.io"}
+		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: certManagerIssuerKind, Group: certManagerGroup}
 		dnsNames := []string{"prom.ns.svc.cluster.local"}
 		cert := buildCertificate(bindplane, "bp-prom-server", "bp-prom-server", issuerRef, dnsNames, nil, nil)
 		Expect(cert.Name).To(Equal("bp-prom-server"))
@@ -400,7 +400,7 @@ var _ = Describe("buildCertificate", func() {
 	})
 
 	It("builds client certificate with commonName and client auth usage", func() {
-		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: "ClusterIssuer", Group: "cert-manager.io"}
+		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: certManagerClusterIssuerKind, Group: certManagerGroup}
 		cn := "bindplane-tsdb-remote-write-client"
 		cert := buildCertificate(bindplane, "bp-prom-client", "bp-prom-client", issuerRef, nil, nil, &cn)
 		Expect(cert.Spec.CommonName).To(Equal(cn))
@@ -414,7 +414,7 @@ var _ = Describe("buildTransformAgentCertificate", func() {
 		bindplane := &bindplanev1alpha1.Bindplane{
 			ObjectMeta: metav1.ObjectMeta{Name: "bp", Namespace: "ns"},
 		}
-		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: "Issuer", Group: "cert-manager.io"}
+		issuerRef := cmmeta.IssuerReference{Name: "ca", Kind: certManagerIssuerKind, Group: certManagerGroup}
 		dnsNames := []string{"bp-transform-agent", "bp-transform-agent.ns.svc.cluster.local"}
 
 		cert := buildTransformAgentCertificate(bindplane, "bp-transform-agent-tls", "bp-transform-agent-tls", issuerRef, dnsNames)

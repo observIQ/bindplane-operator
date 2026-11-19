@@ -33,14 +33,14 @@ func TestAnnotationEnabled(t *testing.T) {
 		want        bool
 	}{
 		{name: "nil map", annotations: nil, want: false},
-		{name: "absent", annotations: map[string]string{"other": "true"}, want: false},
+		{name: "absent", annotations: map[string]string{"other": envValueTrue}, want: false},
 		{name: "empty value", annotations: map[string]string{key: ""}, want: false},
-		{name: "lowercase true", annotations: map[string]string{key: "true"}, want: true},
-		{name: "titlecase True", annotations: map[string]string{key: "True"}, want: true},
+		{name: "lowercase true", annotations: map[string]string{key: envValueTrue}, want: true},
+		{name: "titlecase True", annotations: map[string]string{key: testValueTrueTitle}, want: true},
 		{name: "uppercase TRUE", annotations: map[string]string{key: "TRUE"}, want: true},
 		{name: "shorthand t", annotations: map[string]string{key: "t"}, want: true},
 		{name: "numeric 1", annotations: map[string]string{key: "1"}, want: true},
-		{name: "lowercase false", annotations: map[string]string{key: "false"}, want: false},
+		{name: "lowercase false", annotations: map[string]string{key: testValueFalse}, want: false},
 		{name: "uppercase FALSE", annotations: map[string]string{key: "FALSE"}, want: false},
 		{name: "numeric 0", annotations: map[string]string{key: "0"}, want: false},
 		{name: "unparseable yes", annotations: map[string]string{key: "yes"}, want: false},
@@ -65,17 +65,17 @@ func TestSkipMigrateCheck(t *testing.T) {
 		want  bool
 	}{
 		{name: "annotation absent", set: false, want: false},
-		{name: "true", set: true, value: "true", want: true},
-		{name: "True", set: true, value: "True", want: true},
+		{name: envValueTrue, set: true, value: envValueTrue, want: true},
+		{name: testValueTrueTitle, set: true, value: testValueTrueTitle, want: true},
 		{name: "1", set: true, value: "1", want: true},
-		{name: "false", set: true, value: "false", want: false},
+		{name: testValueFalse, set: true, value: testValueFalse, want: false},
 		{name: "garbage", set: true, value: "maybe", want: false},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bp := &bindplanev1alpha1.Bindplane{
-				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: testValue, Namespace: testNamespaceDefault},
 			}
 			if tc.set {
 				bp.Annotations = map[string]string{annotationSkipMigrateCheck: tc.value}

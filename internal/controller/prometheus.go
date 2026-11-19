@@ -165,7 +165,7 @@ func getTSDBProbeServerName(bindplane *bindplanev1alpha1.Bindplane) string {
 	if len(names) > 0 {
 		return names[0] // e.g. my-bp-prometheus.default.svc.cluster.local
 	}
-	return "localhost"
+	return hostLocalhost
 }
 
 // isTSDBServerProbeTLSWithCA returns true when the server TLS secret has a CA file (for probe to verify server cert).
@@ -601,8 +601,8 @@ func getTSDBVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: getResourceName(bindplane, tsdbBasicAuthSecretSuffix),
 						Items: []corev1.KeyToPath{
-							{Key: tsdbBasicAuthSecretKeyUser, Path: "username"},
-							{Key: tsdbBasicAuthSecretKeyPass, Path: "password"},
+							{Key: tsdbBasicAuthSecretKeyUser, Path: tsdbBasicAuthSecretKeyUser},
+							{Key: tsdbBasicAuthSecretKeyPass, Path: tsdbBasicAuthSecretKeyPass},
 						},
 					},
 				},
@@ -636,8 +636,8 @@ func getTSDBVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: getResourceName(bindplane, tsdbBasicAuthSecretSuffix),
 						Items: []corev1.KeyToPath{
-							{Key: tsdbBasicAuthSecretKeyUser, Path: "username"},
-							{Key: tsdbBasicAuthSecretKeyPass, Path: "password"},
+							{Key: tsdbBasicAuthSecretKeyUser, Path: tsdbBasicAuthSecretKeyUser},
+							{Key: tsdbBasicAuthSecretKeyPass, Path: tsdbBasicAuthSecretKeyPass},
 						},
 					},
 				},
@@ -647,17 +647,17 @@ func getTSDBVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
 		// User-defined secret; map keys to tls.crt, tls.key; optionally ca.crt when CAKey set (mTLS).
 		certKey, keyKey := tls.CertKey, tls.KeyKey
 		if certKey == "" {
-			certKey = "tls.crt"
+			certKey = tlsSecretCertKey
 		}
 		if keyKey == "" {
-			keyKey = "tls.key"
+			keyKey = tlsSecretKeyKey
 		}
 		items := []corev1.KeyToPath{
-			{Key: certKey, Path: "tls.crt"},
-			{Key: keyKey, Path: "tls.key"},
+			{Key: certKey, Path: tlsSecretCertKey},
+			{Key: keyKey, Path: tlsSecretKeyKey},
 		}
 		if tls.CAKey != "" {
-			items = append(items, corev1.KeyToPath{Key: tls.CAKey, Path: "ca.crt"})
+			items = append(items, corev1.KeyToPath{Key: tls.CAKey, Path: tlsSecretCAKey})
 		}
 		secretVols = []corev1.Volume{
 			{
@@ -675,8 +675,8 @@ func getTSDBVolumes(bindplane *bindplanev1alpha1.Bindplane) []corev1.Volume {
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: getResourceName(bindplane, tsdbBasicAuthSecretSuffix),
 						Items: []corev1.KeyToPath{
-							{Key: tsdbBasicAuthSecretKeyUser, Path: "username"},
-							{Key: tsdbBasicAuthSecretKeyPass, Path: "password"},
+							{Key: tsdbBasicAuthSecretKeyUser, Path: tsdbBasicAuthSecretKeyUser},
+							{Key: tsdbBasicAuthSecretKeyPass, Path: tsdbBasicAuthSecretKeyPass},
 						},
 					},
 				},

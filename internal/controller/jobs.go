@@ -467,7 +467,7 @@ func (r *BindplaneReconciler) deleteJobWithPods(ctx context.Context, job *batchv
 // setMigrateFailureCondition records a MigrationFailed condition on the Bindplane CR.
 func setMigrateFailureCondition(bindplane *bindplanev1alpha1.Bindplane) {
 	meta.SetStatusCondition(&bindplane.Status.Conditions, metav1.Condition{
-		Type:               "Reconciled",
+		Type:               conditionTypeReconciled,
 		Status:             metav1.ConditionFalse,
 		Reason:             "MigrationFailed",
 		Message:            "Jobs Migrate Job failed; downstream workloads are blocked until migration succeeds",

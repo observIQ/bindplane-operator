@@ -30,7 +30,7 @@ var _ = Describe("skip seed", func() {
 	var r *BindplaneReconciler
 
 	newBindplane := func() *bindplanev1alpha1.Bindplane {
-		bp := newTestBindplane("my-bp", "default")
+		bp := newTestBindplane(testMyBindplaneName, testNamespaceDefault)
 		bp.Spec.Bindplane.Replicas = new(int32(2))
 		bp.Spec.Nats = &bindplanev1alpha1.NatsComponentSpec{Replicas: new(int32(3))}
 		return bp
@@ -47,13 +47,13 @@ var _ = Describe("skip seed", func() {
 	})
 
 	It("node rollout passes --skip-seed", func() {
-		bp := newTestBindplaneWithArgoRollout("my-bp", "default")
+		bp := newTestBindplaneWithArgoRollout(testMyBindplaneName, testNamespaceDefault)
 		container := r.nodeRollout(bp).Spec.Template.Spec.Containers[0]
 		Expect(container.Args).To(Equal([]string{skipSeedArg}))
 	})
 
 	It("opamp deployment passes --skip-seed", func() {
-		bp := newTestBindplaneWithOpAMP("my-bp", "default")
+		bp := newTestBindplaneWithOpAMP(testMyBindplaneName, testNamespaceDefault)
 		container := r.opampDeployment(bp).Spec.Template.Spec.Containers[0]
 		Expect(container.Args).To(Equal([]string{skipSeedArg}))
 	})
@@ -65,14 +65,14 @@ var _ = Describe("skip seed", func() {
 	})
 
 	It("jobs deployment does not pass --skip-seed so it seeds on startup", func() {
-		bp := newTestBindplane("my-bp", "default")
+		bp := newTestBindplane(testMyBindplaneName, testNamespaceDefault)
 		container := r.bindplaneJobsDeployment(bp).Spec.Template.Spec.Containers[0]
 		Expect(container.Args).NotTo(ContainElement(skipSeedArg))
 		Expect(container.Command).NotTo(ContainElement(skipSeedArg))
 	})
 
 	It("jobs migrate job does not pass --skip-seed", func() {
-		bp := newTestBindplane("my-bp", "default")
+		bp := newTestBindplane(testMyBindplaneName, testNamespaceDefault)
 		container := r.bindplaneJobsMigrateJob(bp).Spec.Template.Spec.Containers[0]
 		Expect(container.Command).NotTo(ContainElement(skipSeedArg))
 		Expect(container.Args).NotTo(ContainElement(skipSeedArg))

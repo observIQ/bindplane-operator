@@ -23,25 +23,25 @@ import (
 )
 
 func TestPrependExtraEnv_NilExtraEnv(t *testing.T) {
-	op := []corev1.EnvVar{{Name: "OP_VAR", Value: "op"}}
+	op := []corev1.EnvVar{{Name: testOpVar, Value: "op"}}
 	result := prependExtraEnv(nil, op)
-	if len(result) != 1 || result[0].Name != "OP_VAR" {
+	if len(result) != 1 || result[0].Name != testOpVar {
 		t.Errorf("unexpected result: %v", result)
 	}
 }
 
 func TestPrependExtraEnv_EmptyExtraEnv(t *testing.T) {
-	op := []corev1.EnvVar{{Name: "OP_VAR", Value: "op"}}
+	op := []corev1.EnvVar{{Name: testOpVar, Value: "op"}}
 	result := prependExtraEnv([]corev1.EnvVar{}, op)
-	if len(result) != 1 || result[0].Name != "OP_VAR" {
+	if len(result) != 1 || result[0].Name != testOpVar {
 		t.Errorf("unexpected result: %v", result)
 	}
 }
 
 func TestPrependExtraEnv_UserVarsFirst(t *testing.T) {
 	user := []corev1.EnvVar{
-		{Name: "HTTP_PROXY", Value: "http://proxy:3128"},
-		{Name: "NO_PROXY", Value: "localhost"},
+		{Name: testHTTPProxyEnv, Value: "http://proxy:3128"},
+		{Name: testNoProxyEnv, Value: "localhost"},
 	}
 	op1 := []corev1.EnvVar{{Name: "KUBERNETES_NAMESPACE_NAME", Value: "ns"}}
 	op2 := []corev1.EnvVar{{Name: "BINDPLANE_MODE", Value: "node"}}
@@ -51,10 +51,10 @@ func TestPrependExtraEnv_UserVarsFirst(t *testing.T) {
 	if len(result) != 4 {
 		t.Fatalf("expected 4 vars, got %d", len(result))
 	}
-	if result[0].Name != "HTTP_PROXY" {
+	if result[0].Name != testHTTPProxyEnv {
 		t.Errorf("expected HTTP_PROXY first, got %s", result[0].Name)
 	}
-	if result[1].Name != "NO_PROXY" {
+	if result[1].Name != testNoProxyEnv {
 		t.Errorf("expected NO_PROXY second, got %s", result[1].Name)
 	}
 	if result[2].Name != "KUBERNETES_NAMESPACE_NAME" {
@@ -68,7 +68,7 @@ func TestPrependExtraEnv_UserVarsFirst(t *testing.T) {
 func TestPrependExtraEnv_OperatorWinsOnDuplicate(t *testing.T) {
 	// If the user sets a name that the operator also sets, the operator's value
 	// (appended last) takes precedence — Kubernetes uses the last entry.
-	user := []corev1.EnvVar{{Name: "SOME_VAR", Value: "user-value"}}
+	user := []corev1.EnvVar{{Name: "SOME_VAR", Value: testUserValue}}
 	op := []corev1.EnvVar{{Name: "SOME_VAR", Value: "operator-value"}}
 
 	result := prependExtraEnv(user, op)
