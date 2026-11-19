@@ -684,7 +684,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 
 		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(applyingChangesPollInterval), "polls while workloads roll out")
+		Expect(result.RequeueAfter).To(BeZero(), "watched workloads are not polled while they roll out")
 
 		// Jobs Deployment should now exist
 		dep := &appsv1.Deployment{}
@@ -908,7 +908,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		markJobComplete(testCtx, jobName, testNamespace)
 		result, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(applyingChangesPollInterval), "polls while workloads roll out")
+		Expect(result.RequeueAfter).To(BeZero(), "watched workloads are not polled while they roll out")
 
 		updated, cond = getReconciledCondition(testCtx, name, testNamespace)
 		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
@@ -1209,7 +1209,7 @@ var _ = Describe("Reconcile - status", func() {
 
 		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(applyingChangesPollInterval))
+		Expect(result.RequeueAfter).To(BeZero(), "the node Deployment is watched, so it is not polled")
 
 		updated := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
@@ -1372,10 +1372,10 @@ var _ = Describe("Reconcile - status", func() {
 		_, err := failing.Reconcile(testCtx, reconcileRequest(name, testNamespace))
 		Expect(err).To(HaveOccurred())
 
-		// The phase was computed for the current generation and is left unchanged.
+		// A Ready phase is replaced so it stays consistent with Ready=False.
 		updated := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
-		Expect(updated.Status.Phase).To(Equal(phaseReady))
+		Expect(updated.Status.Phase).To(Equal(phaseApplyingChanges))
 		Expect(updated.Status.ObservedGeneration).To(Equal(updated.Generation))
 		readyCond := getReadyCondition(testCtx, name, testNamespace)
 		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
@@ -1383,6 +1383,15 @@ var _ = Describe("Reconcile - status", func() {
 		Expect(readyCond.ObservedGeneration).To(Equal(updated.Generation))
 		Expect(readyCond.Message).To(HavePrefix("unable to reconcile Node: "))
 		Expect(readyCond.Message).To(ContainSubstring(errInjectedGet))
+
+		// A Degraded phase computed for the current generation is left unchanged.
+		updated.Status.Phase = phaseDegraded
+		Expect(k8sClient.Status().Update(testCtx, updated)).To(Succeed())
+		_, err = failing.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).To(HaveOccurred())
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseDegraded))
+		Expect(getReadyCondition(testCtx, name, testNamespace).Reason).To(Equal(reasonReconcileError))
 
 		// At a new generation the phase from the older generation is replaced.
 		replicas := int32(2)
@@ -1407,6 +1416,13 @@ var _ = Describe("Reconcile - status", func() {
 		Expect(k8sClient.Create(testCtx, newTestBindplane(name, testNamespace))).To(Succeed())
 		reconcileRolledOut(newReconciler(), name)
 
+		// Record a Degraded phase for the current generation, which a reconcile error at
+		// that generation would leave unchanged.
+		degraded := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, degraded)).To(Succeed())
+		degraded.Status.Phase = phaseDegraded
+		Expect(k8sClient.Status().Update(testCtx, degraded)).To(Succeed())
+
 		// Pause, change the spec, and reconcile: the pause path advances
 		// status.observedGeneration without computing a phase.
 		bp := &bindplanev1alpha1.Bindplane{}
@@ -1421,7 +1437,7 @@ var _ = Describe("Reconcile - status", func() {
 		paused := &bindplanev1alpha1.Bindplane{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, paused)).To(Succeed())
 		Expect(paused.Status.ObservedGeneration).To(Equal(paused.Generation))
-		Expect(paused.Status.Phase).To(Equal(phaseReady))
+		Expect(paused.Status.Phase).To(Equal(phaseDegraded))
 
 		// Unpause and fail the reconcile: the phase from the older generation is replaced.
 		paused.Annotations = nil

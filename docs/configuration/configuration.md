@@ -1457,12 +1457,12 @@ The operator reads workload status directly from the API server rather than from
 | Phase | Meaning |
 |-------|---------|
 | `Pending` | CR was just created; first reconcile has not run yet |
-| `ApplyingChanges` | The Jobs Migrate Job is running, or one or more workloads are still rolling out or paused. The operator requeues at least every 30 seconds while in this phase (every 10 seconds while the Jobs Migrate Job is running) |
+| `ApplyingChanges` | The Jobs Migrate Job is running, or one or more workloads are still rolling out or paused. Status updates as the operator observes changes to its workloads. It requeues every 10 seconds while the Jobs Migrate Job is running, and every 30 seconds while an Argo Rollout node rolls out when the Argo Rollouts CRD was not installed at operator startup (so Rollouts are not watched) |
 | `Ready` | Every workload has rolled out and is ready (`Ready=True`) |
 | `Degraded` | The CR failed validation, the Jobs Migrate Job failed, or a workload failed. The `Ready` condition holds the reason. The operator requeues every 30 seconds while the Bindplane Node Argo Rollout is `Degraded` |
 | `Deleting` | CR deletion is in progress; finalizer is being removed |
 
-A reconcile error sets `Ready=False` with reason `ReconcileError`. It leaves the phase unchanged when the phase was set for the current generation, and otherwise sets it to `ApplyingChanges`. The pause annotation does not change the phase either; it sets `Reconciled=False` with reason `Paused`.
+A reconcile error sets `Ready=False` with reason `ReconcileError` and sets the phase to `ApplyingChanges`, except that a `Degraded` phase set for the current generation is left unchanged. The pause annotation does not change the phase either; it sets `Reconciled=False` with reason `Paused`.
 
 The `status.observedGeneration` field is set to the `metadata.generation` of the CR when the operator writes status for that generation, including when it halts for a running Jobs Migrate Job or records a reconcile error. GitOps tools should require both `status.observedGeneration == metadata.generation` and `Ready=True` with a matching `observedGeneration` before treating the CR as healthy.
 

@@ -41,9 +41,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 	"github.com/observiq/bindplane-operator/internal/validation"
@@ -316,8 +319,8 @@ const (
 	// Job is still running.
 	migrateJobPollInterval = 10 * time.Second
 
-	// applyingChangesPollInterval is how often the controller requeues while status.phase
-	// is ApplyingChanges.
+	// applyingChangesPollInterval is how often the controller requeues while an Argo
+	// Rollout node is rolling out or Degraded and the Rollout watch is not registered.
 	applyingChangesPollInterval = 30 * time.Second
 
 	// annotationPreserveSelectorKeys is an internal operator annotation placed on Service objects
@@ -518,6 +521,9 @@ type BindplaneReconciler struct {
 	// APIReader reads child workload status directly from the API server. When nil, the
 	// reconciler's Client is used.
 	APIReader client.Reader
+	// rolloutWatched records whether SetupWithManager registered a watch on Argo Rollouts.
+	// When it did, Rollout status changes trigger a reconcile and no polling is needed.
+	rolloutWatched bool
 }
 
 // +kubebuilder:rbac:groups=k8s.bindplane.com,resources=bindplanes,verbs=get;list;watch;create;update;patch;delete
@@ -697,9 +703,8 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Error(err, "failed to update Bindplane status")
 		return ctrl.Result{}, err
 	}
-	// Poll while workloads roll out or the node Rollout is Degraded, so status converges
-	// even without a watch event from the workload, for example when the Rollout watch is
-	// not registered.
+	// Poll only when the node is an Argo Rollout that is not watched, so status converges
+	// without a watch event from it. Every other workload is watched via Owns.
 	if poll && (requeueAfter == 0 || requeueAfter > applyingChangesPollInterval) {
 		requeueAfter = applyingChangesPollInterval
 	}
@@ -707,20 +712,23 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // reconcileError logs err, records it as Ready=False/ReconcileError on the Bindplane CR and
-// returns err so the request is retried. status.phase is left unchanged when it was computed
-// for the current generation (the Ready condition and status.observedGeneration both match
-// it); otherwise it is set to ApplyingChanges, so a phase from an older generation is not
-// reported for the current one. The pause path advances status.observedGeneration without
-// computing a phase, which is why the Ready condition is checked too. The status write is
-// best effort: a failed write is logged unless it is a conflict.
+// returns err so the request is retried. status.phase is set to ApplyingChanges when it was
+// not computed for the current generation (the Ready condition or status.observedGeneration
+// does not match it), so a phase from an older generation is not reported for the current
+// one. The pause path advances status.observedGeneration without computing a phase, which is
+// why the Ready condition is checked too. A Ready phase is also set to ApplyingChanges, so
+// phase and the Ready=False condition stay consistent; Degraded is left as is. The status
+// write is best effort: a failed write is logged unless it is a conflict.
 func (r *BindplaneReconciler) reconcileError(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger, err error, msg string) (ctrl.Result, error) {
 	log.Error(err, msg)
 	ready := meta.FindStatusCondition(bindplane.Status.Conditions, conditionTypeReady)
 	stalePhase := bindplane.Status.ObservedGeneration != bindplane.Generation ||
 		ready == nil || ready.ObservedGeneration != bindplane.Generation
 	setReadyCondition(bindplane, metav1.ConditionFalse, reasonReconcileError, fmt.Sprintf("%s: %v", msg, err))
-	if stalePhase {
+	if stalePhase || bindplane.Status.Phase == phaseReady {
 		bindplane.Status.Phase = phaseApplyingChanges
+	}
+	if stalePhase {
 		bindplane.Status.ObservedGeneration = bindplane.Generation
 	}
 	if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil && !errors.IsConflict(statusErr) {
@@ -829,7 +837,9 @@ func reconciledCondition(bindplane *bindplanev1alpha1.Bindplane, state migrateSt
 // status.components and sets status.phase and the Ready condition from the rollout state of
 // all of them. state is the Jobs Migrate state; a Job that is not complete counts as a
 // workload that is still rolling out, or as a failed one when the Job failed. poll is true
-// when the phase is ApplyingChanges or the node Rollout is Degraded.
+// when the node is an Argo Rollout that is not watched (see rolloutWatched) and the phase is
+// ApplyingChanges or the Rollout is Degraded. Deployments, StatefulSets and the migrate Job
+// are watched via Owns, so they never need polling.
 func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, state migrateState) (poll bool) {
 	var node workloadProgress
 	nodeIsRollout := bindplane.Spec.Bindplane.ArgoRollout != nil && bindplane.Spec.Bindplane.ArgoRollout.Enabled
@@ -869,7 +879,8 @@ func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bind
 	}
 
 	setPhaseFromProgress(bindplane, progress)
-	return bindplane.Status.Phase == phaseApplyingChanges || (nodeIsRollout && node.failed)
+	return nodeIsRollout && !r.rolloutWatched &&
+		(bindplane.Status.Phase == phaseApplyingChanges || node.failed)
 }
 
 // updateImageStatus records the resolved container image for each deployed component into
@@ -897,7 +908,9 @@ func updateImageStatus(bindplane *bindplanev1alpha1.Bindplane) {
 // SetupWithManager sets up the controller with the Manager.
 func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	b := ctrl.NewControllerManagedBy(mgr).
-		For(&bindplanev1alpha1.Bindplane{}).
+		// Ignore status-only updates to the CR: the controller writes status itself, and
+		// requeueing on those writes would bypass the rate-limited retry backoff.
+		For(&bindplanev1alpha1.Bindplane{}, builder.WithPredicates(ignoreStatusOnlyUpdates())).
 		Owns(&appsv1.Deployment{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&batchv1.Job{}).
@@ -912,10 +925,32 @@ func (r *BindplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if gvks, _, err := mgr.GetScheme().ObjectKinds(&rolloutsv1alpha1.Rollout{}); err == nil && len(gvks) > 0 {
 		if _, err := mgr.GetRESTMapper().RESTMapping(gvks[0].GroupKind(), gvks[0].Version); err == nil {
 			b = b.Owns(&rolloutsv1alpha1.Rollout{})
+			r.rolloutWatched = true
 		}
 	}
 
 	return b.Named("bindplane").Complete(r)
+}
+
+// ignoreStatusOnlyUpdates returns a predicate that drops update events which change only the
+// status (and resourceVersion/managedFields) of the object. Spec changes bump generation;
+// annotations (pause, skip-migrate-check, force-migrate), labels, finalizers and the deletion
+// timestamp are metadata changes that must still trigger a reconcile. In particular, the
+// finalizer-add path returns without requeue and relies on its own update event.
+func ignoreStatusOnlyUpdates() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld == nil || e.ObjectNew == nil {
+				return true
+			}
+			oldObj, newObj := e.ObjectOld, e.ObjectNew
+			return oldObj.GetGeneration() != newObj.GetGeneration() ||
+				!maps.Equal(oldObj.GetAnnotations(), newObj.GetAnnotations()) ||
+				!maps.Equal(oldObj.GetLabels(), newObj.GetLabels()) ||
+				!slices.Equal(oldObj.GetFinalizers(), newObj.GetFinalizers()) ||
+				!oldObj.GetDeletionTimestamp().Equal(newObj.GetDeletionTimestamp())
+		},
+	}
 }
 
 // getLabels returns the standard labels for Bindplane resources

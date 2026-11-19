@@ -30,6 +30,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	bindplanev1alpha1 "github.com/observiq/bindplane-operator/api/v1alpha1"
 )
@@ -60,7 +61,7 @@ func stateOf(p workloadProgress) progressState {
 // rolledOutDeployment returns a Deployment whose status matches its spec at generation 1.
 func rolledOutDeployment(name string, replicas int32) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespaceDefault, Generation: 1},
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 		Status: appsv1.DeploymentStatus{
 			ObservedGeneration: 1,
@@ -75,7 +76,7 @@ func rolledOutDeployment(name string, replicas int32) *appsv1.Deployment {
 // rolledOutStatefulSet returns a StatefulSet whose status matches its spec at generation 1.
 func rolledOutStatefulSet(name string, replicas int32) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespaceDefault, Generation: 1},
 		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
 		Status: appsv1.StatefulSetStatus{
 			ObservedGeneration: 1,
@@ -92,7 +93,7 @@ func rolledOutStatefulSet(name string, replicas int32) *appsv1.StatefulSet {
 // Healthy at generation 1.
 func healthyNodeRollout(replicas int32) *rolloutsv1alpha1.Rollout {
 	return &rolloutsv1alpha1.Rollout{
-		ObjectMeta: metav1.ObjectMeta{Name: "bp-node", Namespace: "default", Generation: 1},
+		ObjectMeta: metav1.ObjectMeta{Name: "bp-node", Namespace: testNamespaceDefault, Generation: 1},
 		Spec:       rolloutsv1alpha1.RolloutSpec{Replicas: &replicas},
 		Status: rolloutsv1alpha1.RolloutStatus{
 			ObservedGeneration: "1",
@@ -199,7 +200,7 @@ var _ = Describe("rolloutProgress", func() {
 })
 
 var _ = Describe("migrateProgress", func() {
-	bp := newTestBindplane("bp", "default")
+	bp := newTestBindplane("bp", testNamespaceDefault)
 
 	It("reports nothing when migration is complete", func() {
 		_, ok := migrateProgress(bp, migrateComplete)
@@ -233,7 +234,7 @@ var _ = Describe("setPhaseFromProgress", func() {
 
 	DescribeTable("sets the phase and Ready condition",
 		func(progress []workloadProgress, wantPhase string, wantStatus metav1.ConditionStatus, wantReason, wantMessage string) {
-			bp := newTestBindplane("bp", "default")
+			bp := newTestBindplane("bp", testNamespaceDefault)
 			bp.Generation = 7
 			setPhaseFromProgress(bp, progress)
 			Expect(bp.Status.Phase).To(Equal(wantPhase))
@@ -255,7 +256,7 @@ var _ = Describe("setPhaseFromProgress", func() {
 	)
 
 	It("lists every waiting component", func() {
-		bp := newTestBindplane("bp", "default")
+		bp := newTestBindplane("bp", testNamespaceDefault)
 		setPhaseFromProgress(bp, []workloadProgress{pending("node", "a"), pending("opamp", "b")})
 		cond := meta.FindStatusCondition(bp.Status.Conditions, conditionTypeReady)
 		Expect(cond.Message).To(Equal("node: a; opamp: b"))
@@ -269,7 +270,7 @@ var _ = Describe("updateReadyReplicaStatus with an Argo Rollout node", func() {
 	}
 
 	newRolloutBindplane := func() *bindplanev1alpha1.Bindplane {
-		bp := newTestBindplane("bp", "default")
+		bp := newTestBindplane("bp", testNamespaceDefault)
 		bp.Generation = 1
 		bp.Spec.Bindplane.ArgoRollout = &bindplanev1alpha1.ArgoRolloutSpec{Enabled: true}
 		return bp
@@ -356,6 +357,25 @@ var _ = Describe("updateReadyReplicaStatus with an Argo Rollout node", func() {
 		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 	})
 
+	It("does not poll a Rollout that is watched", func() {
+		for _, phase := range []rolloutsv1alpha1.RolloutPhase{
+			rolloutsv1alpha1.RolloutPhaseProgressing,
+			rolloutsv1alpha1.RolloutPhasePaused,
+			rolloutsv1alpha1.RolloutPhaseDegraded,
+		} {
+			ro := healthyNodeRollout(2)
+			ro.Status.Phase = phase
+			r := newFakeReconciler(append(children(), ro)...)
+			r.rolloutWatched = true
+
+			bp := newRolloutBindplane()
+			poll := r.updateReadyReplicaStatus(context.Background(), bp, migrateComplete)
+
+			Expect(poll).To(BeFalse(), "phase %s", phase)
+			Expect(bp.Status.Phase).NotTo(Equal(phaseReady), "phase %s", phase)
+		}
+	})
+
 	It("does not read a node Deployment when the Rollout is enabled", func() {
 		objs := append(children(), rolledOutDeployment("bp-node", 3))
 		r := newFakeReconciler(objs...)
@@ -382,7 +402,7 @@ func newFakeClient(objs ...client.Object) client.Client {
 
 var _ = Describe("updateReadyReplicaStatus with a Deployment node", func() {
 	newBindplane := func() *bindplanev1alpha1.Bindplane {
-		bp := newTestBindplane("bp", "default")
+		bp := newTestBindplane("bp", testNamespaceDefault)
 		bp.Generation = 1
 		return bp
 	}
@@ -410,7 +430,7 @@ var _ = Describe("updateReadyReplicaStatus with a Deployment node", func() {
 		bp := newBindplane()
 		poll := r.updateReadyReplicaStatus(context.Background(), bp, migrateComplete)
 
-		Expect(poll).To(BeTrue())
+		Expect(poll).To(BeFalse(), "a node Deployment is watched, so it is not polled")
 		Expect(bp.Status.Phase).To(Equal(phaseApplyingChanges))
 		cond := meta.FindStatusCondition(bp.Status.Conditions, conditionTypeReady)
 		Expect(cond).NotTo(BeNil())
@@ -435,5 +455,63 @@ var _ = Describe("updateReadyReplicaStatus with a Deployment node", func() {
 		Expect(cond).NotTo(BeNil())
 		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 		Expect(cond.Message).NotTo(ContainSubstring("tsdb:"))
+	})
+})
+
+var _ = Describe("ignoreStatusOnlyUpdates", func() {
+	base := func() *bindplanev1alpha1.Bindplane {
+		bp := newTestBindplane("bp", testNamespaceDefault)
+		bp.Generation = 1
+		bp.ResourceVersion = "1"
+		bp.Annotations = map[string]string{"a": "b"}
+		bp.Finalizers = []string{bindplaneFinalizer}
+		return bp
+	}
+	update := func(mutate func(*bindplanev1alpha1.Bindplane)) bool {
+		oldObj := base()
+		newObj := base()
+		newObj.ResourceVersion = "2"
+		mutate(newObj)
+		return ignoreStatusOnlyUpdates().Update(event.UpdateEvent{ObjectOld: oldObj, ObjectNew: newObj})
+	}
+
+	It("ignores a status-only update", func() {
+		Expect(update(func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Status.Phase = phaseApplyingChanges
+			bp.Status.Conditions = []metav1.Condition{{Type: conditionTypeReady, Message: "changed"}}
+		})).To(BeFalse())
+	})
+
+	It("passes a spec change", func() {
+		Expect(update(func(bp *bindplanev1alpha1.Bindplane) { bp.Generation = 2 })).To(BeTrue())
+	})
+
+	It("passes an annotation change", func() {
+		Expect(update(func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Annotations[annotationPauseReconciliation] = "true"
+		})).To(BeTrue())
+	})
+
+	It("passes a label change", func() {
+		Expect(update(func(bp *bindplanev1alpha1.Bindplane) {
+			bp.Labels = map[string]string{"x": "y"}
+		})).To(BeTrue())
+	})
+
+	It("passes a finalizer change", func() {
+		Expect(update(func(bp *bindplanev1alpha1.Bindplane) { bp.Finalizers = nil })).To(BeTrue())
+	})
+
+	It("passes a deletion", func() {
+		Expect(update(func(bp *bindplanev1alpha1.Bindplane) {
+			now := metav1.Now()
+			bp.DeletionTimestamp = &now
+		})).To(BeTrue())
+	})
+
+	It("passes create and delete events", func() {
+		p := ignoreStatusOnlyUpdates()
+		Expect(p.Create(event.CreateEvent{Object: base()})).To(BeTrue())
+		Expect(p.Delete(event.DeleteEvent{Object: base()})).To(BeTrue())
 	})
 })
