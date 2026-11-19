@@ -46,6 +46,7 @@ Configuration is provided via the `spec.config` field of the `Bindplane` custom 
   - [Pause annotation](#pause-annotation)
   - [Finalizer and garbage collection](#finalizer-and-garbage-collection)
   - [Conditions and phases](#conditions-and-phases)
+  - [Argo CD health check](#argo-cd-health-check)
   - [Migration contract](#migration-contract)
 - [Examples](#examples)
   - [Minimal configuration](#minimal-configuration)
@@ -1375,11 +1376,11 @@ While the annotation is set:
 - The Jobs Migrate Job is **still created and managed exactly as before**: it runs on install and on every image change, stale Jobs are replaced, and the `k8s.bindplane.com/force-migrate` annotation still works. Only the gate is bypassed.
 - Downstream workloads are reconciled on every pass, regardless of whether the Job is running or has failed.
 - The `Reconciled` condition is `True` with `Reason: MigrationCheckSkipped` while the Job is failed or not yet complete. The message names the Job and its state. Once the Job succeeds the condition returns to `Reason: Reconciled`.
-- `status.phase` reflects workload readiness as normal (`ApplyingChanges` or `Ready`); it is not set to `Degraded`.
+- `status.phase` and the `Ready` condition include the Jobs Migrate Job: a running Job keeps the phase at `ApplyingChanges` (`Ready=False` with reason `WorkloadsProgressing` and a `jobs-migrate: ...` entry in the message), and a failed Job sets the phase to `Degraded` (`Ready=False` with reason `WorkloadFailed`).
 - `status.components.jobsMigrate.image` is **not** written by the bypass. It is only recorded when a Job actually succeeds, so it always reflects a confirmed migration.
 - While a Job is still running the operator keeps requeueing every 10 seconds so the success is recorded; a terminal `Failed` Job is not requeued.
 
-The annotation is sticky: the operator never clears it. Removing it (or setting it to any value other than `"true"`) re-engages the gate on the next reconcile. If the Job is still failed at that point, the `MigrationFailed` condition and `Degraded` phase return. Workloads that were rolled out during the bypass are left in place; the gate only blocks further updates.
+The annotation is sticky: the operator never clears it. Removing it (or setting it to any value other than `"true"`) re-engages the gate on the next reconcile. If the Job is still failed at that point, the `Reconciled` and `Ready` conditions are set to `False` with reason `MigrationFailed` and the phase stays `Degraded`. Workloads that were rolled out during the bypass are left in place; the gate only blocks further updates.
 
 The `k8s.bindplane.com/pause-reconciliation` annotation takes precedence: a paused resource is not reconciled at all, whether or not the skip annotation is present.
 
@@ -1395,7 +1396,7 @@ Set the annotation `k8s.bindplane.com/pause-reconciliation: "true"` on the `Bind
 
 - No resources are created, updated, or deleted.
 - The `Reconciled` condition is set to `False` with `Reason: Paused`.
-- The `status.phase` is set to `Paused`.
+- `status.phase` is left at its current value (`Pending` if the CR has never been reconciled).
 
 Remove the annotation (or set it to `"false"`) to resume reconciliation. The operator will re-apply the current desired state on the next reconcile cycle.
 
@@ -1434,19 +1435,85 @@ The operator reports overall state via `status.conditions` and the `status.phase
 | `Reconciled` | `False` | `Invalid` | CR failed validation; no resources were mutated |
 | `Reconciled` | `False` | `MigrationFailed` | The Jobs Migrate Job failed; downstream workloads are blocked |
 | `Reconciled` | `True` | `MigrationCheckSkipped` | The `k8s.bindplane.com/skip-migrate-check` annotation is set and the Jobs Migrate Job is failed or not yet complete; downstream workloads were reconciled without a confirmed migration |
+| `Ready` | `True` | `WorkloadsReady` | Every workload has rolled out the spec at the condition's `observedGeneration` and all of its replicas are updated and available |
+| `Ready` | `False` | `WorkloadsProgressing` | One or more workloads are still rolling out; the message lists each one as `<component>: <reason>` |
+| `Ready` | `False` | `RolloutPaused` | The Bindplane Node Argo Rollout is paused, for example a blue-green rollout with `autoPromotionEnabled: false` awaiting promotion |
+| `Ready` | `False` | `WorkloadFailed` | A workload failed: a Deployment exceeded its progress deadline, the Bindplane Node Argo Rollout is `Degraded`, or the Jobs Migrate Job failed while the migration check is skipped |
+| `Ready` | `False` | `MigrationInProgress` | Downstream workloads are waiting for the Jobs Migrate Job (`<name>-migrate`) to complete |
+| `Ready` | `False` | `MigrationFailed` | The Jobs Migrate Job failed; downstream workloads are blocked |
+| `Ready` | `False` | `Invalid` | CR failed validation; no resources were mutated |
+| `Ready` | `False` | `ReconcileError` | The last reconcile returned an error; the message holds the error and the operator retries with backoff |
+
+The `Ready` condition's `observedGeneration` is the CR generation it describes. Each workload counts as rolled out using the same checks as `kubectl rollout status`:
+
+- **Deployments** (Jobs, Transform Agent, OpAMP, and Node when Argo Rollouts is disabled): the Deployment controller has observed the latest spec, the updated replica count matches the live `spec.replicas` (which an HPA may set), no old replicas remain, and every updated replica is available. A `Progressing` condition with reason `ProgressDeadlineExceeded` counts as failed.
+- **StatefulSets** (NATS, and TSDB unless remote TSDB is enabled): the StatefulSet controller has observed the latest spec, every replica is ready and updated, and the current revision equals the update revision.
+- **Argo Rollout** (Node when `spec.bindplane.argoRollout.enabled: true`): the Argo Rollouts controller has observed the latest spec and reports phase `Healthy`. Phase `Degraded` counts as failed and phase `Paused` counts as paused.
+
+The operator reads workload status directly from the API server rather than from its cache, so a workload updated earlier in the same reconcile is never reported from its previous state.
 
 **Phases**
 
 | Phase | Meaning |
 |-------|---------|
 | `Pending` | CR was just created; first reconcile has not run yet |
-| `ApplyingChanges` | One or more workloads are not yet at their desired replica count |
-| `Ready` | All required workloads have their desired replica count ready |
-| `Degraded` | CR failed validation; no resources are being managed |
-| `Paused` | Reconciliation is suspended via the pause annotation |
+| `ApplyingChanges` | The Jobs Migrate Job is running, or one or more workloads are still rolling out or paused. The operator requeues at least every 30 seconds while in this phase (every 10 seconds while the Jobs Migrate Job is running) |
+| `Ready` | Every workload has rolled out and is ready (`Ready=True`) |
+| `Degraded` | The CR failed validation, the Jobs Migrate Job failed, or a workload failed. The `Ready` condition holds the reason. The operator requeues every 30 seconds while the Bindplane Node Argo Rollout is `Degraded` |
 | `Deleting` | CR deletion is in progress; finalizer is being removed |
 
-The `status.observedGeneration` field is set to the `metadata.generation` of the CR after every successful reconcile, allowing GitOps tools and `kubectl wait` to detect when the operator has processed the latest spec version.
+A reconcile error sets `Ready=False` with reason `ReconcileError`. It leaves the phase unchanged when the phase was set for the current generation, and otherwise sets it to `ApplyingChanges`. The pause annotation does not change the phase either; it sets `Reconciled=False` with reason `Paused`.
+
+The `status.observedGeneration` field is set to the `metadata.generation` of the CR when the operator writes status for that generation, including when it halts for a running Jobs Migrate Job or records a reconcile error. GitOps tools should require both `status.observedGeneration == metadata.generation` and `Ready=True` with a matching `observedGeneration` before treating the CR as healthy.
+
+### Argo CD health check
+
+Argo CD has no built-in health check for `k8s.bindplane.com/Bindplane`. Add this Lua health check to the `argocd-cm` ConfigMap under the key `resource.customizations.health.k8s.bindplane.com_Bindplane` so an Application reports `Healthy` only after every workload has rolled out the CR's current generation:
+
+```lua
+local hs = {}
+if obj.status == nil or obj.status.observedGeneration == nil
+    or obj.status.observedGeneration ~= obj.metadata.generation then
+  hs.status = "Progressing"
+  hs.message = "Waiting for the operator to observe generation " .. tostring(obj.metadata.generation)
+  return hs
+end
+local ready, reconciled = nil, nil
+for _, c in ipairs(obj.status.conditions or {}) do
+  if c.type == "Ready" then ready = c end
+  if c.type == "Reconciled" then reconciled = c end
+end
+if reconciled ~= nil and reconciled.status == "False" and reconciled.reason == "Paused" then
+  hs.status = "Suspended"; hs.message = reconciled.message; return hs
+end
+if ready ~= nil and ready.status == "False" and ready.reason == "RolloutPaused" then
+  hs.status = "Suspended"; hs.message = ready.message; return hs
+end
+if obj.status.phase == "Degraded" then
+  hs.status = "Degraded"
+  hs.message = (ready ~= nil and ready.message) or (reconciled ~= nil and reconciled.message) or "Bindplane is Degraded"
+  return hs
+end
+if obj.status.phase == "Ready" and ready ~= nil and ready.status == "True"
+    and ready.observedGeneration == obj.metadata.generation then
+  hs.status = "Healthy"; hs.message = ready.message; return hs
+end
+hs.status = "Progressing"
+hs.message = (ready ~= nil and ready.message) or ("Phase " .. tostring(obj.status.phase))
+return hs
+```
+
+| CR state | Argo CD health |
+|----------|----------------|
+| `status.observedGeneration` differs from `metadata.generation` | `Progressing` |
+| `Reconciled=False` with reason `Paused` | `Suspended` |
+| `Ready=False` with reason `RolloutPaused` | `Suspended` |
+| Phase `Degraded` | `Degraded` |
+| Phase `Ready` with `Ready=True` at the current generation | `Healthy` |
+| `Ready=False` with reason `ReconcileError` | `Progressing`, or `Degraded` when the phase was already `Degraded` at the current generation |
+| Anything else, including `MigrationInProgress` and `WorkloadsProgressing` | `Progressing` |
+
+A CR without a `Ready` condition never reports `Healthy`.
 
 ### Component status
 
@@ -1471,7 +1538,7 @@ When `spec.version` changes (or the `k8s.bindplane.com/force-migrate` annotation
 1. Creates a new `Jobs Migrate` (`batch/v1 Job`) before updating any long-running workloads (Jobs, NATS, Node).
 2. Blocks all downstream workload updates until the Jobs Migrate Job completes successfully (requeues every 10 seconds while the Job is still running), unless the `k8s.bindplane.com/skip-migrate-check` annotation is set (see [Skip migration check](#skip-migration-check)).
 3. On success, records the migrated image in `status.components.jobsMigrate.image` and proceeds to roll out updated workloads.
-4. On failure (the Job reaches a terminal `Failed` state after exhausting `backoffLimit`), sets the `Reconciled` condition to `False` with `Reason: MigrationFailed`, sets `status.phase = Degraded`, and **halts the rollout without requeueing** — a terminal Job will not change state on its own, so the operator stops retrying to avoid log spam. The failure remains visible in status until you intervene: inspect the retained failed pods for logs, fix the underlying cause, then change `spec.version` or set the `k8s.bindplane.com/force-migrate` annotation (see [Force migration](#force-migration)) to retry. Either action triggers a fresh reconcile. To proceed with workload updates despite the failure, set the `k8s.bindplane.com/skip-migrate-check` annotation (see [Skip migration check](#skip-migration-check)).
+4. On failure (the Job reaches a terminal `Failed` state after exhausting `backoffLimit`), sets the `Reconciled` and `Ready` conditions to `False` with `Reason: MigrationFailed`, sets `status.phase = Degraded`, and **halts the rollout without requeueing** — a terminal Job will not change state on its own, so the operator stops retrying to avoid log spam. The failure remains visible in status until you intervene: inspect the retained failed pods for logs, fix the underlying cause, then change `spec.version` or set the `k8s.bindplane.com/force-migrate` annotation (see [Force migration](#force-migration)) to retry. Either action triggers a fresh reconcile. To proceed with workload updates despite the failure, set the `k8s.bindplane.com/skip-migrate-check` annotation (see [Skip migration check](#skip-migration-check)).
 
 This ordering guarantees that the database schema is always compatible with all running workloads before any new binary version is activated.
 

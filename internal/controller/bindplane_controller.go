@@ -316,6 +316,10 @@ const (
 	// Job is still running.
 	migrateJobPollInterval = 10 * time.Second
 
+	// applyingChangesPollInterval is how often the controller requeues while status.phase
+	// is ApplyingChanges.
+	applyingChangesPollInterval = 30 * time.Second
+
 	// annotationPreserveSelectorKeys is an internal operator annotation placed on Service objects
 	// to signal which selector keys should be preserved from the live Service (e.g.
 	// rollouts-pod-template-hash written by Argo Rollouts during a BlueGreen cutover).
@@ -511,6 +515,9 @@ const (
 type BindplaneReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// APIReader reads child workload status directly from the API server. When nil, the
+	// reconciler's Client is used.
+	APIReader client.Reader
 }
 
 // +kubebuilder:rbac:groups=k8s.bindplane.com,resources=bindplanes,verbs=get;list;watch;create;update;patch;delete
@@ -608,7 +615,8 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			LastTransitionTime: metav1.Now(),
 		}
 		meta.SetStatusCondition(&bindplane.Status.Conditions, condition)
-		bindplane.Status.Phase = "Degraded"
+		setReadyCondition(bindplane, metav1.ConditionFalse, reasonInvalid, err.Error())
+		bindplane.Status.Phase = phaseDegraded
 		bindplane.Status.ObservedGeneration = bindplane.Generation
 		if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil {
 			log.Error(statusErr, "failed to update Bindplane status")
@@ -619,40 +627,34 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Reconcile internal TLS certificates (cert-manager) before workloads that mount them.
 	if err := r.reconcileInternalTLSCertificates(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile internal TLS certificates")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile internal TLS certificates")
 	}
 
 	// Reconcile session secret before workloads that consume it via BINDPLANE_SESSION_SECRET.
 	if err := r.reconcileSessionSecret(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile session secret")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile session secret")
 	}
 
 	// Reconcile status secret before workloads that consume it via BINDPLANE_STATUS_KEYS.
 	if err := r.reconcileStatusSecret(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile status secret")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile status secret")
 	}
 
 	// Reconcile Transform Agent resources
 	if err := r.reconcileTransformAgent(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile Transform Agent")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile Transform Agent")
 	}
 
 	// Reconcile Prometheus resources
 	if err := r.reconcileTSDB(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile Prometheus")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile Prometheus")
 	}
 
 	// Reconcile the Jobs Migrate batch/v1 Job; block downstream workloads until it completes,
 	// unless the skip-migrate-check annotation bypasses the gate.
 	state, err := r.reconcileMigrateJob(ctx, bindplane, log)
 	if err != nil {
-		log.Error(err, "unable to reconcile Jobs Migrate Job")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile Jobs Migrate Job")
 	}
 	halt, requeueAfter, err := r.applyMigrateGate(ctx, bindplane, state, log)
 	if err != nil {
@@ -664,33 +666,29 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Reconcile Bindplane Jobs resources
 	if err := r.reconcileBindplaneJobsRegular(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile Bindplane Jobs")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile Bindplane Jobs")
 	}
 
 	// Reconcile NATS resources
 	if err := r.reconcileNats(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile NATS")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile NATS")
 	}
 
 	// Reconcile Node resources
 	if err := r.reconcileNode(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile Node")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile Node")
 	}
 
 	// Reconcile OpAMP resources (optional dedicated OpAMP deployment)
 	if err := r.reconcileOpAMP(ctx, bindplane, log); err != nil {
-		log.Error(err, "unable to reconcile OpAMP")
-		return ctrl.Result{}, err
+		return r.reconcileError(ctx, bindplane, log, err, "unable to reconcile OpAMP")
 	}
 
 	// Mark as reconciled so any previous InvalidName condition is cleared
 	meta.SetStatusCondition(&bindplane.Status.Conditions, reconciledCondition(bindplane, state))
 
-	// Populate per-component ready replica counts and overall phase.
-	r.updateReadyReplicaStatus(ctx, bindplane)
+	// Populate per-component ready replica counts, overall phase and the Ready condition.
+	poll := r.updateReadyReplicaStatus(ctx, bindplane, state)
 	// Populate resolved images for each deployed component.
 	updateImageStatus(bindplane)
 	bindplane.Status.ObservedGeneration = bindplane.Generation
@@ -699,7 +697,36 @@ func (r *BindplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Error(err, "failed to update Bindplane status")
 		return ctrl.Result{}, err
 	}
+	// Poll while workloads roll out or the node Rollout is Degraded, so status converges
+	// even without a watch event from the workload, for example when the Rollout watch is
+	// not registered.
+	if poll && (requeueAfter == 0 || requeueAfter > applyingChangesPollInterval) {
+		requeueAfter = applyingChangesPollInterval
+	}
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// reconcileError logs err, records it as Ready=False/ReconcileError on the Bindplane CR and
+// returns err so the request is retried. status.phase is left unchanged when it was computed
+// for the current generation (the Ready condition and status.observedGeneration both match
+// it); otherwise it is set to ApplyingChanges, so a phase from an older generation is not
+// reported for the current one. The pause path advances status.observedGeneration without
+// computing a phase, which is why the Ready condition is checked too. The status write is
+// best effort: a failed write is logged unless it is a conflict.
+func (r *BindplaneReconciler) reconcileError(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, log logr.Logger, err error, msg string) (ctrl.Result, error) {
+	log.Error(err, msg)
+	ready := meta.FindStatusCondition(bindplane.Status.Conditions, conditionTypeReady)
+	stalePhase := bindplane.Status.ObservedGeneration != bindplane.Generation ||
+		ready == nil || ready.ObservedGeneration != bindplane.Generation
+	setReadyCondition(bindplane, metav1.ConditionFalse, reasonReconcileError, fmt.Sprintf("%s: %v", msg, err))
+	if stalePhase {
+		bindplane.Status.Phase = phaseApplyingChanges
+		bindplane.Status.ObservedGeneration = bindplane.Generation
+	}
+	if statusErr := r.Status().Update(ctx, bindplane); statusErr != nil && !errors.IsConflict(statusErr) {
+		log.Error(statusErr, "failed to record reconcile error in Bindplane status")
+	}
+	return ctrl.Result{}, err
 }
 
 // applyMigrateGate applies the migration gate policy to the state reported by
@@ -738,6 +765,10 @@ func (r *BindplaneReconciler) applyMigrateGate(ctx context.Context, bindplane *b
 	case migrateInProgress:
 		if !skipMigrate {
 			log.Info("waiting for Jobs Migrate Job to complete")
+			if err := r.setMigrationInProgressStatus(ctx, bindplane, migrateJobName); err != nil {
+				log.Error(err, "failed to update Bindplane status for migration in progress")
+				return nil, 0, err
+			}
 			return &ctrl.Result{RequeueAfter: migrateJobPollInterval}, 0, nil
 		}
 		log.Info("Jobs Migrate Job not yet complete but the migration check is skipped via annotation; "+
@@ -748,6 +779,23 @@ func (r *BindplaneReconciler) applyMigrateGate(ctx context.Context, bindplane *b
 		// migrateComplete: migration is complete for the desired image; proceed.
 		return nil, 0, nil
 	}
+}
+
+// setMigrationInProgressStatus records that downstream workloads are waiting on the Jobs
+// Migrate Job. It writes status only when the phase, observedGeneration or Ready condition
+// changed, so polling a running Job does not rewrite an unchanged status.
+func (r *BindplaneReconciler) setMigrationInProgressStatus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, migrateJobName string) error {
+	changed := setReadyCondition(bindplane, metav1.ConditionFalse, reasonMigrationInProgress,
+		fmt.Sprintf("waiting for Jobs Migrate Job %s to complete", migrateJobName))
+	if bindplane.Status.Phase != phaseApplyingChanges || bindplane.Status.ObservedGeneration != bindplane.Generation {
+		bindplane.Status.Phase = phaseApplyingChanges
+		bindplane.Status.ObservedGeneration = bindplane.Generation
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return r.Status().Update(ctx, bindplane)
 }
 
 // reconciledCondition builds the Reconciled=True condition written at the end of a
@@ -777,53 +825,51 @@ func reconciledCondition(bindplane *bindplanev1alpha1.Bindplane, state migrateSt
 	return condition
 }
 
-// updateReadyReplicaStatus queries the owned workloads for their current ready
-// replica counts and sets the Phase field accordingly.
-func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane) {
-	nodeReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, nodeComponent), bindplane.Namespace)
-	natsReady := r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, natsComponent), bindplane.Namespace)
-	taReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, transformAgentComponent), bindplane.Namespace)
-	jobsReady := r.deploymentReadyReplicas(ctx, getResourceName(bindplane, bindplaneJobsComponent), bindplane.Namespace)
-
-	bindplane.Status.Components.Bindplane.ReadyReplicas = nodeReady
-	bindplane.Status.Components.Nats.ReadyReplicas = natsReady
-	bindplane.Status.Components.TransformAgent.ReadyReplicas = taReady
-	bindplane.Status.Components.Jobs.ReadyReplicas = jobsReady
-
-	// Only report TSDB readiness when local TSDB is deployed (not when remote TSDB is enabled).
-	var tsdbReady int32
-	if !isTSDBRemoteEnabled(bindplane) {
-		tsdbReady = r.statefulSetReadyReplicas(ctx, getResourceName(bindplane, tsdbComponent), bindplane.Namespace)
-	}
-	bindplane.Status.Components.TSDB.ReadyReplicas = tsdbReady
-
-	// OpAMP is an optional dedicated deployment; track its readiness separately.
-	var opampReady int32
-	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.Enabled {
-		opampReady = r.deploymentReadyReplicas(ctx, getResourceName(bindplane, opampComponent), bindplane.Namespace)
-	}
-	bindplane.Status.Components.OpAMP.ReadyReplicas = opampReady
-
-	nodeDesired := *bindplane.Spec.Bindplane.Replicas
-	var natsDesired int32
-	if bindplane.Spec.Nats != nil && bindplane.Spec.Nats.Replicas != nil {
-		natsDesired = *bindplane.Spec.Nats.Replicas
-	}
-	var taDesired int32
-	if bindplane.Spec.TransformAgent != nil && bindplane.Spec.TransformAgent.Replicas != nil {
-		taDesired = *bindplane.Spec.TransformAgent.Replicas
-	}
-	// TSDB: desired is 1 replica when local, 0 when remote (already satisfied — remote means no local SS).
-	var tsdbDesired int32
-	if !isTSDBRemoteEnabled(bindplane) {
-		tsdbDesired = 1
-	}
-
-	if r.allWorkloadsReady(nodeReady, nodeDesired, natsReady, natsDesired, taReady, taDesired, jobsReady, tsdbReady, tsdbDesired) {
-		bindplane.Status.Phase = "Ready"
+// updateReadyReplicaStatus reads every owned workload, records its ready replica count in
+// status.components and sets status.phase and the Ready condition from the rollout state of
+// all of them. state is the Jobs Migrate state; a Job that is not complete counts as a
+// workload that is still rolling out, or as a failed one when the Job failed. poll is true
+// when the phase is ApplyingChanges or the node Rollout is Degraded.
+func (r *BindplaneReconciler) updateReadyReplicaStatus(ctx context.Context, bindplane *bindplanev1alpha1.Bindplane, state migrateState) (poll bool) {
+	var node workloadProgress
+	nodeIsRollout := bindplane.Spec.Bindplane.ArgoRollout != nil && bindplane.Spec.Bindplane.ArgoRollout.Enabled
+	if nodeIsRollout {
+		node = r.getRolloutProgress(ctx, bindplane, nodeComponent)
 	} else {
-		bindplane.Status.Phase = "ApplyingChanges"
+		node = r.getDeploymentProgress(ctx, bindplane, nodeComponent)
 	}
+	nats := r.getStatefulSetProgress(ctx, bindplane, natsComponent)
+	transformAgent := r.getDeploymentProgress(ctx, bindplane, transformAgentComponent)
+	jobs := r.getDeploymentProgress(ctx, bindplane, bindplaneJobsComponent)
+	progress := []workloadProgress{node, nats, transformAgent, jobs}
+
+	bindplane.Status.Components.Bindplane.ReadyReplicas = node.ready
+	bindplane.Status.Components.Nats.ReadyReplicas = nats.ready
+	bindplane.Status.Components.TransformAgent.ReadyReplicas = transformAgent.ready
+	bindplane.Status.Components.Jobs.ReadyReplicas = jobs.ready
+
+	// TSDB is a local StatefulSet unless remote TSDB is enabled.
+	bindplane.Status.Components.TSDB.ReadyReplicas = 0
+	if !isTSDBRemoteEnabled(bindplane) {
+		tsdb := r.getStatefulSetProgress(ctx, bindplane, tsdbComponent)
+		bindplane.Status.Components.TSDB.ReadyReplicas = tsdb.ready
+		progress = append(progress, tsdb)
+	}
+
+	// OpAMP is an optional dedicated Deployment.
+	bindplane.Status.Components.OpAMP.ReadyReplicas = 0
+	if bindplane.Spec.OpAMP != nil && bindplane.Spec.OpAMP.Enabled {
+		opamp := r.getDeploymentProgress(ctx, bindplane, opampComponent)
+		bindplane.Status.Components.OpAMP.ReadyReplicas = opamp.ready
+		progress = append(progress, opamp)
+	}
+
+	if migrate, ok := migrateProgress(bindplane, state); ok {
+		progress = append(progress, migrate)
+	}
+
+	setPhaseFromProgress(bindplane, progress)
+	return bindplane.Status.Phase == phaseApplyingChanges || (nodeIsRollout && node.failed)
 }
 
 // updateImageStatus records the resolved container image for each deployed component into
@@ -846,41 +892,6 @@ func updateImageStatus(bindplane *bindplanev1alpha1.Bindplane) {
 	} else {
 		bindplane.Status.Components.TSDB.Image = ""
 	}
-}
-
-// allWorkloadsReady returns true when every workload has met its desired replica count.
-// Optional workloads (nats, transformAgent, tsdb) are considered ready when their desired count is zero.
-func (r *BindplaneReconciler) allWorkloadsReady(
-	nodeReady, nodeDesired int32,
-	natsReady, natsDesired int32,
-	taReady, taDesired int32,
-	jobsReady int32,
-	tsdbReady, tsdbDesired int32,
-) bool {
-	const jobsDesired int32 = 1
-	return nodeReady >= nodeDesired &&
-		(natsDesired == 0 || natsReady >= natsDesired) &&
-		(taDesired == 0 || taReady >= taDesired) &&
-		jobsReady >= jobsDesired &&
-		(tsdbDesired == 0 || tsdbReady >= tsdbDesired)
-}
-
-// deploymentReadyReplicas returns the ready replica count for a Deployment, or 0 if not found.
-func (r *BindplaneReconciler) deploymentReadyReplicas(ctx context.Context, name, namespace string) int32 {
-	dep := &appsv1.Deployment{}
-	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, dep); err != nil {
-		return 0
-	}
-	return dep.Status.ReadyReplicas
-}
-
-// statefulSetReadyReplicas returns the ready replica count for a StatefulSet, or 0 if not found.
-func (r *BindplaneReconciler) statefulSetReadyReplicas(ctx context.Context, name, namespace string) int32 {
-	ss := &appsv1.StatefulSet{}
-	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, ss); err != nil {
-		return 0
-	}
-	return ss.Status.ReadyReplicas
 }
 
 // SetupWithManager sets up the controller with the Manager.
