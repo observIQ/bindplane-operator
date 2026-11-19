@@ -464,7 +464,8 @@ func (r *BindplaneReconciler) deleteJobWithPods(ctx context.Context, job *batchv
 	return nil
 }
 
-// setMigrateFailureCondition records a MigrationFailed condition on the Bindplane CR.
+// setMigrateFailureCondition records MigrationFailed on the Reconciled and Ready conditions
+// and sets status.phase to Degraded.
 func setMigrateFailureCondition(bindplane *bindplanev1alpha1.Bindplane) {
 	meta.SetStatusCondition(&bindplane.Status.Conditions, metav1.Condition{
 		Type:               conditionTypeReconciled,
@@ -474,7 +475,9 @@ func setMigrateFailureCondition(bindplane *bindplanev1alpha1.Bindplane) {
 		ObservedGeneration: bindplane.Generation,
 		LastTransitionTime: metav1.Now(),
 	})
-	bindplane.Status.Phase = "Degraded"
+	setReadyCondition(bindplane, metav1.ConditionFalse, reasonMigrationFailed,
+		"Jobs Migrate Job "+getResourceName(bindplane, bindplaneJobsMigrateComponent)+" failed")
+	bindplane.Status.Phase = phaseDegraded
 	bindplane.Status.ObservedGeneration = bindplane.Generation
 }
 

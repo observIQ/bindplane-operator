@@ -65,8 +65,9 @@ func newTestBindplane(name, namespace string) *bindplanev1alpha1.Bindplane {
 // newReconciler returns a BindplaneReconciler wired to the envtest k8sClient.
 func newReconciler() *BindplaneReconciler {
 	return &BindplaneReconciler{
-		Client: k8sClient,
-		Scheme: k8sClient.Scheme(),
+		Client:    k8sClient,
+		Scheme:    k8sClient.Scheme(),
+		APIReader: k8sClient,
 	}
 }
 
@@ -184,6 +185,64 @@ func getReconciledCondition(ctx context.Context, name, namespace string) (*bindp
 	}
 	Fail("Reconciled condition not found on Bindplane " + name)
 	return bp, metav1.Condition{}
+}
+
+// getReadyCondition fetches the Bindplane CR and returns its Ready condition, failing the
+// test when the condition is absent.
+func getReadyCondition(ctx context.Context, name, namespace string) metav1.Condition {
+	bp := &bindplanev1alpha1.Bindplane{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, bp)).To(Succeed())
+	for i := range bp.Status.Conditions {
+		if bp.Status.Conditions[i].Type == conditionTypeReady {
+			return bp.Status.Conditions[i]
+		}
+	}
+	Fail("Ready condition not found on Bindplane " + name)
+	return metav1.Condition{}
+}
+
+// markWorkloadsRolledOut writes a fully rolled out status to every Deployment and
+// StatefulSet in the namespace, as the Deployment and StatefulSet controllers would.
+// envtest runs no workload controllers, so status is otherwise never written.
+func markWorkloadsRolledOut(ctx context.Context, namespace string) {
+	deps := &appsv1.DeploymentList{}
+	Expect(k8sClient.List(ctx, deps, client.InNamespace(namespace))).To(Succeed())
+	for i := range deps.Items {
+		markDeploymentRolledOut(ctx, deps.Items[i].Name, namespace)
+	}
+	sets := &appsv1.StatefulSetList{}
+	Expect(k8sClient.List(ctx, sets, client.InNamespace(namespace))).To(Succeed())
+	for i := range sets.Items {
+		sts := &sets.Items[i]
+		replicas := replicasOrDefault(sts.Spec.Replicas)
+		sts.Status = appsv1.StatefulSetStatus{
+			ObservedGeneration: sts.Generation,
+			Replicas:           replicas,
+			ReadyReplicas:      replicas,
+			CurrentReplicas:    replicas,
+			UpdatedReplicas:    replicas,
+			AvailableReplicas:  replicas,
+			CurrentRevision:    sts.Name + "-1",
+			UpdateRevision:     sts.Name + "-1",
+		}
+		Expect(k8sClient.Status().Update(ctx, sts)).To(Succeed())
+	}
+}
+
+// markDeploymentRolledOut writes a fully rolled out status for the Deployment's current
+// generation and live spec.replicas.
+func markDeploymentRolledOut(ctx context.Context, name, namespace string) {
+	dep := &appsv1.Deployment{}
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, dep)).To(Succeed())
+	replicas := replicasOrDefault(dep.Spec.Replicas)
+	dep.Status = appsv1.DeploymentStatus{
+		ObservedGeneration: dep.Generation,
+		Replicas:           replicas,
+		UpdatedReplicas:    replicas,
+		ReadyReplicas:      replicas,
+		AvailableReplicas:  replicas,
+	}
+	Expect(k8sClient.Status().Update(ctx, dep)).To(Succeed())
 }
 
 var _ = Describe("Reconcile - finalizer lifecycle", func() {
@@ -373,6 +432,11 @@ var _ = Describe("Reconcile - validation failure", func() {
 		Expect(reconciledCond).NotTo(BeNil())
 		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
 		Expect(reconciledCond.Reason).To(Equal("Invalid"))
+
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(readyCond.Reason).To(Equal(reasonInvalid))
+		Expect(updated.Status.Phase).To(Equal(phaseDegraded))
 	})
 })
 
@@ -620,7 +684,7 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 
 		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(BeZero())
+		Expect(result.RequeueAfter).To(BeZero(), "watched workloads are not polled while they roll out")
 
 		// Jobs Deployment should now exist
 		dep := &appsv1.Deployment{}
@@ -678,6 +742,11 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		Expect(reconciledCond).NotTo(BeNil())
 		Expect(reconciledCond.Status).To(Equal(metav1.ConditionFalse))
 		Expect(reconciledCond.Reason).To(Equal("MigrationFailed"))
+
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(readyCond.Reason).To(Equal(reasonMigrationFailed))
+		Expect(updated.Status.Phase).To(Equal(phaseDegraded))
 
 		dep := &appsv1.Deployment{}
 		err = k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)
@@ -793,7 +862,12 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		Expect(cond.Reason).To(Equal("MigrationCheckSkipped"))
 		Expect(cond.Message).To(ContainSubstring(jobName))
 		Expect(cond.Message).To(ContainSubstring("Failed"))
-		Expect(updated.Status.Phase).NotTo(Equal("Degraded"))
+		// The bypass reconciles workloads, but the failed Job is still reported as a failure.
+		Expect(updated.Status.Phase).To(Equal(phaseDegraded))
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(readyCond.Reason).To(Equal(reasonWorkloadFailed))
+		Expect(readyCond.Message).To(ContainSubstring(jobsMigrateProgressComponent + ": job " + jobName + " failed"))
 		Expect(updated.Status.Components.JobsMigrate.Image).To(BeEmpty(), "bypass must not record a migrated image")
 
 		// The Job itself is untouched: still present and still Failed.
@@ -826,13 +900,15 @@ var _ = Describe("Reconcile - Jobs Migrate", func() {
 		Expect(cond.Reason).To(Equal("MigrationCheckSkipped"))
 		Expect(cond.Message).To(ContainSubstring("not yet complete"))
 		Expect(updated.Status.Components.JobsMigrate.Image).To(BeEmpty())
+		Expect(updated.Status.Phase).To(Equal(phaseApplyingChanges))
+		Expect(getReadyCondition(testCtx, name, testNamespace).Message).To(ContainSubstring(jobsMigrateProgressComponent + ": job " + jobName + " is not complete"))
 
 		// Once the Job succeeds the normal condition and migrated image are recorded,
 		// even with the annotation still present.
 		markJobComplete(testCtx, jobName, testNamespace)
 		result, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(BeZero())
+		Expect(result.RequeueAfter).To(BeZero(), "watched workloads are not polled while they roll out")
 
 		updated, cond = getReconciledCondition(testCtx, name, testNamespace)
 		Expect(cond.Status).To(Equal(metav1.ConditionTrue))
@@ -1082,6 +1158,182 @@ var _ = Describe("Reconcile - status", func() {
 		// In envtest, no pods run, so ready replicas are 0 => ApplyingChanges
 		Expect(updated.Status.Phase).To(Equal("ApplyingChanges"))
 		Expect(updated.Status.Components.Bindplane.ReadyReplicas).To(BeNumerically("==", 0))
+
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(readyCond.Reason).To(Equal(reasonWorkloadsProgressing))
+		Expect(readyCond.ObservedGeneration).To(Equal(updated.Generation))
+		Expect(readyCond.Message).To(ContainSubstring("node: waiting for deployment spec update to be observed"))
+	})
+
+	// reconcileRolledOut drives the CR past migration, marks every workload rolled out and
+	// reconciles once more, returning the result of the last reconcile.
+	reconcileRolledOut := func(r *BindplaneReconciler, name string) reconcile.Result {
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+		markWorkloadsRolledOut(testCtx, testNamespace)
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		return result
+	}
+
+	It("sets phase Ready and Ready=True when every workload is rolled out", func() {
+		name := "bp-status-ready"
+		Expect(k8sClient.Create(testCtx, newTestBindplane(name, testNamespace))).To(Succeed())
+
+		result := reconcileRolledOut(newReconciler(), name)
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseReady))
+		Expect(updated.Status.ObservedGeneration).To(Equal(updated.Generation))
+		Expect(updated.Status.Components.Bindplane.ReadyReplicas).To(BeNumerically("==", 3))
+
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionTrue))
+		Expect(readyCond.Reason).To(Equal(reasonWorkloadsReady))
+		Expect(readyCond.ObservedGeneration).To(Equal(updated.Generation))
+	})
+
+	It("sets phase ApplyingChanges while old node replicas are pending termination", func() {
+		name := "bp-status-old-node"
+		Expect(k8sClient.Create(testCtx, newTestBindplane(name, testNamespace))).To(Succeed())
+
+		r := newReconciler()
+		reconcileRolledOut(r, name)
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, dep)).To(Succeed())
+		dep.Status.Replicas = *dep.Spec.Replicas + 1
+		Expect(k8sClient.Status().Update(testCtx, dep)).To(Succeed())
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero(), "the node Deployment is watched, so it is not polled")
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseApplyingChanges))
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Reason).To(Equal(reasonWorkloadsProgressing))
+		Expect(readyCond.Message).To(ContainSubstring("node: 1 old replicas are pending termination"))
+	})
+
+	It("sets phase ApplyingChanges and names opamp while OpAMP is not rolled out", func() {
+		name := "bp-status-opamp"
+		Expect(k8sClient.Create(testCtx, newTestBindplaneWithOpAMP(name, testNamespace))).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+		markWorkloadsRolledOut(testCtx, testNamespace)
+
+		// Leave OpAMP at its first generation unobserved.
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-opamp", Namespace: testNamespace}, dep)).To(Succeed())
+		dep.Status = appsv1.DeploymentStatus{}
+		Expect(k8sClient.Status().Update(testCtx, dep)).To(Succeed())
+
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseApplyingChanges))
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Reason).To(Equal(reasonWorkloadsProgressing))
+		Expect(readyCond.Message).To(HavePrefix("opamp: "))
+	})
+
+	It("sets phase Degraded when a Deployment exceeds its progress deadline", func() {
+		name := "bp-status-deadline"
+		Expect(k8sClient.Create(testCtx, newTestBindplane(name, testNamespace))).To(Succeed())
+
+		r := newReconciler()
+		reconcileRolledOut(r, name)
+
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-jobs", Namespace: testNamespace}, dep)).To(Succeed())
+		dep.Status.Conditions = []appsv1.DeploymentCondition{{
+			Type:   appsv1.DeploymentProgressing,
+			Status: corev1.ConditionFalse,
+			Reason: "ProgressDeadlineExceeded",
+		}}
+		Expect(k8sClient.Status().Update(testCtx, dep)).To(Succeed())
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeZero())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseDegraded))
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(readyCond.Reason).To(Equal(reasonWorkloadFailed))
+		Expect(readyCond.Message).To(ContainSubstring("jobs: deployment " + name + "-jobs exceeded its progress deadline"))
+	})
+
+	It("reaches Ready at the replica count an autoscaler wrote", func() {
+		name := "bp-status-hpa"
+		bp := newTestBindplane(name, testNamespace)
+		bp.Spec.Bindplane.Autoscaling = &bindplanev1alpha1.NodeAutoscalingSpec{Enabled: true}
+		Expect(k8sClient.Create(testCtx, bp)).To(Succeed())
+
+		r := newReconciler()
+		reconcilePastMigration(testCtx, r, name, testNamespace)
+
+		// Scale the node Deployment as the HPA would; the operator preserves the live count.
+		dep := &appsv1.Deployment{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name + "-node", Namespace: testNamespace}, dep)).To(Succeed())
+		hpaReplicas := int32(2)
+		dep.Spec.Replicas = &hpaReplicas
+		Expect(k8sClient.Update(testCtx, dep)).To(Succeed())
+
+		markWorkloadsRolledOut(testCtx, testNamespace)
+		_, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseReady))
+		Expect(updated.Status.Components.Bindplane.ReadyReplicas).To(BeNumerically("==", 2))
+		Expect(getReadyCondition(testCtx, name, testNamespace).Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("reports MigrationInProgress at the new generation while the migrate Job runs", func() {
+		name := "bp-status-migrating"
+		Expect(k8sClient.Create(testCtx, newTestBindplane(name, testNamespace))).To(Succeed())
+
+		r := newReconciler()
+		reconcileRolledOut(r, name)
+
+		bp := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, bp)).To(Succeed())
+		Expect(bp.Status.Phase).To(Equal(phaseReady))
+		bp.Spec.Version = "1.99.0"
+		Expect(k8sClient.Update(testCtx, bp)).To(Succeed())
+
+		result, err := r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(Equal(migrateJobPollInterval))
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Generation).To(BeNumerically(">", bp.Status.ObservedGeneration))
+		Expect(updated.Status.Phase).To(Equal(phaseApplyingChanges))
+		Expect(updated.Status.ObservedGeneration).To(Equal(updated.Generation))
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(readyCond.Reason).To(Equal(reasonMigrationInProgress))
+		Expect(readyCond.ObservedGeneration).To(Equal(updated.Generation))
+		Expect(readyCond.Message).To(ContainSubstring(name + "-migrate"))
+
+		// Polling the running Job again leaves the unchanged status alone.
+		_, err = r.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+		again := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, again)).To(Succeed())
+		Expect(again.ResourceVersion).To(Equal(updated.ResourceVersion))
 	})
 
 	It("sets Reconciled=True on successful reconcile", func() {
@@ -1107,7 +1359,119 @@ var _ = Describe("Reconcile - status", func() {
 		Expect(reconciledCond.Reason).To(Equal("Reconciled"))
 		Expect(reconciledCond.ObservedGeneration).To(Equal(updated.Generation))
 	})
+
+	It("records a reconcile error as Ready=False/ReconcileError", func() {
+		name := "bp-status-reconcile-error"
+		Expect(k8sClient.Create(testCtx, newTestBindplane(name, testNamespace))).To(Succeed())
+		reconcileRolledOut(newReconciler(), name)
+
+		// failing reads the node Deployment with an error, so the Node step fails.
+		failing := newReconciler()
+		failing.Client = failGetClient{Client: k8sClient, name: name + "-node"}
+
+		_, err := failing.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).To(HaveOccurred())
+
+		// A Ready phase is replaced so it stays consistent with Ready=False.
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseApplyingChanges))
+		Expect(updated.Status.ObservedGeneration).To(Equal(updated.Generation))
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(readyCond.Reason).To(Equal(reasonReconcileError))
+		Expect(readyCond.ObservedGeneration).To(Equal(updated.Generation))
+		Expect(readyCond.Message).To(HavePrefix("unable to reconcile Node: "))
+		Expect(readyCond.Message).To(ContainSubstring(errInjectedGet))
+
+		// A Degraded phase computed for the current generation is left unchanged.
+		updated.Status.Phase = phaseDegraded
+		Expect(k8sClient.Status().Update(testCtx, updated)).To(Succeed())
+		_, err = failing.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).To(HaveOccurred())
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseDegraded))
+		Expect(getReadyCondition(testCtx, name, testNamespace).Reason).To(Equal(reasonReconcileError))
+
+		// At a new generation the phase from the older generation is replaced.
+		replicas := int32(2)
+		updated.Spec.Bindplane.Replicas = &replicas
+		Expect(k8sClient.Update(testCtx, updated)).To(Succeed())
+
+		_, err = failing.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).To(HaveOccurred())
+
+		bumped := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, bumped)).To(Succeed())
+		Expect(bumped.Generation).To(BeNumerically(">", updated.Status.ObservedGeneration))
+		Expect(bumped.Status.Phase).To(Equal(phaseApplyingChanges))
+		Expect(bumped.Status.ObservedGeneration).To(Equal(bumped.Generation))
+		readyCond = getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Reason).To(Equal(reasonReconcileError))
+		Expect(readyCond.ObservedGeneration).To(Equal(bumped.Generation))
+	})
+
+	It("replaces a phase from an older generation after a spec change made while paused", func() {
+		name := "bp-status-reconcile-error-paused"
+		Expect(k8sClient.Create(testCtx, newTestBindplane(name, testNamespace))).To(Succeed())
+		reconcileRolledOut(newReconciler(), name)
+
+		// Record a Degraded phase for the current generation, which a reconcile error at
+		// that generation would leave unchanged.
+		degraded := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, degraded)).To(Succeed())
+		degraded.Status.Phase = phaseDegraded
+		Expect(k8sClient.Status().Update(testCtx, degraded)).To(Succeed())
+
+		// Pause, change the spec, and reconcile: the pause path advances
+		// status.observedGeneration without computing a phase.
+		bp := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, bp)).To(Succeed())
+		bp.Annotations = map[string]string{annotationPauseReconciliation: "true"}
+		replicas := int32(2)
+		bp.Spec.Bindplane.Replicas = &replicas
+		Expect(k8sClient.Update(testCtx, bp)).To(Succeed())
+		_, err := newReconciler().Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		paused := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, paused)).To(Succeed())
+		Expect(paused.Status.ObservedGeneration).To(Equal(paused.Generation))
+		Expect(paused.Status.Phase).To(Equal(phaseDegraded))
+
+		// Unpause and fail the reconcile: the phase from the older generation is replaced.
+		paused.Annotations = nil
+		Expect(k8sClient.Update(testCtx, paused)).To(Succeed())
+		failing := newReconciler()
+		failing.Client = failGetClient{Client: k8sClient, name: name + "-node"}
+		_, err = failing.Reconcile(testCtx, reconcileRequest(name, testNamespace))
+		Expect(err).To(HaveOccurred())
+
+		updated := &bindplanev1alpha1.Bindplane{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: name, Namespace: testNamespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(phaseApplyingChanges))
+		readyCond := getReadyCondition(testCtx, name, testNamespace)
+		Expect(readyCond.Reason).To(Equal(reasonReconcileError))
+		Expect(readyCond.ObservedGeneration).To(Equal(updated.Generation))
+	})
 })
+
+// errInjectedGet is the message of the error failGetClient returns.
+const errInjectedGet = "injected get failure"
+
+// failGetClient returns an error for every Get of the Deployment with the given name and
+// passes every other call to the embedded Client.
+type failGetClient struct {
+	client.Client
+	name string
+}
+
+func (c failGetClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*appsv1.Deployment); ok && key.Name == c.name {
+		return errors.NewServiceUnavailable(errInjectedGet)
+	}
+	return c.Client.Get(ctx, key, obj, opts...)
+}
 
 var _ = Describe("Reconcile - idempotency", func() {
 	var (
