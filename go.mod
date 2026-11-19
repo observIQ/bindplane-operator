@@ -1,6 +1,6 @@
 module github.com/observiq/bindplane-operator
 
-go 1.26.11
+go 1.27.4
 
 require (
 	github.com/argoproj/argo-rollouts v1.10.2
